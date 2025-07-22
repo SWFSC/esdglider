@@ -76,6 +76,76 @@ def get_path_yaml(yaml_type: str) -> str:
     ref = resources.files("esdglider.data") / f"deployment-{yaml_type}-vars.yml"
     with resources.as_file(ref) as path:
         return str(path)
+    
+
+def get_path_deployment_glider(
+    glider_path: str, 
+    deployment_name: str, 
+    mode: str, 
+) -> dict:
+    """
+    Get glider-related paths. Specifically, get all paths that are within 
+    the deployment folder (glider_path)
+
+    This function is typically called by get_path_deployment
+
+    Parameters
+    ----------
+    glider_path : str
+
+    deployment_name : str
+        The glider deployment name
+    mode : str
+        Mode of the glider data being processed.
+        Must be either 'rt', for real-time, or 'delayed
+    deployments_path : str
+        The path to the top-level folder of the glider data.
+        This is intended to be the path to the mounted glider deployments bucket
+
+    Returns
+    -------
+        A dictionary with the relevant paths
+    """
+    binarydir = os.path.join(glider_path, "data", "binary", mode)
+    rawyaml = get_path_yaml("raw")
+    engyaml = get_path_yaml("eng")
+
+    procl1dir = os.path.join(glider_path, "data", "processed-L1")
+    procl2dir = os.path.join(glider_path, "data", "processed-L2")
+    plotdir = os.path.join(glider_path, "plots", mode)
+
+    # Separate, in case in the future they end up in their own directories
+    rawdir = procl1dir
+    tsdir = procl1dir
+    griddir = procl1dir
+    profdir = os.path.join(procl1dir, "ngdac", mode)
+
+    # Create common file names
+    path_raw = os.path.join(tsdir, f"{deployment_name}-{mode}-raw.nc")
+    path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
+    path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
+    path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
+    path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
+    path_prof_summ = os.path.join(tsdir, f"{deployment_name}-{mode}-profiles.csv")
+    
+    return {
+        "binarydir": binarydir,
+        "rawyaml": rawyaml,
+        "engyaml": engyaml,
+        "rawdir": rawdir,
+        "tsdir": tsdir,
+        "griddir": griddir,
+        "profdir": profdir,
+        "plotdir": plotdir,
+        "procl1dir": procl1dir,
+        "procl2dir": procl2dir,
+        "tsrawpath": path_raw,
+        "tsscipath": path_sci,
+        "tsengpath": path_eng,
+        "gr1path": path_gr1,
+        "gr5path": path_gr5,
+        "profsummpath": path_prof_summ,
+    }
 
 
 def get_path_deployment(
@@ -124,52 +194,55 @@ def get_path_deployment(
         _log.error(f"glider_path ({glider_path}) does not exist")
         return {}
 
+    glider_out = get_path_deployment_glider(glider_path, deployment_name, mode)
     cacdir = os.path.join(deployments_path, "cache")
-    binarydir = os.path.join(glider_path, "data", "binary", mode)
+    # binarydir = os.path.join(glider_path, "data", "binary", mode)
     rawyaml = get_path_yaml("raw")
     engyaml = get_path_yaml("eng")
     logdir = os.path.join(deployments_path, "logs")
 
-    procl1dir = os.path.join(glider_path, "data", "processed-L1")
-    procl2dir = os.path.join(glider_path, "data", "processed-L2")
-    plotdir = os.path.join(glider_path, "plots", mode)
+    # procl1dir = os.path.join(glider_path, "data", "processed-L1")
+    # procl2dir = os.path.join(glider_path, "data", "processed-L2")
+    # plotdir = os.path.join(glider_path, "plots", mode)
 
-    # Separate, in case in the future they end up in their own directories
-    rawdir = procl1dir
-    tsdir = procl1dir
-    griddir = procl1dir
-    profdir = os.path.join(procl1dir, "ngdac", mode)
+    # # Separate, in case in the future they end up in their own directories
+    # rawdir = procl1dir
+    # tsdir = procl1dir
+    # griddir = procl1dir
+    # profdir = os.path.join(procl1dir, "ngdac", mode)
 
-    # Create common file names
-    path_raw = os.path.join(tsdir, f"{deployment_name}-{mode}-raw.nc")
-    path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
-    path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
-    path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
-    path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
-    path_prof_summ = os.path.join(tsdir, f"{deployment_name}-{mode}-profiles.csv")
+    # # Create common file names
+    # path_raw = os.path.join(tsdir, f"{deployment_name}-{mode}-raw.nc")
+    # path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
+    # path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
+    # path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
+    # path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
+    # path_prof_summ = os.path.join(tsdir, f"{deployment_name}-{mode}-profiles.csv")
 
-    return {
-        "cacdir": cacdir,
-        "binarydir": binarydir,
+    out = {
         "deploymentyaml": deploymentyaml,
+        "mode": mode,
         "rawyaml": rawyaml,
         "engyaml": engyaml,
+        "cacdir": cacdir,
         "logdir": logdir,
-        "rawdir": rawdir,
-        "tsdir": tsdir,
-        "griddir": griddir,
-        "profdir": profdir,
-        "plotdir": plotdir,
-        "procl1dir": procl1dir,
-        "procl2dir": procl2dir,
-        "tsrawpath": path_raw,
-        "tsscipath": path_sci,
-        "tsengpath": path_eng,
-        "gr1path": path_gr1,
-        "gr5path": path_gr5,
-        "profsummpath": path_prof_summ,
-        "mode": mode,
+        # "binarydir": binarydir,
+        # "rawdir": rawdir,
+        # "tsdir": tsdir,
+        # "griddir": griddir,
+        # "profdir": profdir,
+        # "plotdir": plotdir,
+        # "procl1dir": procl1dir,
+        # "procl2dir": procl2dir,
+        # "tsrawpath": path_raw,
+        # "tsscipath": path_sci,
+        # "tsengpath": path_eng,
+        # "gr1path": path_gr1,
+        # "gr5path": path_gr5,
+        # "profsummpath": path_prof_summ,
     }
+
+    return out | glider_out
 
 
 def binary_to_nc(

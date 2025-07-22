@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Added a new helper function to handle the generation of paths strictly within the glider deployment folder out into its own function: `glider.get_path_deployment_glider`. This function is called by `glider.get_path_deployment`
+
 
 ## [0.2.0] - 2025-07-22
 - Changed repo name from glider-utils to esdglider (#35)
