@@ -348,14 +348,14 @@ def drop_bogus(
     ds: `xarray.Dataset`
         processed glider data
     min_dt: str; default="1970-01-01"
-        String represting the minimum datetime to keep.
+        String representing the minimum datetime to keep.
         Passed to np.datetime64 to be used to filter.
         For instance, '2017-01-01', or '2020-03-06 12:00:00'.
 
     Returns
     -------
     xarray Dataset
-        Dataset with bogus rows rows dropped, and bodus values changed to nan
+        Dataset with bogus rows rows dropped, and bogus values changed to nan
     """
 
     # if not (ds_type in ['sci', 'eng']):
@@ -758,7 +758,7 @@ def calc_profile_phase(profile_index, profile_direction, min_depth):
 
     Note that inflection may be happen after an ascent or descent,
     depending on if the glider makes it to the surface.
-    A surfacing only occurs if profile_direction=0 and proifle min_depth<1
+    A surfacing only occurs if profile_direction=0 and profile min_depth<1
 
     Returns an array of profile phase descriptions
     """

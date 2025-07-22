@@ -5,7 +5,7 @@ import esdglider.config as config
 """
 Scrape info from database, and generate draft of
 yaml deployment config file. This script will normally have to be run
-from a local computer to access the datbase
+from a local computer to access the database
 
 'db/glider-db-prod.txt' is the database URL, used to create the
 sqlalchemy engine. It should not be committed to GitHub.

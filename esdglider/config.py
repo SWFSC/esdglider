@@ -508,7 +508,7 @@ def make_deployment_table(engine):
         + [col for col in df_depl.columns if col not in column_order_pre]
     )
 
-    _log.info("Mergining deployment and summarized device tables")
+    _log.info("Merging deployment and summarized device tables")
     out_table = pd.merge(df_depl, device_summ, on="Glider_Deployment_ID", how="left")
     out_table = out_table[column_order].sort_values(by=["Start", "Glider"])
 

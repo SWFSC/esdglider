@@ -26,7 +26,7 @@ _log = logging.getLogger(__name__)
 
 """
 ESD-specific glider values. 
-Note that depth bins will be dfined by `np.arange(0, depth_max, i)`, 
+Note that depth bins will be defined by `np.arange(0, depth_max, i)`, 
 where i is in element of bin_size
 
 gridded_exclude_vars: list
@@ -102,7 +102,7 @@ def get_path_deployment(
             Must be either 'rt', for real-time, or 'delayed
     deployments_path : str
         The path to the top-level folder of the glider data.
-        This is inteded to be the path to the mounted glider deployments bucket
+        This is intended to be the path to the mounted glider deployments bucket
 
     Returns
     -------
@@ -219,8 +219,10 @@ def binary_to_nc(
         using the science timeseries as the input.
         Both 1m and 5m gridded datasets are created.
         Note: if True then any existing files will be clobbered
-    sci_imeseries_pyglider : bool (default False)
-        TODO
+    sci_timeseries_pyglider : bool, default False
+        Should the function use pyglider.slocum.binary_to_timeseries to create 
+        create the science timeseries (True), 
+        or glider.timeseries_raw_to_sci (False)
     file_path: str | None, default None
         The path of the parent processing script.
         If provided, will be included in the history attribute
@@ -779,7 +781,11 @@ def drop_ts_ranges(
         Input ds, with points within specified time ranges dropped.
         Also saves 'dropped' scatter plots to plotdir, if specified.
     """
-    _log.info(f"There are {len(ds.time)} points in the original {dstype} dataset")
+    _log.info(
+        "There are %s points in the original %s dataset", 
+        len(ds.time), 
+        dstype, 
+    )
 
     # Create the mask framework
     todrop = np.full(len(ds.time), False)

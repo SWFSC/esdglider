@@ -27,8 +27,8 @@ def solocam_filename_dt(filename, dt_idx_start, format="%Y%m%d-%H%M%S"):
         Full filename
     dt_idx_start : int
         The index of the start of the datetime string.
-        The datetime inlcudes this index, plus the next 15 characters
-        Sepcifically: filename[dt_idx_start : (dt_idx_start + 15)]
+        The datetime includes this index, plus the next 15 characters
+        Specifically: filename[dt_idx_start : (dt_idx_start + 15)]
     format : str
         format passed to datetime.strptime
 

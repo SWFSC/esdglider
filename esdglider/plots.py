@@ -231,7 +231,7 @@ def esd_all_plots(
     max_workers : int | None
         Number of workers with which to make the plots.
         If 1, a normal for loop is used.
-        If None, all cores are used, as determiend by os.cpu_count()
+        If None, all cores are used, as determined by os.cpu_count()
         Else, max_workers is the number of cores used
 
     Returns
@@ -329,7 +329,7 @@ def sci_gridded_loop(
     max_workers : int | None
         Number of workers with which to make the plots.
         If 1, a normal for loop is used.
-        If None, all cores are used, as determiend by os.cpu_count()
+        If None, all cores are used, as determined by os.cpu_count()
         Else, max_workers is the number of cores used
 
     Returns
@@ -395,7 +395,7 @@ def eng_tvt_loop(
     max_workers : int | None
         Number of workers with which to make the plots.
         If 1, a normal for loop is used.
-        If None, all cores are used, as determiend by os.cpu_count()
+        If None, all cores are used, as determined by os.cpu_count()
         Else, max_workers is the number of cores used
 
     Returns
@@ -484,7 +484,7 @@ def sci_timeseries_loop(
     max_workers : int | None
         Number of workers with which to make the plots.
         If 1, a normal for loop is used.
-        If None, all cores are used, as determiend by os.cpu_count()
+        If None, all cores are used, as determined by os.cpu_count()
         Else, max_workers is the number of cores used
 
     Returns
@@ -552,7 +552,7 @@ def eng_timeseries_loop(
     max_workers : int | None
         Number of workers with which to make the plots.
         If 1, a normal for loop is used.
-        If None, all cores are used, as determiend by os.cpu_count()
+        If None, all cores are used, as determined by os.cpu_count()
         Else, max_workers is the number of cores used
 
     Returns
@@ -684,7 +684,7 @@ def sci_surface_map_loop(
     max_workers : int | None
         Number of workers with which to make the plots.
         If 1, a normal for loop is used.
-        If None, all cores are used, as determiend by os.cpu_count()
+        If None, all cores are used, as determined by os.cpu_count()
         Else, max_workers is the number of cores used
 
     Returns

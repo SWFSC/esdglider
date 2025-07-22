@@ -4,7 +4,7 @@ setup(
     name="esdglider",
     version="0.2.0-dev",
     description="Utility functions for processing ESD glider data",
-    url="http://github.com/swfsc/glider-utils",
+    url="http://github.com/SWFSC/esdglider",
     author="Sam Woodman",
     author_email="sam.woodman@noaa.gov",
     license="Apache 2.0",

@@ -8,12 +8,12 @@ import esdglider.config as config
 Make a yaml file for all glider deployments to display on the website
 
 Scrape info from database, and generate a yaml file with deployment info. 
-Then loop thorugh the deployments, and look at GCP to see what output 
+Then loop through the deployments, and look at GCP to see what output 
 files have been created. Add this info to the yaml. 
 Write this yaml top the glider-lab-manual repo to be displayed
 
 This script will normally have to be run
-from a local computer to access the datbase
+from a local computer to access the database
 
 'db/glider-db-prod.txt' is the database URL, used to create the
 sqlalchemy engine. It should not be committed to GitHub.
