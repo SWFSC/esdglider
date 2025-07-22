@@ -1,6 +1,6 @@
 # glider-utils
 
-Utility functions for ESD glider processing.
+Utility functions for ESD glider data processing.
 
 This repo was inspired by [cproofutils](https://github.com/c-proof/cproofutils) and [votoutils](https://github.com/voto-ocean-knowledge/votoutils), as well as informed by experiences developing [amlr-gliders](https://github.com/us-amlr/amlr-gliders). Although this repo is a collection of utility functions and functionality, it roughly follows structure and opinions outlined by [Cookiecutter Data Science](https://cookiecutter-data-science.drivendata.org/).
 
@@ -35,7 +35,7 @@ pip install -e glider-utils
 You can then use esdglider functions in your scripts. For instance:
 
 ```python
-from esdglider.process import binary_to_nc
+from esdglider.glider import binary_to_nc
 ```
 
 For developers, the pyproject.toml and setup.py files specify for pip how to install the esdglider package. See [here](https://packaging.python.org/en/latest/tutorials/packaging-projects/) and [here](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) for more info.
@@ -54,16 +54,18 @@ dependencies:
 
 ### Modules
 
+* **acoustics**: functions for generating metadata for acoustic data processing
 * **data**: folder for data included in the package
+* **config**: functions for creating ESD metadata files, typically by interacting with the Glider & Mooring database
 * **gcp**: functions specific to interacting with ESD's Google Cloud Platform (GCP) project
-* **metadata**: functions for creating ESD metadata files
-* **pathutils**: utility functions related to directory and file path creation and management. These functions follow the directory structure outlined [here](https://swfsc.github.io/glider-lab-manual/content/data-management.html)
-* **process**: processing functions, for instance scraping data from the SFMC or writing NetCDF files
+* **glider**: processing functions for slocum glider data, for instance generating slocum glider data paths or writing NetCDF files
+* **imagery**: functions for generating metadata for image processing
+* **rt**: functions for handling real-time glider data, including scraping data from the SFMC or doing real-time data file management
 * **utils**: utility functions for glider data shenanigans
 
 ## Notebooks
 
-This folder contains Jupyter notebooks, for instance for demonstrating sample processing or data access.
+This folder contains Jupyter notebooks, for instance for demonstrating sample processing or data access, or sanity-checking profile calculations.
 
 ## Resources
 

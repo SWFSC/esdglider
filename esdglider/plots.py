@@ -3,6 +3,8 @@ import functools
 import logging
 import os
 
+import typing
+from cartopy.mpl.geoaxes import GeoAxes
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import cmocean.cm as cmo
@@ -197,6 +199,7 @@ eng_vars = [
 def esd_all_plots(
     ds_paths: dict,
     crs=None,
+    ds_sci_depth_var: str = "depth", 
     base_path: str | None = None,
     bar_file: str | None = None,
     max_workers: int | None = 1,
@@ -216,6 +219,9 @@ def esd_all_plots(
         An instantiated cartopy projection, such as cartopy.crs.PlateCarree()
         or cartopy.crs.Mercator().
         If None, surface maps are not created
+    ds_sci_depth_var : str
+        Name of the depth variable in the science dataset. 
+        See 'sci_timeseries_loop' for more details
     base_path : str or None (default None)
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of slocum.get_path_deployments
@@ -255,7 +261,7 @@ def esd_all_plots(
 
     # Sci/eng loops
     sci_gridded_loop(ds_gr5m, base_path, max_workers=max_workers)
-    sci_timeseries_loop(ds_sci, base_path, max_workers=max_workers)
+    sci_timeseries_loop(ds_sci, depth_var=ds_sci_depth_var, base_path=base_path, max_workers=max_workers)
     eng_timeseries_loop(ds_eng, base_path, max_workers=max_workers)
     eng_tvt_loop(ds_raw, base_path, max_workers=max_workers)
     # sci_ts_loop(ds_sci, base_path, max_workers=max_workers)
@@ -430,6 +436,7 @@ def eng_tvt_loop(
 def sci_timeseries_loop_helper(
     var: str,
     ds: xr.Dataset,
+    depth_var: str, 
     base_path: str | None = None,
     show: bool = False,
 ):
@@ -439,13 +446,15 @@ def sci_timeseries_loop_helper(
     concurrent.futures.ProcessPoolExecutor
     """
     _log.debug(f"var {var}")
-    sci_timeseries_plot(var, ds, base_path=base_path, show=show)
-    sci_timesection_gt_plot(var, ds, base_path=base_path, show=show)
+    sci_timeseries_plot(var, ds, depth_var=depth_var, base_path=base_path, show=show)
+    sci_timesection_gt_plot(var, ds, depth_var=depth_var, base_path=base_path, show=show)
     ts_plot(var, ds, base_path=base_path, show=show)
 
 
 def sci_timeseries_loop(
     ds: xr.Dataset,
+    *, 
+    depth_var: str = "depth", 
     base_path: str | None = None,
     show: bool = False,
     max_workers: int | None = 1,
@@ -463,6 +472,10 @@ def sci_timeseries_loop(
     ----------
     ds : xarray Dataset
         Timeseries science dataset
+    depth_var : str
+        The name of the depth variable to use in the plots. 
+        Default is depth; other common option will be 'depth_measured', if 
+        the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of slocum.get_path_deployments
@@ -491,8 +504,8 @@ def sci_timeseries_loop(
         _log.info("Plotting with one worker, not in parallel")
         for var in vars_toloop:
             _log.debug(f"var {var}")
-            sci_timeseries_plot(var, ds, base_path=base_path, show=show)
-            sci_timesection_gt_plot(var, ds, base_path=base_path, show=show)
+            sci_timeseries_plot(var, ds, depth_var=depth_var, base_path=base_path, show=show)
+            sci_timesection_gt_plot(var, ds, depth_var=depth_var, base_path=base_path, show=show)
             ts_plot(var, ds, base_path=base_path, show=show)
     else:
         if max_workers is None:
@@ -501,6 +514,7 @@ def sci_timeseries_loop(
         task_function = functools.partial(
             sci_timeseries_loop_helper,
             ds=ds,
+            depth_var=depth_var, 
             base_path=base_path,
             show=show,
         )
@@ -915,6 +929,7 @@ def sci_timesection_plot(
     deployment = ds.deployment_name
     # glider = utils.split_deployment(deployment)[0]
     project = ds.project
+    ds = ds.dropna(dim="depth", how="all")
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
     std = np.nanstd(ds[var])
@@ -989,6 +1004,7 @@ def sci_spatialsection_plot(
     _log.info(f"Making spatialsection plot for variable {var}")
     deployment = ds.deployment_name
     project = ds.project
+    ds = ds.dropna(dim="depth", how="all")
 
     fig, axs = plt.subplots(1, 2, figsize=(11, 8.5), sharey=True)
     std = np.nanstd(ds[var])
@@ -1118,6 +1134,7 @@ def sci_spatialgrid_plot(
     )
     deployment = ds.deployment_name
     project = ds.project
+    ds = ds.dropna(dim="depth", how="all")
 
     fig = plt.figure(figsize=(11, 8.5))
 
@@ -1393,6 +1410,8 @@ def eng_timeseries_plot(
 def sci_timeseries_plot(
     var: str,
     ds: xr.Dataset,
+    *, 
+    depth_var: str = "depth", 
     base_path: str | None = None,
     show: bool = False,
 ):
@@ -1407,6 +1426,10 @@ def sci_timeseries_plot(
         This is intended to be a gridded dataset produced by slocum.binary_to_nc
     var : str
         The name of the variable to plot
+    depth_var : str
+        The name of the depth variable to use in the plots. 
+        Default is depth; other common option will be 'depth_measured', if 
+        the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of slocum.get_path_deployments
@@ -1436,7 +1459,7 @@ def sci_timeseries_plot(
     ax.invert_yaxis()
     ax.set_title(f"Deployment {deployment} for project {project}", size=title_size)
 
-    p = ax.scatter(ds.time, ds.depth, c=adj_var(ds, var), cmap=sci_vars[var], s=3)
+    p = ax.scatter(ds.time, ds[depth_var], c=adj_var(ds, var), cmap=sci_vars[var], s=3)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
     fig.colorbar(p, location="right").set_label(adj_var_label(ds, var), size=label_size)
     fig.autofmt_xdate()
@@ -1459,6 +1482,8 @@ def sci_timeseries_plot(
 def sci_timesection_gt_plot(
     var: str,
     ds: xr.Dataset,
+    *, 
+    depth_var: str = "depth", 
     base_path: str | None = None,
     show: bool = False,
     robust: bool = True,
@@ -1480,6 +1505,10 @@ def sci_timesection_gt_plot(
         This is intended to be a gridded dataset produced by slocum.binary_to_nc
     var : str
         The name of the variable to plot
+    depth_var : str
+        The name of the depth variable to use in the plots. 
+        Default is depth; other common option will be 'depth_measured', if 
+        the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of slocum.get_path_deployments
@@ -1508,8 +1537,8 @@ def sci_timesection_gt_plot(
     project = ds.project
 
     dat = ds.where(ds["profile_index"] % 1 == 0, drop=True)
-    x = dat.profile_index
-    y = dat.depth
+    x = dat["profile_index"]
+    y = dat[depth_var]
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
     ax = gt.plot(x, y, adj_var(dat, var), cmap=sci_vars[var], ax=ax, robust=robust)
@@ -1518,7 +1547,7 @@ def sci_timesection_gt_plot(
     ax.set_title(f"Deployment {deployment} for project {project}", size=title_size)
 
     # Sometimes glidertools won't plot label, so guarantee it
-    ax.cb.set_label(adj_var_label(ds, var), size=label_size)
+    ax.cb.set_label(adj_var_label(ds, var), size=label_size) # type: ignore
 
     if base_path is not None:
         fname = os.path.join(
@@ -1642,7 +1671,8 @@ def sci_surface_map(
     figsize_y: float = 11,
 ):
     """
-    Create surface maps of science variables
+    Create surface maps of science variables, 
+    plotting the mean/lat/lon for each profile. 
     Saves the plot to 'surfacemap_sci_path' folder within 'base_path'
 
     Parameters
@@ -1694,6 +1724,8 @@ def sci_surface_map(
         figsize=(figsize_x, figsize_y),
         subplot_kw={"projection": crs},
     )
+    ax = typing.cast(GeoAxes, ax) # Explicitly cast to GeoAxes, for Pylance
+
     ax.set_xlabel("\n\n\nLongitude [Deg]", size=14)
     ax.set_ylabel("Latitude [Deg]\n\n\n", size=14)
 
@@ -1714,7 +1746,7 @@ def sci_surface_map(
     ax.add_feature(cfeature.OCEAN, edgecolor="none", facecolor="#7bcbe3")
 
     # Add parallels and meridians; no scale bar since no built-in function
-    gl = ax.gridlines(draw_labels=["bottom", "left"])
+    gl = ax.gridlines(draw_labels=["bottom", "left"]) # type: ignore
     gl.xlabel_style = {"rotation": 15}
 
     # Scatter plot data given data, colored by values in the top 10m
