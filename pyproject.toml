@@ -10,7 +10,7 @@ authors = [
   { name="Sam Woodman", email="sam.woodman@noaa.gov" },
   { name="Caleb Flaim" },
 ]
-license = "Apache 2.0"
+license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
     "google-crc32c>=1.1",
