@@ -11,8 +11,6 @@ import pandas as pd
 import pytz
 import xarray as xr
 import yaml
-from skyfield import almanac, api
-from timezonefinder import TimezoneFinder
 
 _log = logging.getLogger(__name__)
 
@@ -1149,6 +1147,9 @@ def get_sunrise_sunset(time, lat, lon):
     local time: numpy.ndarray
         An array of the calculated local times.
     """
+    
+    from skyfield import almanac, api
+    from timezonefinder import TimezoneFinder
 
     ts = api.load.timescale()
     eph = api.load("de421.bsp")

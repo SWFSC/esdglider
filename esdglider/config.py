@@ -8,7 +8,8 @@ import sqlalchemy
 import yaml
 from google.cloud import storage
 
-from esdglider import gcp, utils
+from esdglider import gcp
+from esdglider.utils import split_deployment, year_path
 
 _log = logging.getLogger(__name__)
 
@@ -201,7 +202,7 @@ def make_deployment_yaml(
             if key == "par":
                 netcdf_vars.pop("par", None)
 
-    deployment_split = utils.split_deployment(deployment_name)
+    deployment_split = split_deployment(deployment_name)
     metadata["deployment_name"] = deployment_name
     metadata["os_version"] = db_depl["Software_Version"].values[0]
     metadata["project"] = project
@@ -265,8 +266,8 @@ def make_website_yaml(engine, out_path):
     # Make new columns for data URLs
     df_foryaml["report_link"] = ""
     df_foryaml["ERDDAP_link"] = ""
-    df_foryaml["gcp_link_glider"] = ""
     df_foryaml["gcp_link_plots"] = ""
+    df_foryaml["gcp_link_glider"] = ""
     df_foryaml["gcp_link_acoustics"] = ""
     df_foryaml["gcp_link_imagery"] = ""
 
@@ -289,7 +290,7 @@ def make_website_yaml(engine, out_path):
         deployment_name = d["Deployment_Name"]
         _log.info("Working on deployment %s", deployment_name)
         project = d["Project"]
-        year = utils.year_path(project, deployment_name)
+        year = year_path(project, deployment_name)
         url_pre = f"{project}/{year}/{deployment_name}"
         _log.debug("url/path prefix %s", url_pre)
 

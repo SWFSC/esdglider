@@ -27,8 +27,9 @@ setup(
         "cmocean",
         "matplotlib",
         "glidertools",
-        "skyfield", 
-        "timezonefinder", 
     ],
+    extras_require={
+        "imagery": ["skyfield", "timezonefinder"],
+    },
     zip_safe=False,
 )

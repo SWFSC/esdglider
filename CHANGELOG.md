@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the function `glider.make_gridfiles_depth_measured` to make gridded NetCDF files using the glider measured depth.
 - Added the function `glider.grid_esd` to ensure that ESD data are gridded consistently across different ESD processing pathways. This function uses new module-level variables to define the variables to exclude from gridding, maximum depth value, and depth bin spacing.
 - Changed the esdglider function `decompress` to `decompress_dir`, to be explicit and consistent with dbdreader's `decompress_file`
+- Changed skyfield and timezonefinder to optional dependencies, since they are only used by a single function
 
 
 ## [0.1.0] - 2025-07-17
