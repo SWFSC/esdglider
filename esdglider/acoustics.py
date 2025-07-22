@@ -11,7 +11,7 @@ import esdglider.utils as utils
 _log = logging.getLogger(__name__)
 
 
-def get_path_acoutics(deployment_info: dict, acoustic_path: str):
+def get_path_acoustics(deployment_info: dict, acoustic_path: str):
     """
     Return a dictionary of acoustic-related paths
     These paths follow the directory structure outlined here:
@@ -140,7 +140,7 @@ def echoview_metadata(ds: xr.Dataset, paths: dict) -> str:
         Science timeseries dataset
     paths : dict
         A dictionary of acoustic file/directory paths
-        See get_path_acoutics for the expected key/value pairs
+        See get_path_acoustics for the expected key/value pairs
 
     Returns
     -------

@@ -1724,7 +1724,7 @@ def sci_surface_map(
         matplotlib.Figure.figure object
     """
 
-    if var not in list(ds.data_vars):
+    if var not in list(ds.data_vars) and var != "profile_index":
         _log.info("Variable name %s not present in ds. Skipping plot", var)
         return
 
@@ -1772,11 +1772,21 @@ def sci_surface_map(
     gl = ax.gridlines(draw_labels=["bottom", "left"])  # type: ignore
     gl.xlabel_style = {"rotation": 15}
 
+    # Special considerations for profile_index
+    if var == "profile_index":
+        c = ds["profile"]
+        title = f"{deployment}: {var}\nfrom {start} to {end}"
+        cbar_label = "profile_index [1]"
+    else:
+        c = ds[var].where(ds.depth <= 10, drop=True).mean(dim="depth")
+        title = f"{deployment}: 0 - 10m average {var}\nfrom {start} to {end}"
+        cbar_label = adj_var_label(ds, var)
+
     # Scatter plot data given data, colored by values in the top 10m
     p = ax.scatter(
         ds.longitude,
         ds.latitude,
-        c=ds[var].where(ds.depth <= 10, drop=True).mean(dim="depth"),
+        c=c,
         cmap=sci_vars[var],
         s=10,
         zorder=2.5,
@@ -1796,15 +1806,12 @@ def sci_surface_map(
         ax.clabel(C0, colors="grey", fontsize=9, inline=True)
         # m.contourf(lon, lat, bar.z, cmap="Pastel1")
 
-    # Add colorbar
+    # Add colorbar and title
     fig.colorbar(p, ax=ax, shrink=0.6, location="right").set_label(
-        label=adj_var_label(ds, var),
+        label=cbar_label,
         size=label_size,
     )
-    ax.set_title(
-        f"{deployment}: 0 - 10m average {var}\nfrom {start} to {end}",
-        size=title_size,
-    )
+    ax.set_title(title, size=title_size)
 
     if base_path is not None:
         fname = os.path.join(
