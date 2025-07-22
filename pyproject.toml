@@ -1,3 +1,46 @@
 [build-system]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
-requires = [ "setuptools>=61", "wheel" ]
+
+[project]
+name = "esdglider"
+version = "0.3.0-dev"
+description = "Functions for processing ESD glider data"
+authors = [
+  { name="Sam Woodman", email="sam.woodman@noaa.gov" },
+  { name="Caleb Flaim" },
+]
+license = "Apache 2.0"
+requires-python = ">=3.10"
+dependencies = [
+    "google-crc32c>=1.1",
+    "google-cloud-secret-manager>=2.12",
+    "numpy",
+    "pandas",
+    "xarray",
+    "gsw",
+    "pyyaml",
+    "pyglider",
+    "netCDF4",
+    "cartopy",
+    "cmocean",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+imagery = [
+    "glidertools",
+    "skyfield",
+    "timezonefinder",
+]
+
+[project.urls]
+Homepage  = "https://swfsc.github.io/glider-lab-manual"
+Repository  = "http://github.com/SWFSC/esdglider.git"
+Issues = "http://github.com/SWFSC/esdglider/issues"
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "docs*"]
+
+[tool.setuptools.package-data]
+esdglider = ["data/*"]

@@ -7,7 +7,6 @@ import typing
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import cmocean.cm as cmo
-import glidertools as gt
 import matplotlib
 import matplotlib.dates as mdates
 import matplotlib.figure
@@ -1545,6 +1544,7 @@ def sci_timesection_gt_plot(
     -------
         matplotlib.Figure.figure object
     """
+    import glidertools as gt
 
     if var not in list(ds.data_vars):
         _log.info("Variable name %s not present in ds. Skipping plot", var)

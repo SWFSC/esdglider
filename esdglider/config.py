@@ -4,7 +4,7 @@ from importlib.resources import as_file, files
 
 import numpy as np
 import pandas as pd
-import sqlalchemy
+# import sqlalchemy
 import yaml
 from google.cloud import storage
 
@@ -89,13 +89,15 @@ def instrument_attrs(key, devices, dev_df, cal_df):
 
 
 def make_deployment_yaml(
+    engine, 
     deployment_name: str,
     out_path: str,
-    db_url: str | sqlalchemy.URL,
 ):
     """
     Parameters
     ----------
+    engine: str | sqlalchemy URL
+        The database engine, typically the output of sqlalchemy.create_engine
     deployment_name : str
         name of the glider deployment. Eg, amlr01-20200101.
         Only need the name of the deployment,
@@ -126,9 +128,10 @@ def make_deployment_yaml(
     prof_vars = esdglider_yaml_read("profile-variables.yml")
     devices = esdglider_yaml_read("glider-devices.yml")
 
-    _log.debug("connecting to database, using the following: %s", db_url)
-    engine = sqlalchemy.create_engine(db_url)
+    # _log.debug("connecting to database, using the following: %s", db_url)
+    # engine = sqlalchemy.create_engine(db_url)
 
+    _log.debug("database engine %s", engine)
     Glider_Deployment = pd.read_sql_table(
         "vGlider_Deployment",
         con=engine,
