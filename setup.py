@@ -8,7 +8,7 @@ setup(
     author="Sam Woodman",
     author_email="sam.woodman@noaa.gov",
     license="Apache 2.0",
-    packages=find_packages(exclude=('tests', 'docs')),
+    packages=find_packages(exclude=("tests", "docs")),
     package_data={"esdglider": ["esdglider/data/*"]},
     include_package_data=True,
     python_requires=">=3.10",

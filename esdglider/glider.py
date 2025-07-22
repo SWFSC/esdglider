@@ -1,7 +1,7 @@
 import logging
 import os
-from importlib import metadata, resources
 import tempfile
+from importlib import metadata, resources
 
 import netCDF4
 import numpy as np
@@ -25,8 +25,8 @@ _log = logging.getLogger(__name__)
 
 
 """
-ESD-specific glider values. 
-Note that depth bins will be defined by `np.arange(0, depth_max, i)`, 
+ESD-specific glider values.
+Note that depth bins will be defined by `np.arange(0, depth_max, i)`,
 where i is in element of bin_size
 
 gridded_exclude_vars: list
@@ -35,10 +35,10 @@ gridded_exclude_vars: list
     then this list will need to be updated
 
 bin_size: list
-    a list of the gridded depth bin sizes 
+    a list of the gridded depth bin sizes
 
 depth_max: float
-    The maximum value to use when making depth bins    
+    The maximum value to use when making depth bins
 """
 gridded_exclude_vars = [
     "distance_over_ground",
@@ -46,22 +46,22 @@ gridded_exclude_vars = [
     "pitch",
     "roll",
     "waypoint_latitude",
-    "waypoint_longitude"
+    "waypoint_longitude",
 ]
-bin_size=[1, 5]
-depth_max=1200.1
+bin_size = [1, 5]
+depth_max = 1200.1
 
 
 def get_path_yaml(yaml_type: str) -> str:
     """
-    Get the path to the specified yaml (raw or eng). 
-    The yamls are included as part of the package data, 
+    Get the path to the specified yaml (raw or eng).
+    The yamls are included as part of the package data,
     and contain the relevant NetCDF variables to extract from the binary files
 
     Parameters
     ----------
     yaml_type : str
-        A string that defines the type of yaml to get. 
+        A string that defines the type of yaml to get.
         Must be either 'raw' or 'eng'
 
     Returns
@@ -69,10 +69,10 @@ def get_path_yaml(yaml_type: str) -> str:
     str
         the path of the yaml
     """
-    if not (yaml_type in ["raw", "eng"]):
+    if yaml_type not in ["raw", "eng"]:
         _log.error("yaml_type %s", yaml_type)
         raise ValueError("yaml_type must be either 'raw' or 'eng'")
-    
+
     ref = resources.files("esdglider.data") / f"deployment-{yaml_type}-vars.yml"
     with resources.as_file(ref) as path:
         return str(path)
@@ -175,10 +175,10 @@ def get_path_deployment(
 def binary_to_nc(
     deployment_info: dict,
     paths: dict,
-    *, 
+    *,
     write_raw: bool = True,
     write_timeseries: bool = True,
-    sci_timeseries_pyglider: bool = True, 
+    sci_timeseries_pyglider: bool = True,
     write_gridded: bool = True,
     file_info: str | None = None,
     **kwargs,
@@ -220,8 +220,8 @@ def binary_to_nc(
         Both 1m and 5m gridded datasets are created.
         Note: if True then any existing files will be clobbered
     sci_timeseries_pyglider : bool, default False
-        Should the function use pyglider.slocum.binary_to_timeseries to create 
-        create the science timeseries (True), 
+        Should the function use pyglider.slocum.binary_to_timeseries to create
+        create the science timeseries (True),
         or glider.timeseries_raw_to_sci (False)
     file_path: str | None, default None
         The path of the parent processing script.
@@ -244,8 +244,8 @@ def binary_to_nc(
     if paths["deploymentyaml"] != deploymentyaml:
         raise ValueError(
             "Provided yaml path (%s) is not the same as the paths yaml path (%s)",
-            deploymentyaml, 
-            paths['deploymentyaml'], 
+            deploymentyaml,
+            paths["deploymentyaml"],
         )
 
     deployment = utils.read_deploymentyaml(deploymentyaml)
@@ -254,7 +254,7 @@ def binary_to_nc(
     deploymentyaml = paths["deploymentyaml"]
     rawdir = paths["rawdir"]
     tsdir = paths["tsdir"]
-    griddir = paths["griddir"]
+    # griddir = paths["griddir"]
 
     # Check mode, set binary_search regex
     if mode == "delayed":
@@ -273,7 +273,7 @@ def binary_to_nc(
         "metadata_dict": {"deployment_name": deployment_name},
         "device_dict": {},
         "profile_summary_path": paths["profsummpath"],
-        "maxgap": maxgap_esd, 
+        "maxgap": maxgap_esd,
     }
 
     # --------------------------------------------
@@ -379,13 +379,13 @@ def binary_to_nc(
         else:
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
             outname_tssci = timeseries_raw_to_sci(
-                outname_tsraw, 
-                tsdir, 
+                outname_tsraw,
+                tsdir,
                 deploymentyaml,
                 fnamesuffix=f"-{mode}-sci",
-                maxgap = maxgap_esd, 
-                pp=postproc_info, 
-                **kwargs
+                maxgap=maxgap_esd,
+                pp=postproc_info,
+                **kwargs,
             )
             # raw_to_sci_timeseries calls postproc_sci_timeseries internally
             tssci = xr.load_dataset(outname_tssci)
@@ -587,12 +587,11 @@ def postproc_general(
         # Assuming the raw dataset
         depth_var = "depth_measured"
 
-
     # ATTRIBUTES, after dropping vars, etc
     ds = postproc_attrs(ds, pp)
 
     # Profiles check
-    prof_summ= utils.calc_profile_summary(ds, depth_var)
+    prof_summ = utils.calc_profile_summary(ds, depth_var)
     utils.check_profiles(prof_summ)
 
     return ds
@@ -638,7 +637,7 @@ def postproc_eng_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
     # )
 
     # With depth (CTD) gone, rename depth_measured
-    if ('depth_measured' in ds):
+    if "depth_measured" in ds:
         ds = ds.rename({"depth_measured": "depth"})
 
     # General updates
@@ -654,9 +653,7 @@ def postproc_eng_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
         ds.attrs["comment"] = eng_comment
     else:
         ds.attrs["comment"] += ". " + eng_comment
-    ds.attrs["processing_level"] += (
-        " All values have been interpolated via linear fill"
-    )
+    ds.attrs["processing_level"] += " All values have been interpolated via linear fill"
 
     _log.debug(f"end eng postproc: ds has {len(ds.time)} values")
     # utils.to_netcdf_esd(ds, ds_file)
@@ -688,7 +685,7 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
     _log.debug("begin sci postproc: ds has %s values", len(ds.time))
 
     # In case ds is coming from raw_to_timeseries
-    if ('depth_ctd' in ds):
+    if "depth_ctd" in ds:
         ds = ds.rename({"depth_ctd": "depth"})
 
     # General updates
@@ -703,7 +700,7 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
     # Science-specific attribute updates
     ds.attrs["processing_level"] += (
         " Science values have been interpolated via linear fill, "
-        + f"with a maxgap of {pp["maxgap"]} seconds. "
+        + f"with a maxgap of {pp['maxgap']} seconds. "
     )
 
     # Reorder data variables
@@ -720,7 +717,7 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
         "potential_temperature",
         "potential_density",
     ]
-    new_start[2:2] = sorted([i for i in ds.keys() if "depth" in i]) # type: ignore
+    new_start[2:2] = sorted([i for i in ds.keys() if "depth" in i])  # type: ignore
     ds = utils.data_var_reorder(ds, new_start)
 
     _log.debug("end sci postproc: ds has %s values", len(ds.time))
@@ -782,9 +779,9 @@ def drop_ts_ranges(
         Also saves 'dropped' scatter plots to plotdir, if specified.
     """
     _log.info(
-        "There are %s points in the original %s dataset", 
-        len(ds.time), 
-        dstype, 
+        "There are %s points in the original %s dataset",
+        len(ds.time),
+        dstype,
     )
 
     # Create the mask framework
@@ -1062,10 +1059,10 @@ def binary_to_raw_timeseries(
     # Read and parse deployment yaml(s)
     deployment = pgutils._get_deployment(deploymentyaml)
 
-    # NetCDF vars: 
+    # NetCDF vars:
     # Loop through deploymentyaml files, and append all new netcdf vars.
     # This chunk maintains the key from the first time it sees it.
-    # This distinction from pgutils._get_deployment 
+    # This distinction from pgutils._get_deployment
     # allows us to 'concatenate' netcdf vars for this raw dataset
     ncvar = {}
     if isinstance(deploymentyaml, str):
@@ -1252,20 +1249,20 @@ def binary_to_raw_timeseries(
 
 
 def timeseries_raw_to_sci(
-    inname, 
-    outdir, 
-    deploymentyaml, 
+    inname,
+    outdir,
+    deploymentyaml,
     *,
-    fnamesuffix="", 
-    maxgap=300, 
-    pp: dict, 
+    fnamesuffix="",
+    maxgap=300,
+    pp: dict,
     **kwargs,
 ):
     """
     Go from raw timeseries (from esdglider.glider.binary_to_raw)
-    to processed science timeseries. 
+    to processed science timeseries.
     This function can be used in cases where different science sensors are
-    on at different times, e.g. PAM deployments, and thus it is not possible 
+    on at different times, e.g. PAM deployments, and thus it is not possible
     to get the full science timeseries using dbdreader.get_sync.
 
     Other than not using get_sync, this function closely follows the
@@ -1278,7 +1275,7 @@ def timeseries_raw_to_sci(
     Returns
     -------
     """
-    
+
     ds = xr.open_dataset(inname, decode_times=True)
 
     # Read and parse deployment yaml(s), to get variables
@@ -1288,20 +1285,21 @@ def timeseries_raw_to_sci(
 
     vars_tokeep = [i for i in ncvar.keys() if (i in ds.keys() and i != "time")]
     vars_tokeep[2:2] = [
-        "depth_measured", "depth_ctd", 
-        "profile_index", "profile_direction"
+        "depth_measured",
+        "depth_ctd",
+        "profile_index",
+        "profile_direction",
     ]
-    vars_sci = (
-        [i for i in ncvar if "sci" in ncvar[i]["source"] and i != "time"]
-        + ["depth_ctd"]
-    )
+    vars_sci = [i for i in ncvar if "sci" in ncvar[i]["source"] and i != "time"] + [
+        "depth_ctd",
+    ]
 
     # Use deployment yaml(s) to specify the variables to keep and interpolate
     ds = ds[vars_tokeep].dropna(dim="time", how="all")
 
     # For the science variables: interpolate and run find_gaps
-    # To be consistent with pyglider, engineering variables are 
-    # interpolated, but not run through find_gaps 
+    # To be consistent with pyglider, engineering variables are
+    # interpolated, but not run through find_gaps
     t = ds.time.values.astype(np.int64) / 1e9
     for i in vars_tokeep:
         _log.info("variable %s", i)
@@ -1313,53 +1311,51 @@ def timeseries_raw_to_sci(
         _t = da.time.values.astype(np.int64) / 1e9
         val_interp = np.interp(t, _t, da.values, left=np.nan, right=np.nan)
 
-        # To be consistent with pyglider.slocum.binary_to_timeseries, 
+        # To be consistent with pyglider.slocum.binary_to_timeseries,
         # only find gaps and zero screens for science vars
         # Ensure that _t, t, and maxgap are all in the same units
         if i in vars_sci:
             tg_ind = pgutils.find_gaps(_t, t, maxgap)
             val_interp[tg_ind] = np.nan
             val_interp = pgutils._zero_screen(val_interp)
-            _log.debug('number of gaps %s', np.count_nonzero(tg_ind))
+            _log.debug("number of gaps %s", np.count_nonzero(tg_ind))
 
         # Update ds object with values and attributes
         ds[i].values = val_interp
         ds[i].attrs["method"] = "linear fill"
-        #The var already has the yaml-specified attributes from binary_to_raw
+        # The var already has the yaml-specified attributes from binary_to_raw
 
     # Drop rows where all science vars are nan
     _log.info(
-        "Dropping datapoints that have nan values for all of these vars: %s", 
-        ", ".join([str(i) for i in vars_sci]), 
+        "Dropping datapoints that have nan values for all of these vars: %s",
+        ", ".join([str(i) for i in vars_sci]),
     )
     # vars_ignore = list(set(vars_tokeep).difference(vars_sci))
     # vars_ignore = list(set(vars_tokeep).intersection([
-    #     "depth", "profile_index", "profile_direction", "latitude", "longitude", 
-    #     "heading", "pitch", "roll", 
-    #     "water_velocity_eastward", "water_velocity_northward", 
+    #     "depth", "profile_index", "profile_direction", "latitude", "longitude",
+    #     "heading", "pitch", "roll",
+    #     "water_velocity_eastward", "water_velocity_northward",
     # ]))
     # vars_sci = list(set(vars_tokeep).difference(set(vars_ignore)))
     ds = ds.dropna(dim="time", how="all", subset=vars_sci)
 
     # Not necessary with subset arg
     # ds = xr.combine_by_coords(
-    #     [ds[vars_ignore], ds_sci], join="inner", combine_attrs ="identical", 
+    #     [ds[vars_ignore], ds_sci], join="inner", combine_attrs ="identical",
     # )
     # ds = utils.data_var_reorder(ds, vars_tokeep)
 
-
-
-    if ('temperature' in ds) and ('conductivity' in ds) and ('pressure' in ds):
+    if ("temperature" in ds) and ("conductivity" in ds) and ("pressure" in ds):
         ds = pgutils.get_derived_eos_raw(ds)
 
-    # Perform ESD-specific post-processing    
-    _log.info(f"Post-processing science timeseries")
+    # Perform ESD-specific post-processing
+    _log.info("Post-processing science timeseries")
     ds = postproc_sci_timeseries(ds, pp, **kwargs)
 
     # if dstype == "eng":
     #     _log.info(f"Post-processing engineering timeseries")
     #     ds = postproc_eng_timeseries(ds, pp, **kwargs)
-    # elif dstype == "sci":    
+    # elif dstype == "sci":
     #     _log.info(f"Post-processing science timeseries")
     #     ds = postproc_sci_timeseries(ds, pp, **kwargs)
     # else:
@@ -1368,7 +1364,7 @@ def timeseries_raw_to_sci(
 
     # Write out to file
     outname = f"{outdir}/{ds.attrs['deployment_name'] + fnamesuffix}.nc"
-    _log.info('writing %s', outname)
+    _log.info("writing %s", outname)
     utils.to_netcdf_esd(ds, outname)
 
     return outname
@@ -1377,7 +1373,7 @@ def timeseries_raw_to_sci(
 def decompress_dir(binarydir):
     """
     A light wrapper around the dbdreader function decompress_file
-    Decompress all compressed bianry files in binarydir. 
+    Decompress all compressed bianry files in binarydir.
     Decompressed files will be written within binarydir.
     Compressed files will not be altered
 
@@ -1411,7 +1407,7 @@ def grid_esd(inname, paths):
     Parameters
     ----------
     inname : str or Path
-        netcdf file to break into profiles. 
+        netcdf file to break into profiles.
         Passed directly to inname argument of pyglider.ncprocess.make_gridfiles
     paths : dict
         A dictionary of file/directory paths for various processing steps.
@@ -1426,14 +1422,14 @@ def grid_esd(inname, paths):
     """
 
     outnames = []
-    for i in bin_size:        
+    for i in bin_size:
         _log.info("Generating %sm gridded data", i)
         outname_gr = pgncprocess.make_gridfiles(
             inname,
-            paths["griddir"], 
+            paths["griddir"],
             paths["deploymentyaml"],
             depth_bins=np.arange(0, depth_max, i),
-            fnamesuffix=f"-{paths["mode"]}-{i}m",
+            fnamesuffix=f"-{paths['mode']}-{i}m",
             exclude_vars=gridded_exclude_vars,
         )
         outnames.append(outname_gr)
@@ -1444,10 +1440,10 @@ def grid_esd(inname, paths):
 def make_gridfiles_depth_measured(paths):
     """
     Make gridfiles using the measured depth. This function will be used
-    if for instance the CTD was turned off during parts of a deployment, and 
+    if for instance the CTD was turned off during parts of a deployment, and
     thus the depth calculated from the CTD does not span the full timeseries.
 
-    A temporary nc file is written, to pass to 
+    A temporary nc file is written, to pass to
     pyglider.ncprocess.make_gridfiles. The science dataset is not altered.
 
     Parameters
@@ -1466,25 +1462,21 @@ def make_gridfiles_depth_measured(paths):
     outname_tssci = paths["tsscipath"]
     outname_gr1m = paths["gr1path"]
     outname_gr5m = paths["gr5path"]
-    
+
     utils.remove_file(outname_gr1m)
     utils.remove_file(outname_gr5m)
     if not os.path.isfile(outname_tssci):
         raise FileNotFoundError(f"Could not find {outname_tssci}")
 
     _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
-    
+
     with tempfile.TemporaryDirectory() as temp_dir:
         # Creating temporary science dataset with measured depth as depth
         temp_file = os.path.join(temp_dir, os.path.basename(outname_tssci))
         _log.debug("temp_file %s", temp_file)
         ds_sci_tmp = xr.load_dataset(outname_tssci)
-        ds_sci_tmp = (
-            ds_sci_tmp
-            .drop_vars(["depth"])
-            .rename({"depth_measured": "depth"})
-        )
-        
+        ds_sci_tmp = ds_sci_tmp.drop_vars(["depth"]).rename({"depth_measured": "depth"})
+
         # Add a comment that the bins were created useing depth_measured
         tmp_comment = (
             "Glider data was gridded using the glider measured depth (m_depth)"

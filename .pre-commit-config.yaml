@@ -43,6 +43,6 @@ repos:
     -   id: isort
         name: isort (python)
 
-# cd glider-utils
+# cd esdglider
 # pre-commit run --all-files
 # pylint esdglider --disable=invalid-name

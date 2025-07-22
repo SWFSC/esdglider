@@ -102,7 +102,7 @@ def findProfiles(stamp: np.ndarray, depth: np.ndarray, **kwargs):
         "shake": 20,
     }
     # Filter for relevant kwards, in case any others got passed in
-    # Added because optionsList is now returned 
+    # Added because optionsList is now returned
     kwargs = {key: value for key, value in kwargs.items() if key in optionsList.keys()}
     optionsList.update(kwargs)
     _log.info(
@@ -315,10 +315,9 @@ def drop_bogus_times(
     if (num_orig - len(ds.time)) > 0:
         _log.info(
             "Dropped %s times that were either nan (n=%s) or before '%s'",
-            num_orig - len(ds.time), 
-            num_orig_nan, 
-            min_dt, 
-
+            num_orig - len(ds.time),
+            num_orig_nan,
+            min_dt,
         )
 
     if max_drop:
@@ -328,8 +327,8 @@ def drop_bogus_times(
         if (num_orig - len(ds.time)) > 0:
             _log.warning(
                 "Dropped %s times that were after the current UTC time %s",
-                num_orig - len(ds.time), 
-                max_dt
+                num_orig - len(ds.time),
+                max_dt,
             )
 
     return ds
@@ -385,7 +384,7 @@ def drop_bogus(
     if (num_orig - len(ds.time)) > 0:
         _log.info(
             "Dropped %s nan or out of range lat/lons",
-            num_orig - len(ds.time)
+            num_orig - len(ds.time),
         )
 
     # For science variables, change out of range values to nan
@@ -406,8 +405,8 @@ def drop_bogus(
     for var, value in drop_values.items():
         if var not in list(ds.keys()):
             _log.debug(
-                "%s not present in ds - skipping drop_values check", 
-                num_orig - len(ds.time)
+                "%s not present in ds - skipping drop_values check",
+                num_orig - len(ds.time),
             )
             continue
         num_orig = len(ds[var])
@@ -416,10 +415,10 @@ def drop_bogus(
         if num_orig - len(ds[var]) > 0:
             _log.info(
                 "Changed %s %s values outside range [%s, %s] to nan",
-                num_orig - len(ds[var]), 
-                var, 
-                value[0], 
-                value[1], 
+                num_orig - len(ds[var]),
+                var,
+                value[0],
+                value[1],
             )
 
     return ds
@@ -821,7 +820,7 @@ def calc_profile_summary(ds: xr.Dataset, depth_var: str) -> pd.DataFrame:
     """
     # Minimum columns needed by aggregation function
     _log.info("Calculating profile summary using var %s", depth_var)
-    ds = ds.rename({depth_var: "depth"})    
+    ds = ds.rename({depth_var: "depth"})
     grouped_columns = [
         "time",
         "depth",
@@ -1039,7 +1038,7 @@ def check_depth(x: xr.DataArray, y: xr.DataArray, depth_ok=5) -> xr.Dataset:
             depth_ok,
         )
         d = depth_diff_abs.to_pandas()
-        _log.warning(d[depth_diff_abs.values>depth_ok].describe())
+        _log.warning(d[depth_diff_abs.values > depth_ok].describe())
 
     ds = xr.merge(
         [
@@ -1147,7 +1146,7 @@ def get_sunrise_sunset(time, lat, lon):
     local time: numpy.ndarray
         An array of the calculated local times.
     """
-    
+
     from skyfield import almanac, api
     from timezonefinder import TimezoneFinder
 

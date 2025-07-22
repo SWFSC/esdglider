@@ -1,15 +1,16 @@
 import logging
-import sqlalchemy
+
 import gspread
+import sqlalchemy
 
 import esdglider.config as config
 
 """
 Make a yaml file for all glider deployments to display on the website
 
-Scrape info from database, and generate a yaml file with deployment info. 
-Then loop through the deployments, and look at GCP to see what output 
-files have been created. Add this info to the yaml. 
+Scrape info from database, and generate a yaml file with deployment info.
+Then loop through the deployments, and look at GCP to see what output
+files have been created. Add this info to the yaml.
 Write this yaml top the glider-lab-manual repo to be displayed
 
 This script will normally have to be run
@@ -38,15 +39,15 @@ if __name__ == "__main__":
     df_depl = df_depl.drop(["Dates", "Sensors"], axis=1)
 
     # df_depl.to_csv(
-    #     "C:/Users/sam.woodman/Downloads/fleet-status-deployments.csv", 
+    #     "C:/Users/sam.woodman/Downloads/fleet-status-deployments.csv",
     #     index=False
     # )
 
     # Write Deployments table to fleet status
     wk_name = "Deployments-Database"
     logging.info("Updating the Fleet Status %s sheet", wk_name)
-    df_depl = df_depl.fillna('').rename({"Glider_Deployment_ID": "Deployment_ID"})
-    gc = gspread.oauth()     # type: ignore
+    df_depl = df_depl.fillna("").rename({"Glider_Deployment_ID": "Deployment_ID"})
+    gc = gspread.oauth()  # type: ignore
     sh = gc.open("Fleet Status")
     wk = sh.worksheet(wk_name)
     wk.update([df_depl.columns.values.tolist()] + df_depl.values.tolist())
@@ -56,7 +57,7 @@ if __name__ == "__main__":
     # wk.add_validation(
     #     f'F2:L{1+df_depl.shape[0]}',
     #     ValidationConditionType.one_of_list,
-    #     ['TRUE', 'FALSE'], 
+    #     ['TRUE', 'FALSE'],
     #     showCustomUi=True
     # )
 

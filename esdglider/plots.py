@@ -2,9 +2,8 @@ import concurrent.futures
 import functools
 import logging
 import os
-
 import typing
-from cartopy.mpl.geoaxes import GeoAxes
+
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import cmocean.cm as cmo
@@ -14,10 +13,11 @@ import matplotlib.dates as mdates
 import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
-from numpy.typing import NDArray
 import xarray as xr
+from cartopy.mpl.geoaxes import GeoAxes
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
+from numpy.typing import NDArray
 
 from esdglider import utils
 
@@ -154,19 +154,19 @@ or that most closely matched variables colors in the R package oce
 (eg, https://dankelley.github.io/oce/reference/oceColorsOxygen.html)
 """
 sci_vars = {
-    "temperature": cmo.thermal, # type: ignore
-    "potential_temperature": cmo.thermal, # type: ignore
-    "conductivity": cmo.tempo, # type: ignore
-    "salinity": cmo.haline, # type: ignore
-    "density": cmo.dense,  #colormaps["cividis"], # type: ignore
-    "potential_density": cmo.dense, # type: ignore
-    "oxygen_concentration": cmo.oxy,  #cmo.tempo, # type: ignore
-    "oxygen_saturation": cmo.oxy, # type: ignore
-    "chlorophyll": cmo.algae, # type: ignore
-    "cdom": cmo.matter, # type: ignore
-    "backscatter_700": cmo.delta, #colormaps["terrain"], # type: ignore 
-    "par": cmo.turbid, # type: ignore
-    "profile_index": cmo.gray, # type: ignore
+    "temperature": cmo.thermal,  # type: ignore
+    "potential_temperature": cmo.thermal,  # type: ignore
+    "conductivity": cmo.tempo,  # type: ignore
+    "salinity": cmo.haline,  # type: ignore
+    "density": cmo.dense,  # colormaps["cividis"], # type: ignore
+    "potential_density": cmo.dense,  # type: ignore
+    "oxygen_concentration": cmo.oxy,  # cmo.tempo, # type: ignore
+    "oxygen_saturation": cmo.oxy,  # type: ignore
+    "chlorophyll": cmo.algae,  # type: ignore
+    "cdom": cmo.matter,  # type: ignore
+    "backscatter_700": cmo.delta,  # colormaps["terrain"], # type: ignore
+    "par": cmo.turbid,  # type: ignore
+    "profile_index": cmo.gray,  # type: ignore
 }
 
 """
@@ -199,7 +199,7 @@ eng_vars = [
 def esd_all_plots(
     ds_paths: dict,
     crs=None,
-    ds_sci_depth_var: str = "depth", 
+    ds_sci_depth_var: str = "depth",
     base_path: str | None = None,
     bar_file: str | None = None,
     max_workers: int | None = 1,
@@ -220,7 +220,7 @@ def esd_all_plots(
         or cartopy.crs.Mercator().
         If None, surface maps are not created
     ds_sci_depth_var : str
-        Name of the depth variable in the science dataset. 
+        Name of the depth variable in the science dataset.
         See 'sci_timeseries_loop' for more details
     base_path : str or None (default None)
         The 'base' of the plot path. If None, then the plot will not be saved
@@ -261,7 +261,12 @@ def esd_all_plots(
 
     # Sci/eng loops
     sci_gridded_loop(ds_gr5m, base_path, max_workers=max_workers)
-    sci_timeseries_loop(ds_sci, depth_var=ds_sci_depth_var, base_path=base_path, max_workers=max_workers)
+    sci_timeseries_loop(
+        ds_sci,
+        depth_var=ds_sci_depth_var,
+        base_path=base_path,
+        max_workers=max_workers,
+    )
     eng_timeseries_loop(ds_eng, base_path, max_workers=max_workers)
     eng_tvt_loop(ds_raw, base_path, max_workers=max_workers)
     # sci_ts_loop(ds_sci, base_path, max_workers=max_workers)
@@ -436,7 +441,7 @@ def eng_tvt_loop(
 def sci_timeseries_loop_helper(
     var: str,
     ds: xr.Dataset,
-    depth_var: str, 
+    depth_var: str,
     base_path: str | None = None,
     show: bool = False,
 ):
@@ -447,14 +452,20 @@ def sci_timeseries_loop_helper(
     """
     _log.debug(f"var {var}")
     sci_timeseries_plot(var, ds, depth_var=depth_var, base_path=base_path, show=show)
-    sci_timesection_gt_plot(var, ds, depth_var=depth_var, base_path=base_path, show=show)
+    sci_timesection_gt_plot(
+        var,
+        ds,
+        depth_var=depth_var,
+        base_path=base_path,
+        show=show,
+    )
     ts_plot(var, ds, base_path=base_path, show=show)
 
 
 def sci_timeseries_loop(
     ds: xr.Dataset,
-    *, 
-    depth_var: str = "depth", 
+    *,
+    depth_var: str = "depth",
     base_path: str | None = None,
     show: bool = False,
     max_workers: int | None = 1,
@@ -473,8 +484,8 @@ def sci_timeseries_loop(
     ds : xarray Dataset
         Timeseries science dataset
     depth_var : str
-        The name of the depth variable to use in the plots. 
-        Default is depth; other common option will be 'depth_measured', if 
+        The name of the depth variable to use in the plots.
+        Default is depth; other common option will be 'depth_measured', if
         the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
@@ -504,8 +515,20 @@ def sci_timeseries_loop(
         _log.info("Plotting with one worker, not in parallel")
         for var in vars_toloop:
             _log.debug(f"var {var}")
-            sci_timeseries_plot(var, ds, depth_var=depth_var, base_path=base_path, show=show)
-            sci_timesection_gt_plot(var, ds, depth_var=depth_var, base_path=base_path, show=show)
+            sci_timeseries_plot(
+                var,
+                ds,
+                depth_var=depth_var,
+                base_path=base_path,
+                show=show,
+            )
+            sci_timesection_gt_plot(
+                var,
+                ds,
+                depth_var=depth_var,
+                base_path=base_path,
+                show=show,
+            )
             ts_plot(var, ds, base_path=base_path, show=show)
     else:
         if max_workers is None:
@@ -514,7 +537,7 @@ def sci_timeseries_loop(
         task_function = functools.partial(
             sci_timeseries_loop_helper,
             ds=ds,
-            depth_var=depth_var, 
+            depth_var=depth_var,
             base_path=base_path,
             show=show,
         )
@@ -817,7 +840,7 @@ def scatter_plot(
 
 def scatter_drop_plot(
     ds: xr.Dataset,
-    todrop: NDArray[np.bool_], 
+    todrop: NDArray[np.bool_],
     ds_type: str,
     base_path: str | None = None,
     show: bool = False,
@@ -1011,7 +1034,7 @@ def sci_spatialsection_plot(
     mean = np.nanmean(ds[var])
 
     ### Lon
-    ds0 = ds.sortby('longitude')
+    ds0 = ds.sortby("longitude")
     axs[0].pcolormesh(
         ds0.longitude,
         ds0.depth,
@@ -1034,7 +1057,7 @@ def sci_spatialsection_plot(
     )
 
     ### Lat
-    ds1 = ds.sortby('latitude')
+    ds1 = ds.sortby("latitude")
     p2 = axs[1].pcolormesh(
         ds1.latitude,
         ds1.depth,
@@ -1159,19 +1182,19 @@ def sci_spatialgrid_plot(
     ax0.set_xticklabels([])
 
     # ax0.scatter(sci_ds.longitude, sci_ds.latitude, c=sci_ds[var], cmap=sci_vars[var])
-    ds1 = ds.sortby('longitude')
+    ds1 = ds.sortby("longitude")
     ax1.pcolormesh(ds1.longitude, ds1.depth, adj_var(ds1, var), cmap=sci_vars[var])
     ax1.set_ylabel("Depth [m]", size=label_size)
     ax1.set_xlabel("Longitude [Deg]", size=label_size)
     ax1.invert_yaxis()
 
-    ds2 = ds.sortby('latitude')
+    ds2 = ds.sortby("latitude")
     ax2.pcolormesh(
         ds2.depth,
         ds2.latitude,
         np.transpose(adj_var(ds2, var).values),
         cmap=sci_vars[var],
-        # shading="gouraud", 
+        # shading="gouraud",
     )
     ax2.set_xlabel("Depth [m]", size=label_size)
     ax2.set_yticks([])
@@ -1211,12 +1234,12 @@ def eng_plots_to_make(ds: xr.Dataset):
 
     Returns
     -------
-    Dictionary used by eng_tvt_plot to make plots 
+    Dictionary used by eng_tvt_plot to make plots
     """
-    
+
     da_c_depth = ds["target_depth"].dropna(dim="time")
     da_m_depth = ds["depth_measured"].interp(time=da_c_depth.time)
-    
+
     plots_to_make = {
         "oilVol": {
             "X": ds["commanded_oil_volume"],
@@ -1410,8 +1433,8 @@ def eng_timeseries_plot(
 def sci_timeseries_plot(
     var: str,
     ds: xr.Dataset,
-    *, 
-    depth_var: str = "depth", 
+    *,
+    depth_var: str = "depth",
     base_path: str | None = None,
     show: bool = False,
 ):
@@ -1427,8 +1450,8 @@ def sci_timeseries_plot(
     var : str
         The name of the variable to plot
     depth_var : str
-        The name of the depth variable to use in the plots. 
-        Default is depth; other common option will be 'depth_measured', if 
+        The name of the depth variable to use in the plots.
+        Default is depth; other common option will be 'depth_measured', if
         the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
@@ -1482,8 +1505,8 @@ def sci_timeseries_plot(
 def sci_timesection_gt_plot(
     var: str,
     ds: xr.Dataset,
-    *, 
-    depth_var: str = "depth", 
+    *,
+    depth_var: str = "depth",
     base_path: str | None = None,
     show: bool = False,
     robust: bool = True,
@@ -1506,8 +1529,8 @@ def sci_timesection_gt_plot(
     var : str
         The name of the variable to plot
     depth_var : str
-        The name of the depth variable to use in the plots. 
-        Default is depth; other common option will be 'depth_measured', if 
+        The name of the depth variable to use in the plots.
+        Default is depth; other common option will be 'depth_measured', if
         the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
@@ -1547,7 +1570,7 @@ def sci_timesection_gt_plot(
     ax.set_title(f"Deployment {deployment} for project {project}", size=title_size)
 
     # Sometimes glidertools won't plot label, so guarantee it
-    ax.cb.set_label(adj_var_label(ds, var), size=label_size) # type: ignore
+    ax.cb.set_label(adj_var_label(ds, var), size=label_size)  # type: ignore
 
     if base_path is not None:
         fname = os.path.join(
@@ -1671,8 +1694,8 @@ def sci_surface_map(
     figsize_y: float = 11,
 ):
     """
-    Create surface maps of science variables, 
-    plotting the mean/lat/lon for each profile. 
+    Create surface maps of science variables,
+    plotting the mean/lat/lon for each profile.
     Saves the plot to 'surfacemap_sci_path' folder within 'base_path'
 
     Parameters
@@ -1724,7 +1747,7 @@ def sci_surface_map(
         figsize=(figsize_x, figsize_y),
         subplot_kw={"projection": crs},
     )
-    ax = typing.cast(GeoAxes, ax) # Explicitly cast to GeoAxes, for Pylance
+    ax = typing.cast(GeoAxes, ax)  # Explicitly cast to GeoAxes, for Pylance
 
     ax.set_xlabel("\n\n\nLongitude [Deg]", size=14)
     ax.set_ylabel("Latitude [Deg]\n\n\n", size=14)
@@ -1746,7 +1769,7 @@ def sci_surface_map(
     ax.add_feature(cfeature.OCEAN, edgecolor="none", facecolor="#7bcbe3")
 
     # Add parallels and meridians; no scale bar since no built-in function
-    gl = ax.gridlines(draw_labels=["bottom", "left"]) # type: ignore
+    gl = ax.gridlines(draw_labels=["bottom", "left"])  # type: ignore
     gl.xlabel_style = {"rotation": 15}
 
     # Scatter plot data given data, colored by values in the top 10m
