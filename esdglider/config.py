@@ -4,11 +4,14 @@ from importlib.resources import as_file, files
 
 import numpy as np
 import pandas as pd
-# import sqlalchemy
+import sqlalchemy
 import yaml
 from google.cloud import storage
 
-from esdglider import gcp
+# from esdglider.acoustics import get_path_acoustics_deployment
+from esdglider.gcp import check_gcs_file_exists, check_gcs_directory_exists
+from esdglider.glider import get_path_glider_deployment
+from esdglider.imagery import get_path_imagery_deployment
 from esdglider.utils import split_deployment, year_path
 
 _log = logging.getLogger(__name__)
@@ -89,15 +92,13 @@ def instrument_attrs(key, devices, dev_df, cal_df):
 
 
 def make_deployment_yaml(
-    engine,
     deployment_name: str,
     out_path: str,
+    db_url: str | sqlalchemy.URL,
 ):
     """
     Parameters
     ----------
-    engine: str | sqlalchemy URL
-        The database engine, typically the output of sqlalchemy.create_engine
     deployment_name : str
         name of the glider deployment. Eg, amlr01-20200101.
         Only need the name of the deployment,
@@ -128,10 +129,9 @@ def make_deployment_yaml(
     prof_vars = esdglider_yaml_read("profile-variables.yml")
     devices = esdglider_yaml_read("glider-devices.yml")
 
-    # _log.debug("connecting to database, using the following: %s", db_url)
-    # engine = sqlalchemy.create_engine(db_url)
+    _log.debug("connecting to database, using the following: %s", db_url)
+    engine = sqlalchemy.create_engine(db_url)
 
-    _log.debug("database engine %s", engine)
     Glider_Deployment = pd.read_sql_table(
         "vGlider_Deployment",
         con=engine,
@@ -269,10 +269,13 @@ def make_website_yaml(engine, out_path):
     # Make new columns for data URLs
     df_foryaml["report_link"] = ""
     df_foryaml["ERDDAP_link"] = ""
+    df_foryaml["gcp_link_tssci"] = ""
+    # df_foryaml["gcp_link_gr5"] = ""
     df_foryaml["gcp_link_plots"] = ""
-    df_foryaml["gcp_link_glider"] = ""
-    df_foryaml["gcp_link_acoustics"] = ""
-    df_foryaml["gcp_link_imagery"] = ""
+    df_foryaml["gcp_link_imgcsv"] = ""
+    df_foryaml["gcp_dir_link_glider"] = ""
+    df_foryaml["gcp_dir_link_acoustics"] = ""
+    df_foryaml["gcp_dir_link_imagery"] = ""
 
     _log.info("Get info about what files exist in GCP")
     glider_bucket_name = "amlr-gliders-deployments-dev"
@@ -285,8 +288,12 @@ def make_website_yaml(engine, out_path):
     glider_bucket = storage_client.bucket(glider_bucket_name)
     acoustics_bucket = storage_client.bucket(acoustics_bucket_name)
     imagery_bucket = storage_client.bucket(imagery_bucket_name)
-    # gcp.check_gcs_directory_exists(bucket, "SANDIEGO/2022/amlr08-20220513/plots/delayed")
-    # gcp.check_gcs_file_exists(bucket, "SANDIEGO/2022/amlr08-20220504/data/processed-L1/amlr08-20220513-delayed-sci.nc")
+    # check_gcs_directory_exists(bucket, "SANDIEGO/2022/amlr08-20220513/plots/delayed")
+    # check_gcs_file_exists(bucket, "SANDIEGO/2022/amlr08-20220504/data/processed-L1/amlr08-20220513-delayed-sci.nc")
+
+    def href_url(bucket_name, path, text):
+        out = f"<a href='{console_url}/{bucket_name}/{path}'>{text}</a>"
+        return out
 
     for i, d in df_foryaml.iterrows():
         # Prep
@@ -294,34 +301,61 @@ def make_website_yaml(engine, out_path):
         _log.info("Working on deployment %s", deployment_name)
         project = d["Project"]
         year = year_path(project, deployment_name)
-        url_pre = f"{project}/{year}/{deployment_name}"
-        _log.debug("url/path prefix %s", url_pre)
+        mode = "delayed"
+        path_pre = os.path.join(project, year, deployment_name)
+        # paths_acoustics = get_path_acoustics_deployment(path_pre, deployment_name, mode)
+        paths_glider = get_path_glider_deployment(path_pre, deployment_name, mode)
+        paths_imagery = get_path_imagery_deployment(path_pre, deployment_name)
+        _log.debug("url/path prefix %s", path_pre)
+
+        ### Files
+        # Check for science timeseries
+        tssci_file = paths_glider["tsscipath"]
+        if check_gcs_file_exists(glider_bucket, tssci_file):
+            # url = f"<a href='{console_url}/{glider_bucket_name}/{tssci_file}'>timeseries</a>"
+            url = href_url(glider_bucket_name, tssci_file, "timeseries")
+            df_foryaml.loc[i, "gcp_link_tssci"] = url  # type: ignore
+
+        # # Check for gr5 dataset
+        # gr5_file = paths_glider["gr5path"]
+        # if check_gcs_file_exists(glider_bucket, gr5_file):
+        #     url = f"<a href='{console_url}/{glider_bucket_name}/{gr5_file}'>plots</a>"
+        #     df_foryaml.loc[i, "gcp_link_gr5"] = url  # type: ignore
+        # del gr5_file
 
         # Check for plots
-        plots_path = f"{url_pre}/plots/delayed"
-        if gcp.check_gcs_directory_exists(glider_bucket, plots_path):
-            url = f"<a href='{console_url}/{glider_bucket_name}/{plots_path}'>plots</a>"
+        plots_path = paths_glider["plotdir"]
+        if check_gcs_directory_exists(glider_bucket, plots_path):
+            # url = f"<a href='{console_url}/{glider_bucket_name}/{plots_path}'>plots</a>"
+            url = href_url(glider_bucket_name, plots_path, "plots")
             df_foryaml.loc[i, "gcp_link_plots"] = url  # type: ignore
 
+        # Check for acoustics NetCDF (hold)
+
+        # Check for imagery metadata CSV
+        imgcsv_file = paths_imagery["imgcsv"]
+        if check_gcs_file_exists(glider_bucket, imgcsv_file):
+            # url = f"<a href='{console_url}/{imagery_bucket_name}/{imgcsv_file}'>imagery-csv</a>"
+            url = href_url(imagery_bucket_name, imgcsv_file, "imagery-csv")
+            df_foryaml.loc[i, "gcp_link_imgcsv"] = url  # type: ignore
+
+
+        ### Directories
         # Check for NetCDF files timeseries
-        procl1_path = f"{url_pre}/data/processed-L1"
-        if gcp.check_gcs_directory_exists(glider_bucket, procl1_path):
-            url = (
-                f"<a href='{console_url}/{glider_bucket_name}/{procl1_path}'>glider</a>"
-            )
-            df_foryaml.loc[i, "gcp_link_glider"] = url  # type: ignore
+        procl1_path = paths_glider["procl1dir"]
+        if check_gcs_directory_exists(glider_bucket, procl1_path):
+            url = href_url(glider_bucket_name, procl1_path, "glider")
+            df_foryaml.loc[i, "gcp_dir_link_glider"] = url  # type: ignore
 
         # Check for acoustics
-        if gcp.check_gcs_directory_exists(acoustics_bucket, url_pre):
-            url = f"<a href='{console_url}/{acoustics_bucket_name}/{url_pre}'>acoustics</a>"
-            df_foryaml.loc[i, "gcp_link_acoustics"] = url  # type: ignore
+        if check_gcs_directory_exists(acoustics_bucket, path_pre):
+            url = href_url(acoustics_bucket_name, path_pre, "acoustics")
+            df_foryaml.loc[i, "gcp_dir_link_acoustics"] = url  # type: ignore
 
         # Check for imagery
-        if gcp.check_gcs_directory_exists(imagery_bucket, url_pre):
-            html = (
-                f"<a href='{console_url}/{imagery_bucket_name}/{url_pre}'>imagery</a>"
-            )
-            df_foryaml.loc[i, "gcp_link_imagery"] = html  # type: ignore
+        if check_gcs_directory_exists(imagery_bucket, path_pre):
+            url = href_url(imagery_bucket_name, path_pre, "imagery")
+            df_foryaml.loc[i, "gcp_dir_link_imagery"] = url  # type: ignore
 
     # Write to a yaml file
     yaml_data = df_foryaml.to_dict(orient="records")
