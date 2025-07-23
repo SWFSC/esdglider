@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.3.0] - 2025-07-22
+
 - Changed package config fully to pyproject.toml
 - Changed get_path_ functions to be both consistent across modules, and more useful outside of GCP. These changes include:
     - Renamed `glider.get_path_deployment` to `glider.get_path_glider`
@@ -16,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [0.2.0] - 2025-07-22
+
 - Changed repo name from glider-utils to esdglider (#35)
 - Changed `glider.binary_to_nc` to pass 'sci_water_pressure' to `pyglider.slocum.binary_to_timeseries`, rather than 'sci_water_temp'
 - Changed `glider.binary_to_nc` so that it uses `pyglider.slocum.binary_to_timeseries` to generate the engineering timeseries for all deployments
