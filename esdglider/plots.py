@@ -223,7 +223,7 @@ def esd_all_plots(
         See 'sci_timeseries_loop' for more details
     base_path : str or None (default None)
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     bar_file : str or None (default None)
         Path to the ETOPO nc file to use for contour lines.
         If None (default), then contour lines will not be drawn
@@ -327,7 +327,7 @@ def sci_gridded_loop(
         Gridded science dataset
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
     max_workers : int | None
@@ -393,7 +393,7 @@ def eng_tvt_loop(
         Raw engineering dataset
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
     max_workers : int | None
@@ -488,7 +488,7 @@ def sci_timeseries_loop(
         the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
     max_workers : int | None
@@ -568,7 +568,7 @@ def eng_timeseries_loop(
         Timeseries science dataset
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
     max_workers : int | None
@@ -631,7 +631,7 @@ def eng_timeseries_loop(
 #         Timeseries science dataset
 #     base_path : str
 #         The 'base' of the plot path. If None, then the plot will not be saved
-#         Intended to be the 'plotdir' output of slocum.get_path_deployments
+#         Intended to be the 'plotdir' output of glider.get_path_glider
 #     show : bool
 #         Boolean indicating if the plots should be shown before being closed
 #     max_workers : int | None
@@ -698,7 +698,7 @@ def sci_surface_map_loop(
         cartopy.crs projection to be used for the map
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
     bar : xarray Dataset
@@ -797,7 +797,7 @@ def scatter_plot(
         dataset (timeseries) type: one of 'sci', 'eng', or 'raw'
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
@@ -859,7 +859,7 @@ def scatter_drop_plot(
         dataset (timeseries) type: one of 'sci' or 'eng'
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
@@ -931,7 +931,7 @@ def sci_timesection_plot(
         The name of the variable to plot
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
@@ -1007,7 +1007,7 @@ def sci_spatialsection_plot(
         The name of the variable to plot
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
@@ -1127,7 +1127,7 @@ def sci_spatialgrid_plot(
         The name of the variable to plot
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments.
+        Intended to be the 'plotdir' output of glider.get_path_glider.
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
@@ -1314,7 +1314,7 @@ def eng_tvt_plot(
         The name of the variable (i.e., key from eng_dict) to plot
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
@@ -1385,7 +1385,7 @@ def eng_timeseries_plot(
         The name of the variable to plot
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
@@ -1454,7 +1454,7 @@ def sci_timeseries_plot(
         the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
@@ -1533,7 +1533,7 @@ def sci_timesection_gt_plot(
         the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
     robust : bool
@@ -1606,7 +1606,7 @@ def ts_plot(
         The name of the variable to plot
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
@@ -1710,7 +1710,7 @@ def sci_surface_map(
         If crs is a string, then it is passed to plots.crs_map()
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of slocum.get_path_deployments
+        Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
     bar : xarray dataset

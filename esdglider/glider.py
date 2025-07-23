@@ -284,7 +284,7 @@ def binary_to_nc(
             Must be either 'rt', for real-time, or 'delayed
     paths : dict
         A dictionary of file/directory paths for various processing steps.
-        Intended to be the output of esdglider.glider.get_path_deployment()
+        Intended to be the output of get_path_glider()
         See this function for the expected key/value pairs
     write_raw, write_timeseries, write_gridded : bool, default True
         Should the raw, timeseries, and gridded, respectively,
@@ -1489,7 +1489,7 @@ def grid_esd(inname, paths):
         Passed directly to inname argument of pyglider.ncprocess.make_gridfiles
     paths : dict
         A dictionary of file/directory paths for various processing steps.
-        Intended to be the output of esdglider.glider.get_path_deployment()
+        Intended to be the output of get_path_glider()
         See this function for the expected key/value pairs
 
     Returns
@@ -1528,7 +1528,7 @@ def make_gridfiles_depth_measured(paths):
     ----------
     paths : dict
         A dictionary of file/directory paths for various processing steps.
-        Intended to be the output of esdglider.glider.get_path_deployment()
+        Intended to be the output of get_path_glider()
         See this function for the expected key/value pairs
 
     Returns
