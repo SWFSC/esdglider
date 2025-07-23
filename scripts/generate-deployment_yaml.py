@@ -1,4 +1,5 @@
 import logging
+
 import sqlalchemy
 
 import esdglider.config as config
@@ -29,7 +30,7 @@ if __name__ == "__main__":
     engine = sqlalchemy.create_engine(conn_string)
 
     config.make_deployment_yaml(
-        engine=engine, 
+        engine=engine,
         deployment_name="amlr04-20231128",
         out_path=path_config,
     )

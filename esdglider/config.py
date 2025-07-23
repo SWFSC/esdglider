@@ -89,7 +89,7 @@ def instrument_attrs(key, devices, dev_df, cal_df):
 
 
 def make_deployment_yaml(
-    engine, 
+    engine,
     deployment_name: str,
     out_path: str,
 ):

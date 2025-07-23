@@ -2,8 +2,8 @@
 
 import argparse
 import logging
-import sys
 import os
+import sys
 
 import esdglider.glider as glider
 
@@ -21,8 +21,9 @@ def main(args):
         "deployment_name": args.deployment_name,
         "mode": args.mode,
         "deploymentyaml": os.path.join(
-            args.config_path, f"{args.deployment_name}.yml"
-        )
+            args.config_path,
+            f"{args.deployment_name}.yml",
+        ),
     }
     paths = glider.get_path_glider(deployment_info, args.deployments_path)
 

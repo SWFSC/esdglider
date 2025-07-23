@@ -1,46 +1,51 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+requires = [ "setuptools>=61", "wheel" ]
 
 [project]
 name = "esdglider"
 version = "0.3.0-dev"
 description = "Functions for processing ESD glider data"
-authors = [
-  { name="Sam Woodman", email="sam.woodman@noaa.gov" },
-  { name="Caleb Flaim" },
-]
 license = "Apache-2.0"
+authors = [
+  { name = "Sam Woodman", email = "sam.woodman@noaa.gov" },
+  { name = "Caleb Flaim" },
+]
 requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
 dependencies = [
-    "google-crc32c>=1.1",
-    "google-cloud-secret-manager>=2.12",
-    "numpy",
-    "pandas",
-    "xarray",
-    "gsw",
-    "pyyaml",
-    "pyglider",
-    "netCDF4",
-    "cartopy",
-    "cmocean",
-    "matplotlib",
+  "cartopy",
+  "cmocean",
+  "google-cloud-secret-manager>=2.12",
+  "google-crc32c>=1.1",
+  "gsw",
+  "matplotlib",
+  "netcdf4",
+  "numpy",
+  "pandas",
+  "pyglider",
+  "pyyaml",
+  "xarray",
 ]
 
-[project.optional-dependencies]
-imagery = [
-    "glidertools",
-    "skyfield",
-    "timezonefinder",
+optional-dependencies.imagery = [
+  "glidertools",
+  "skyfield",
+  "timezonefinder",
 ]
-
-[project.urls]
-Homepage  = "https://swfsc.github.io/glider-lab-manual"
-Repository  = "http://github.com/SWFSC/esdglider.git"
-Issues = "http://github.com/SWFSC/esdglider/issues"
+urls.Homepage = "https://swfsc.github.io/glider-lab-manual"
+urls.Issues = "http://github.com/SWFSC/esdglider/issues"
+urls.Repository = "http://github.com/SWFSC/esdglider.git"
 
 [tool.setuptools.packages.find]
-exclude = ["tests*", "docs*"]
+exclude = [ "tests*", "docs*" ]
 
 [tool.setuptools.package-data]
-esdglider = ["data/*"]
+esdglider = [ "data/*" ]

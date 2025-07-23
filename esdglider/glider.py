@@ -77,15 +77,15 @@ def get_path_yaml(yaml_type: str) -> str:
     ref = resources.files("esdglider.data") / f"deployment-{yaml_type}-vars.yml"
     with resources.as_file(ref) as path:
         return str(path)
-    
+
 
 def get_path_glider_deployment(
-    deployment_path: str, 
-    deployment_name: str, 
-    mode: str, 
+    deployment_path: str,
+    deployment_name: str,
+    mode: str,
 ) -> dict:
     """
-    Get deployment-specific paths. Specifically, get all paths that are within 
+    Get deployment-specific paths. Specifically, get all paths that are within
     the deployment folder (deployment_path)
 
     This function is typically called by get_path_glider()
@@ -128,7 +128,7 @@ def get_path_glider_deployment(
     path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
     path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
     path_prof_summ = os.path.join(tsdir, f"{deployment_name}-{mode}-profiles.csv")
-    
+
     return {
         "binarydir": binarydir,
         "rawyaml": rawyaml,
@@ -193,9 +193,11 @@ def get_path_glider(
     glider_path = os.path.join(deployments_path, project, year, deployment_name)
     if not os.path.isdir(glider_path):
         raise FileNotFoundError(f"{glider_path} does not exist")
-    
+
     deployment_paths_out = get_path_glider_deployment(
-        glider_path, deployment_name, mode
+        glider_path,
+        deployment_name,
+        mode,
     )
 
     cacdir = os.path.join(deployments_path, "cache")

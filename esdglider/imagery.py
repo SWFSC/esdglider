@@ -47,12 +47,12 @@ def solocam_filename_dt(filename, dt_idx_start, format="%Y%m%d-%H%M%S"):
 
 
 def get_path_imagery_deployment(
-    deployment_path: str, 
-    deployment_name: str, 
+    deployment_path: str,
+    deployment_name: str,
 ) -> dict:
     """
-    Get deployment-specific imagery paths. 
-    Specifically, get all imagery paths that are within 
+    Get deployment-specific imagery paths.
+    Specifically, get all imagery paths that are within
     the given deployment folder (deployment_path)
 
     This function is typically called by get_path_imagery()
@@ -65,7 +65,7 @@ def get_path_imagery_deployment(
         "imagedir": os.path.join(deployment_path, "images"),
         "configdir": os.path.join(deployment_path, "config"),
         "metadir": metadir,
-        "imgcsv": imgcsv,    
+        "imgcsv": imgcsv,
     }
 
 
@@ -118,8 +118,9 @@ def get_path_imagery(deployment_info: dict, imagery_path):
 
     # Return dictionary of file paths
     deployment_paths_out = get_path_imagery_deployment(
-        imagery_deployment_path, deployment_name
-    )    
+        imagery_deployment_path,
+        deployment_name,
+    )
     return deployment_paths_out
 
 

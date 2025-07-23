@@ -12,13 +12,13 @@ _log = logging.getLogger(__name__)
 
 
 def get_path_acoustics_deployment(
-    deployment_path: str, 
-    deployment_name: str, 
-    mode: str, 
+    deployment_path: str,
+    deployment_name: str,
+    mode: str,
 ) -> dict:
     """
-    Get deployment-specific acoustics paths. 
-    Specifically, get all acoutics paths that are within 
+    Get deployment-specific acoustics paths.
+    Specifically, get all acoutics paths that are within
     the given deployment folder (deployment_path)
 
     This function is typically called by get_path_acoustics()
@@ -26,7 +26,7 @@ def get_path_acoustics_deployment(
 
     metadir = os.path.join(deployment_path, "metadata")
     echoviewdir = os.path.join(metadir, "echoview")
-    
+
     regionspath = os.path.join(echoviewdir, f"{deployment_name}-regions.csv")
     pitchpath = os.path.join(echoviewdir, f"{deployment_name}.pitch.csv")
     rollpath = os.path.join(echoviewdir, f"{deployment_name}.roll.csv")
@@ -38,14 +38,15 @@ def get_path_acoustics_deployment(
         "rawdatadir": os.path.join(deployment_path, "data", mode),
         "configdir": os.path.join(deployment_path, "config"),
         "metadir": metadir,
-        "echoviewdir": echoviewdir, 
-        "regionspath": regionspath, 
-        "pitchpath": pitchpath, 
-        "rollpath": rollpath, 
-        "gpspath": gpspath, 
-        "depthpath": depthpath, 
-        "evrpathprefix": evrpathprefix, 
+        "echoviewdir": echoviewdir,
+        "regionspath": regionspath,
+        "pitchpath": pitchpath,
+        "rollpath": rollpath,
+        "gpspath": gpspath,
+        "depthpath": depthpath,
+        "evrpathprefix": evrpathprefix,
     }
+
 
 def get_path_acoustics(deployment_info: dict, acoustic_path: str):
     """
@@ -95,8 +96,10 @@ def get_path_acoustics(deployment_info: dict, acoustic_path: str):
 
     # Return dictionary of file paths
     deployment_paths_out = get_path_acoustics_deployment(
-        acoustic_deployment_path, deployment_name, mode
-    )    
+        acoustic_deployment_path,
+        deployment_name,
+        mode,
+    )
     return deployment_paths_out
 
 
@@ -254,7 +257,7 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
             "repthree": 3,
         },
     )
-    depth_file = paths["depthpath"] #f"{file_echoview_pre}.depth.evl"
+    depth_file = paths["depthpath"]  # f"{file_echoview_pre}.depth.evl"
     depth_df.to_csv(depth_file, index=False, header=False, sep="\t")
     utils.line_prepender(depth_file, str(len(depth_df.index)))
     utils.line_prepender(depth_file, "EVBD 3 8.0.73.30735")
