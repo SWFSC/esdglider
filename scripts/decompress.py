@@ -26,7 +26,7 @@ if __name__ == "__main__":
     deployments_path = os.path.join("/home/sam_woodman_noaa_gov", bucket_name)
     gcp.gcs_mount_bucket(bucket_name, deployments_path, ro=False)
 
-    paths = glider.get_path_deployment(deployment_info, deployments_path)
+    paths = glider.get_path_glider(deployment_info, deployments_path)
 
     logging.basicConfig(
         filename=os.path.join(paths["logdir"], log_file_name),

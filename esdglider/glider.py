@@ -19,7 +19,8 @@ try:
 except ImportError:
     have_dbdreader = False
 
-from esdglider import plots, utils
+import esdglider.plots as plots
+import esdglider.utils as utils
 
 _log = logging.getLogger(__name__)
 
@@ -78,21 +79,21 @@ def get_path_yaml(yaml_type: str) -> str:
         return str(path)
     
 
-def get_path_deployment_glider(
-    glider_path: str, 
+def get_path_glider_deployment(
+    deployment_path: str, 
     deployment_name: str, 
     mode: str, 
 ) -> dict:
     """
-    Get glider-related paths. Specifically, get all paths that are within 
-    the deployment folder (glider_path)
+    Get deployment-specific paths. Specifically, get all paths that are within 
+    the deployment folder (deployment_path)
 
-    This function is typically called by get_path_deployment
+    This function is typically called by get_path_glider()
 
     Parameters
     ----------
-    glider_path : str
-
+    deployment_path : str
+        Path to the specific glider deployment
     deployment_name : str
         The glider deployment name
     mode : str
@@ -106,13 +107,13 @@ def get_path_deployment_glider(
     -------
         A dictionary with the relevant paths
     """
-    binarydir = os.path.join(glider_path, "data", "binary", mode)
+    binarydir = os.path.join(deployment_path, "data", "binary", mode)
     rawyaml = get_path_yaml("raw")
     engyaml = get_path_yaml("eng")
 
-    procl1dir = os.path.join(glider_path, "data", "processed-L1")
-    procl2dir = os.path.join(glider_path, "data", "processed-L2")
-    plotdir = os.path.join(glider_path, "plots", mode)
+    procl1dir = os.path.join(deployment_path, "data", "processed-L1")
+    procl2dir = os.path.join(deployment_path, "data", "processed-L2")
+    plotdir = os.path.join(deployment_path, "plots", mode)
 
     # Separate, in case in the future they end up in their own directories
     rawdir = procl1dir
@@ -148,7 +149,7 @@ def get_path_deployment_glider(
     }
 
 
-def get_path_deployment(
+def get_path_glider(
     deployment_info: dict,
     deployments_path: str,
 ) -> dict:
@@ -191,10 +192,12 @@ def get_path_deployment(
     # Check that relevant deployment path exists
     glider_path = os.path.join(deployments_path, project, year, deployment_name)
     if not os.path.isdir(glider_path):
-        _log.error(f"glider_path ({glider_path}) does not exist")
-        return {}
+        raise FileNotFoundError(f"{glider_path} does not exist")
+    
+    deployment_paths_out = get_path_glider_deployment(
+        glider_path, deployment_name, mode
+    )
 
-    glider_out = get_path_deployment_glider(glider_path, deployment_name, mode)
     cacdir = os.path.join(deployments_path, "cache")
     # binarydir = os.path.join(glider_path, "data", "binary", mode)
     rawyaml = get_path_yaml("raw")
@@ -242,7 +245,7 @@ def get_path_deployment(
         # "profsummpath": path_prof_summ,
     }
 
-    return out | glider_out
+    return out | deployment_paths_out
 
 
 def binary_to_nc(

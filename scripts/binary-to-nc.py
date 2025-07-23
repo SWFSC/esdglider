@@ -3,6 +3,7 @@
 import argparse
 import logging
 import sys
+import os
 
 import esdglider.glider as glider
 
@@ -16,21 +17,24 @@ def main(args):
         level=getattr(logging, args.loglevel.upper()),
     )
 
-    paths = glider.get_path_deployment(
-        args.project,
-        args.deployment,
-        args.mode,
-        args.deployments_path,
-        args.config_path,
-    )
+    deployment_info = {
+        "deployment_name": args.deployment_name,
+        "mode": args.mode,
+        "deploymentyaml": os.path.join(
+            args.config_path, f"{args.deployment_name}.yml"
+        )
+    }
+    paths = glider.get_path_glider(deployment_info, args.deployments_path)
+
+    file_info = f"https://github.com/SWFSC/glider-lab: {os.path.basename(__file__)}"
 
     glider.binary_to_nc(
-        deployment=args.deployment,
-        mode=args.mode,
+        deployment_info=deployment_info,
         paths=paths,
-        min_dt=args.min_dt,
+        write_raw=args.write_timeseries,
         write_timeseries=args.write_timeseries,
         write_gridded=args.write_gridded,
+        file_info=file_info,
     )
 
 
@@ -49,7 +53,7 @@ if __name__ == "__main__":
     )
 
     arg_parser.add_argument(
-        "deployment",
+        "deployment_name",
         type=str,
         help="Deployment name, eg amlr03-20220425",
     )

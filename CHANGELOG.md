@@ -8,7 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - Changed package config fully to pyproject.toml
-- Added a new helper function to handle the generation of paths strictly within the glider deployment folder out into its own function: `glider.get_path_deployment_glider`. This function is called by `glider.get_path_deployment`
+- Changed get_path_ functions to be both consistent across modules, and more useful outside of GCP. These changes include:
+    - Renamed `glider.get_path_deployment` to `glider.get_path_glider`
+    - Added new helper functions in the acoustics, glider, and imagery modules to handle the generation of paths strictly within each acoustics/glider/imagery deployment folder. These functions have a '_deployment' suffix, e.g. `glider.get_path_glider_deployment`
+    - Added paths for files written in the acoustics and imagery modules to `acoustics.get_path_acoustics` and `imagery.get_path_imagery`
 - Changed all config module functions to accept an engine argument, rather than a db_url
 
 

@@ -46,6 +46,29 @@ def solocam_filename_dt(filename, dt_idx_start, format="%Y%m%d-%H%M%S"):
     return solocam_dt64s
 
 
+def get_path_imagery_deployment(
+    deployment_path: str, 
+    deployment_name: str, 
+) -> dict:
+    """
+    Get deployment-specific imagery paths. 
+    Specifically, get all imagery paths that are within 
+    the given deployment folder (deployment_path)
+
+    This function is typically called by get_path_imagery()
+    """
+
+    metadir = os.path.join(deployment_path, "metadata")
+    imgcsv = os.path.join(metadir, f"{deployment_name}-imagery-metadata.csv")
+
+    return {
+        "imagedir": os.path.join(deployment_path, "images"),
+        "configdir": os.path.join(deployment_path, "config"),
+        "metadir": metadir,
+        "imgcsv": imgcsv,    
+    }
+
+
 def get_path_imagery(deployment_info: dict, imagery_path):
     """
     Return a dictionary of imagery-related paths
@@ -94,11 +117,10 @@ def get_path_imagery(deployment_info: dict, imagery_path):
         raise FileNotFoundError(f"{imagery_deployment_path} does not exist")
 
     # Return dictionary of file paths
-    return {
-        "imagedir": os.path.join(imagery_deployment_path, "images"),
-        "configdir": os.path.join(imagery_deployment_path, "config"),
-        "metadir": os.path.join(imagery_deployment_path, "metadata"),
-    }
+    deployment_paths_out = get_path_imagery_deployment(
+        imagery_deployment_path, deployment_name
+    )    
+    return deployment_paths_out
 
 
 def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):

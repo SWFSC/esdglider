@@ -29,7 +29,7 @@ def main():
         "deploymentyaml": os.path.join(config_path, f"{deployment_name}.yml"),
         "mode": mode,
     }
-    paths = glider.get_path_deployment(deployment_info, deployments_path)
+    paths = glider.get_path_glider(deployment_info, deployments_path)
 
     # ds_sci = xr.load_dataset(paths["tsscipath"])
     # ds_eng = xr.load_dataset(paths["tsengpath"])
