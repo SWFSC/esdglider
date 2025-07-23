@@ -390,7 +390,7 @@ def eng_tvt_loop(
     Parameters
     ----------
     ds : xarray Dataset
-        Raw engineering dataset
+        Raw dataset
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of glider.get_path_glider
@@ -1258,12 +1258,12 @@ def eng_plots_to_make(ds: xr.Dataset):
             "C": ["C0"],
             "cb": None,
         },
-        "inflections": {
-            "X": ds["total_num_inflections"],
-            "Y": [ds["total_amphr"]],
-            "C": ["C0"],
-            "cb": None,
-        },
+        # "inflections": {
+        #     "X": ds["total_num_inflections"],
+        #     "Y": [ds["total_amphr"]],
+        #     "C": ["C0"],
+        #     "cb": None,
+        # },
         "diveAmpHr": {
             "X": ds["depth_measured"],
             "Y": [ds["amphr"]],
@@ -1305,7 +1305,7 @@ def eng_tvt_plot(
     Parameters
     ----------
     ds : xarray dataset
-        Timeseries glider engineering dataset.
+        Timeseries glider raw dataset.
         This is intended to be produced by slocum.binary_to_nc
     eng_dict : dictionary
         Dictionary produced by eng_plots_to_make()
@@ -1331,6 +1331,7 @@ def eng_tvt_plot(
 
     fig, ax = plt.subplots(figsize=(8.5, 8.5))
 
+
     for i in range(len(eng_dict[key]["Y"])):
         if key == "oilVol":
             plot = ax.scatter(eng_dict[key]["X"], eng_dict[key]["Y"][i])
@@ -1350,7 +1351,10 @@ def eng_tvt_plot(
     ax.set_ylabel(eng_dict[key]["Y"][0].name, size=label_size)
 
     if len(eng_dict[key]["C"]) > 1:
-        ax.legend()
+        if key == "DiveEnergy":
+            ax.legend(loc="upper left")
+        else:
+            ax.legend(loc="best")
 
     if eng_dict[key]["X"].name == "time":
         fig.autofmt_xdate()

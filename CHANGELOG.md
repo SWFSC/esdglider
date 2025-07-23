@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Updating config website yaml
+- (in progress) Updating config website yaml
+- Changed config module functions that scrape info from the database to all expect a `sqlalchemy.engine.Connectable` object as the first input
+- Changed plots to use a set legend position when possible, and to remove the 'inflections' tvt plot as it is functionally a duplicate of the 'diveEnergy' tvt plot
+- Updated `glider.binary_to_nc` to make the gridded data files using `glider.make_gridfiles_depth_measured` if the argument 'sci_timeseries_pyglider' is True. 
 
 
 ## [0.3.0] - 2025-07-22

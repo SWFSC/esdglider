@@ -40,6 +40,9 @@ optional-dependencies.imagery = [
   "skyfield",
   "timezonefinder",
 ]
+optional-dependencies.db = [
+  "sqlalchemy",
+]
 urls.Homepage = "https://swfsc.github.io/glider-lab-manual"
 urls.Issues = "http://github.com/SWFSC/esdglider/issues"
 urls.Repository = "http://github.com/SWFSC/esdglider.git"

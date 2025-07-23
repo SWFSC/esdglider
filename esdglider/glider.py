@@ -258,6 +258,7 @@ def binary_to_nc(
     write_timeseries: bool = True,
     sci_timeseries_pyglider: bool = True,
     write_gridded: bool = True,
+    # gridded_depth_measured: bool = False, 
     file_info: str | None = None,
     **kwargs,
 ):
@@ -297,10 +298,14 @@ def binary_to_nc(
         using the science timeseries as the input.
         Both 1m and 5m gridded datasets are created.
         Note: if True then any existing files will be clobbered
-    sci_timeseries_pyglider : bool, default False
+    sci_timeseries_pyglider : bool, default True
         Should the function use pyglider.slocum.binary_to_timeseries to create
         create the science timeseries (True),
         or glider.timeseries_raw_to_sci (False)
+    gridded_depth_measured : bool, default False
+        Should the function pass the science timeseries directly to 
+        pyglider.ncprocess.make_gridfiles (False), 
+        or instead use glider.make_gridfiles_depth_measured (True)
     file_path: str | None, default None
         The path of the parent processing script.
         If provided, will be included in the history attribute
@@ -495,12 +500,17 @@ def binary_to_nc(
     # --------------------------------------------
     # Gridded data, 1m and 5m
     if write_gridded:
-        grid_esd(outname_tssci, paths=paths)
-
-        # utils.remove_file(outname_gr1m)
-        # utils.remove_file(outname_gr5m)
-        # if not os.path.isfile(outname_tssci):
-        #     raise FileNotFoundError(f"Could not find {outname_tssci}")
+        utils.remove_file(outname_gr1m)
+        utils.remove_file(outname_gr5m)
+        if not os.path.isfile(outname_tssci):
+            raise FileNotFoundError(f"Could not find {outname_tssci}")
+        
+        if sci_timeseries_pyglider:
+            outnames = make_gridfiles_depth_measured(paths)
+        else:
+            _log.info("Gridding science data using CTD-calculated depth")
+            outnames = grid_esd(outname_tssci, paths=paths)
+        _log.debug("gridded outnames %s", "; ".join(outnames))
 
         # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
 
@@ -849,6 +859,8 @@ def drop_ts_ranges(
         If not None and dstype is eng or sci, will join profiles
     outname : str | None (default None)
         If not None, then ds is written to this path using utils.to_netcdf_esd
+    kwargs
+        Passed to profile functions
 
     Returns
     -------
@@ -1482,6 +1494,10 @@ def decompress_dir(binarydir):
 
 def grid_esd(inname, paths):
     """
+    A consistent way of creating gridded datafiles for ESD. 
+    Note that this function uses the glider module-level variables: 
+    bin_size, depth_max, and gridded_exclude_vars. 
+
     Parameters
     ----------
     inname : str or Path
@@ -1500,6 +1516,8 @@ def grid_esd(inname, paths):
     """
 
     outnames = []
+    _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
+
     for i in bin_size:
         _log.info("Generating %sm gridded data", i)
         outname_gr = pgncprocess.make_gridfiles(
@@ -1521,8 +1539,8 @@ def make_gridfiles_depth_measured(paths):
     if for instance the CTD was turned off during parts of a deployment, and
     thus the depth calculated from the CTD does not span the full timeseries.
 
-    A temporary nc file is written, to pass to
-    pyglider.ncprocess.make_gridfiles. The science dataset is not altered.
+    A temporary nc file is written, to pass to glider.grid_esd (and thus to 
+    pyglider.ncprocess.make_gridfiles). The science dataset is not altered.
 
     Parameters
     ----------
@@ -1536,24 +1554,26 @@ def make_gridfiles_depth_measured(paths):
     The output of grid_esd
     """
 
-    _log.info("Generating gridded files using measured_depth")
+    _log.info("Gridding science data using glider measured depth (m_depth)")
     outname_tssci = paths["tsscipath"]
-    outname_gr1m = paths["gr1path"]
-    outname_gr5m = paths["gr5path"]
 
-    utils.remove_file(outname_gr1m)
-    utils.remove_file(outname_gr5m)
+    # Leave these checks, in case this function is called directly
+    utils.remove_file(paths["gr1path"])
+    utils.remove_file(paths["gr5path"])
     if not os.path.isfile(outname_tssci):
         raise FileNotFoundError(f"Could not find {outname_tssci}")
 
-    _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
+    # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
 
     with tempfile.TemporaryDirectory() as temp_dir:
         # Creating temporary science dataset with measured depth as depth
         temp_file = os.path.join(temp_dir, os.path.basename(outname_tssci))
         _log.debug("temp_file %s", temp_file)
         ds_sci_tmp = xr.load_dataset(outname_tssci)
-        ds_sci_tmp = ds_sci_tmp.drop_vars(["depth"]).rename({"depth_measured": "depth"})
+        ds_sci_tmp = (
+            ds_sci_tmp.drop_vars(["depth"])
+            .rename({"depth_measured": "depth"})
+        )
 
         # Add a comment that the bins were created useing depth_measured
         tmp_comment = (
