@@ -43,19 +43,41 @@ camera_models = {
 db_factory_cal = ["Factory - Initial", "Factory - Recalibration"]
 
 
-def instrument_attrs(key, devices, dev_df, cal_df):
+
+def _read_esdglider_yaml(yaml_name):
     """
-    component: str
+    Safely and consistently read a yaml file from the esdglider data folder
+    """
+    with as_file(files("esdglider.data") / yaml_name) as path:
+        with open(str(path), "r") as fin:
+            return yaml.safe_load(fin)
+
+
+def _get_instrument_attrs(
+    key: str, 
+    dev_df: pd.DataFrame, 
+    cal_df: pd.DataFrame
+):
+    """
+    Get instrument attributes from relevant database tables
+
+    Parameters
+    ----------
+    key: str
         Name of database component key, eg 'ctd' or 'oxygen'.
         Name must be a key in db_components
-    devices: dict
-        Devices dictionary, read in from yaml file
     dev_df: DataFrame
         Pandas dataframe of devices, filtered for Deployment ID
     cal_df: DataFrame
         Pandas dataframe of device calibrations, filtered for Deployment ID
+
+    Returns
+    -------
+    dictionary
+        Instrument attributes, to be added to the deployment yaml
     """
 
+    devices = _read_esdglider_yaml("glider-devices.yml")
     dev_components = dev_df["Component"]
     component = db_components[key]
     instr = devices[key]
@@ -94,41 +116,37 @@ def instrument_attrs(key, devices, dev_df, cal_df):
 def make_deployment_yaml(
         con: Connectable, 
         deployment_name: str,
-        out_path: str,
+        outdir: str,
         schema: str = "dbo", 
 ):
     """
-    Make the first draft deployment yaml
+    Make the first draft deployment yaml. 
+    This yaml contains all relevant info from the Glider&Mooring database
 
     Parameters
     ----------
-    engine : sqlalchemy.engine.Engine
-        The database connection, via a SQLAlchemy Engine object
+    con : sqlalchemy Connectable
+        Database connection, passed to 'con' arg of `pd.read_sql_table`
     deployment_name : str
-        name of the glider deployment. Eg, amlr01-20200101.
-        Only need the name of the deployment,
-        because the database contains the project
-    out_path : str
-        path to which to write the output yaml file
+        name of the glider deployment, eg, amlr01-20200101
+    outdir : str
+        path to which to write the output yaml file. The full output file
+        path will be `os.path.join(outdir, f"{deployment_name}.yml")`
+    schema : string, default "dbo"
+        Database schema, passed to 'schema' arg of `pd.read_sql_table`
 
     Returns
     -------
-    str
-        Full path of the output (written) yaml file
+    dictionary
+        The dictionary that was written to the yaml file 
     """
 
     _log.info("Creating config file for deployment %s", deployment_name)
     _log.debug("Reading template yaml files")
 
-    def esdglider_yaml_read(yaml_name):
-        with as_file(files("esdglider.data") / yaml_name) as path:
-            with open(str(path), "r") as fin:
-                return yaml.safe_load(fin)
-
-    metadata = esdglider_yaml_read("metadata.yml")
-    netcdf_vars = esdglider_yaml_read("netcdf-variables-sci.yml")
-    prof_vars = esdglider_yaml_read("profile-variables.yml")
-    devices = esdglider_yaml_read("glider-devices.yml")
+    metadata = _read_esdglider_yaml("metadata.yml")
+    netcdf_vars = _read_esdglider_yaml("netcdf-variables-sci.yml")
+    prof_vars = _read_esdglider_yaml("profile-variables.yml")
 
     _log.debug("database connection %s", con)
     # _log.debug("connecting to database, using the following: %s", db_url)
@@ -143,31 +161,33 @@ def make_deployment_yaml(
     )
 
     # Filter for the glider deployment, using the deployment name
-    db_depl = Glider_Deployment[Glider_Deployment["Deployment_Name"] == deployment_name]
+    db_depl_mask = Glider_Deployment["Deployment_Name"] == deployment_name
+    db_depl = Glider_Deployment[db_depl_mask]
     _log.debug("database connection successful")
     # Confirm that exactly one deployment in the db matched deployment name
     if db_depl.shape[0] != 1:
         _log.error(
-            "Exactly one row from the Glider_Deployment table "
-            + f"must match the deployment name {deployment_name}. "
-            + f"Currently, {db_depl.shape[0]} rows matched",
+            "Exactly one row from the Glider_Deployment table must match "
+            + "the deployment name %s. Currently, %s rows matched",
+            deployment_name, 
+            db_depl.shape[0], 
         )
         raise ValueError("Invalid Glider_Deployment match")
 
     # Extract various deployment info
     # glider_id = db_depl["Glider_ID"].values[0]
-    glider_deployment_id = db_depl["Glider_Deployment_ID"].values[0]
+    glider_depl_id = db_depl["Glider_Deployment_ID"].values[0]
     project = db_depl["Project"].values[0]
 
     # Get metadata info
-    metadata["deployment_id"] = str(glider_deployment_id)
+    metadata["deployment_id"] = str(glider_depl_id)
 
     # Filter the Devices table for this deployment
     db_devices = Deployment_Device[
-        Deployment_Device["Glider_Deployment_ID"] == glider_deployment_id
+        Deployment_Device["Glider_Deployment_ID"] == glider_depl_id
     ]
     db_cals = Deployment_Device_Calibration[
-        Deployment_Device_Calibration["Glider_Deployment_ID"] == glider_deployment_id
+        Deployment_Device_Calibration["Glider_Deployment_ID"] == glider_depl_id
     ]
     components = db_devices["Component"].values
 
@@ -178,9 +198,9 @@ def make_deployment_yaml(
     for key, value in db_components.items():
         if value in components:
             _log.info("Generating config for component %s", value)
-            instruments[f"instrument_{key}"] = instrument_attrs(
+            instruments[f"instrument_{key}"] = _get_instrument_attrs(
                 key,
-                devices,
+                # devices,
                 db_devices,
                 db_cals,
             )
@@ -201,12 +221,12 @@ def make_deployment_yaml(
 
     deployment_split = split_deployment(deployment_name)
     metadata["deployment_name"] = deployment_name
-    metadata["os_version"] = db_depl["Software_Version"].values[0]
+    metadata["os_version"] = str(db_depl["Software_Version"].values[0])
     metadata["project"] = project
     metadata["glider_name"] = deployment_split[0]
     if not any(db_devices["Device_Type"] == "Teledyne Glider Slocum G3"):
         raise ValueError(
-            "No device 'Teledyne Glider Slocum G3'. " + "Please add it to the build",
+            "No device 'Teledyne Glider Slocum G3'. Please add to the build",
         )
     metadata["glider_serial"] = db_devices.loc[
         db_devices["Device_Type"] == "Teledyne Glider Slocum G3",
@@ -227,18 +247,17 @@ def make_deployment_yaml(
         "profile_variables": prof_vars,
     }
 
-    yaml_file = os.path.join(out_path, f"{deployment_name}.yml")
+    yaml_file = os.path.join(outdir, f"{deployment_name}.yml")
     _log.info(f"writing {yaml_file}")
     with open(yaml_file, "w") as file:
         yaml.dump(deployment_yaml, file, sort_keys=False)
 
-    return yaml_file
+    return deployment_yaml
 
 
 def make_website_yaml(
-        con: Connectable, 
-        out_path: str, 
-        schema: str = "dbo", 
+        df: pd.DataFrame, 
+        outdir: str, 
         glider_bucket_name: str = "amlr-gliders-deployments-dev", 
         acoustics_bucket_name: str = "amlr-gliders-acoustics-dev", 
         imagery_bucket_name: str = "amlr-gliders-imagery-raw-dev",
@@ -246,10 +265,29 @@ def make_website_yaml(
     """
     Scrape deployment data from the database,
     and write to a yaml file that will be parsed by the quarto website
+
+    Parameters
+    ----------
+    df : pandas DataFrame
+        Output of config.make_deployment_table
+    outdir : str
+        Directory to which to write the website yaml. The full output file
+        path will be `os.path.join(outdir, "esd-gliders.yml")`
+    glider_bucket_name : str
+        Name of the glider data bucket
+    acoustics_bucket_name : str
+        Name of the glider active acoustics data bucket
+    imagery_bucket_name : str
+        Name of the glider raw imagery bucket
+
+    Returns
+    -------
+    dictionary
+        The dictionary that was written to the yaml file 
     """
 
-    _log.debug("database connection %s", con)
-    _log.info("Get the info for each deployment from the glider database")
+    # _log.debug("database connection %s", con)
+    # _log.info("Get the info for each deployment from the glider database")
     depl_columns = [
         "Glider",
         "Start",
@@ -259,8 +297,8 @@ def make_website_yaml(
         "Deployment_Name",
         "Project",
     ]
-    df_deployments = make_deployment_table(con=con, schema=schema)
-    df_foryaml = df_deployments[depl_columns].copy()
+    # df_deployments = make_deployment_table(con=con, schema=schema)
+    df_foryaml = df[depl_columns].copy()
     # df_foryaml["Start"] = df_foryaml["Start"].dt.strftime('%Y-%m-%d')
     # df_foryaml["End"] = df_foryaml["End"].dt.strftime('%Y-%m-%d')
 
@@ -306,7 +344,7 @@ def make_website_yaml(
         # Check for science timeseries
         tssci_file = paths_glider["tsscipath"].replace("\\", "/")
         if check_gcs_file_exists(glider_bucket, tssci_file):
-            url = href_url(auth_url, glider_bucket_name, tssci_file, "timeseries")
+            url = href_url(auth_url, glider_bucket_name, tssci_file, "timeseries-sci")
             df_foryaml.loc[i, "gcp_link_tssci"] = url  # type: ignore
 
         # Check for gr5 dataset
@@ -349,21 +387,30 @@ def make_website_yaml(
 
     # Write to a yaml file
     yaml_data = df_foryaml.to_dict(orient="records")
-    yaml_file = os.path.join(out_path, "esd-gliders.yml")
+    yaml_file = os.path.join(outdir, "esd-gliders.yml")
     _log.info(f"writing {yaml_file}")
     with open(yaml_file, "w") as file:
         yaml.dump(yaml_data, file, sort_keys=False, default_flow_style=False)
 
-    # with open(yaml_file) as fin:
-    #     z = yaml.safe_load(fin)
-    # z_df = pd.DataFrame(z)
-
-    return yaml_file
+    return yaml_data
 
 
-def make_deployment_table(con: Connectable, schema: str = "dbo"):
+def get_deployment_table(con: Connectable, schema: str = "dbo"):
     """
-    Generate a deployment summary table, to publish on the Fleet Status page
+    Generate a deployment summary table. 
+    This table is intended to be published on the Fleet Status sheet
+
+    Parameters
+    ----------
+    con : sqlalchemy Connectable
+        Database connection, passed to 'con' arg of `pd.read_sql_table`
+    schema : string, default "dbo"
+        Database schema, passed to 'schema' arg of `pd.read_sql_table`
+
+    Returns
+    -------
+    pandas DataFrame
+        Deployment summary table
     """
 
     ### Helper functions

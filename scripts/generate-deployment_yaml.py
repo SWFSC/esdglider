@@ -13,9 +13,8 @@ from a local computer to access the database
 sqlalchemy engine. It should not be committed to GitHub.
 """
 
-# For testing
+deployment_name = "calanus-20250617"
 # path_config = "C:/Users/sam.woodman/Downloads"
-
 path_config = "C:/SMW/Gliders_Moorings/Gliders/glider-lab/deployment-configs"
 
 if __name__ == "__main__":
@@ -27,10 +26,11 @@ if __name__ == "__main__":
 
     with open("db/glider-db-prod.txt", "r") as f:
         conn_string = f.read()
-    engine = sqlalchemy.create_engine(conn_string)
-
-    config.make_deployment_yaml(
-        engine=engine,
-        deployment_name="amlr04-20231128",
-        out_path=path_config,
-    )
+        engine = sqlalchemy.create_engine(conn_string)
+        with engine.connect() as connection:
+            config.make_deployment_yaml(
+                con=connection,
+                deployment_name=deployment_name,
+                outdir=path_config,
+                schema="dbo", 
+            )
