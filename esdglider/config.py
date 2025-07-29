@@ -518,6 +518,7 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
         "Glider_Name": "Glider",
         "Deployment_Start": "Start",
         "Deployment_End": "End",
+        "Location_Name": "Location", 
         "Deployment_Name": "Deployment_Name",
         "Deployment_Dives": "Dives",
         "Deployment_Days": "Days",
@@ -529,14 +530,11 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
 
     df_depl = (
         vGlider_Deployment[columns_tokeep.keys()]
-        .rename(
-            columns=columns_tokeep,
-        )
-        .copy()
+        .rename(columns=columns_tokeep)
     )
 
-    # TODO: add location and notes to the database
-    df_depl["Location"] = ""
+    # TODO: add notes to the database
+    df_depl["Location"] = df_depl["Location"]
     df_depl["Notes"] = ""
     df_depl["Start"] = df_depl["Start"].dt.strftime("%Y-%m-%d")
     df_depl["End"] = df_depl["End"].dt.strftime("%Y-%m-%d")

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed config module:
     - Functions that scrape info from the database to all expect a `sqlalchemy.engine.Connectable` object as the first input
     - Changed `instrument_attrs` to `_get_instrument_attrs`,  and `make_deployment_table` to `get_deployment_table`, for consistency with functions from other modules
+    - Changed `get_deployment_table` to handle Location column, after updating the database
     - `make_website_yaml` now takes a dataframe (the output of `get_deployment_table`) as an input, rather than a database connection
     - The `make...yaml` functions now return the dictionary rather than the file path
     - `_read_esdglider_yaml` is now a full internal function
