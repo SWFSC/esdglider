@@ -1124,12 +1124,12 @@ def binary_to_raw_timeseries(
     **kwargs,
 ):
     """
-    Extract raw, unprocessed glider data using dbdreader.
-    Adaptation of pyglider.slocum.binary_to_timeseries
+    An adaptation of pyglider.slocum.binary_to_timeseries to 
+    extract raw, unprocessed glider data using dbdreader.
     dbdreader only deals with flight and science computers,
     hence only classifying variables as 'eng' or 'sci'
 
-    the dbdreader MultiDBD.get() method is used,
+    The dbdreader MultiDBD.get() method is used,
     rather than get_sync, to read the parameters specified in
     deploymentyaml. The argument return_nans (of MultiDBD.get()) is set to
     True, so that there are two 'time bases' for the extracted data: one
@@ -1138,10 +1138,23 @@ def binary_to_raw_timeseries(
     and these values are the time index of the output file.
 
     No values are interpolated.
-    Times less than the yaml fil's 'deployment_min_dt' are still dropped.
+    Times before than the yaml file's 'deployment_min_dt' are still dropped.
 
-    pp is the ESD post-process dictionary
-    kwargs is passed to utils.findProfiles
+    Parameters
+    ----------
+    Majority of params are the same as pyglider.slocum.binary_to_timeseries
+    include_source : bool
+        Boolean indicating if the source file should be included in the raw ds.
+        Passed to dbdreader.MULTIDBD.get
+    pp : dict 
+        ESD post-processing dictionary (used by `postproc_attrs`)
+    kwargs 
+        arguments passed to utils.findProfiles
+
+    Returns
+    -------
+    outname : string
+        name of the newly written netcdf file
     """
 
     if not have_dbdreader:
@@ -1296,8 +1309,10 @@ def binary_to_raw_timeseries(
     # screen out-of-range times; these won't convert:
     ds["time"] = ds.time.where((ds.time > 0) & (ds.time < 6.4e9), np.nan)
     ds["time"] = (ds.time * 1e9).astype("datetime64[ns]")
-    min_dt_str = deployment["metadata"]["deployment_min_dt"]
-    ds = utils.drop_bogus_times(ds, min_dt=min_dt_str, max_drop=True)
+    if "deployment_min_dt" in deployment["metadata"].keys():
+        min_dt_str = deployment["metadata"]["deployment_min_dt"]
+        ds = utils.drop_bogus_times(ds, min_dt=min_dt_str, max_drop=True)
+    
     # ds = ds.where(ds.time >= np.datetime64(min_dt_str), drop=True)
     ds["time"].attrs = attr
 
@@ -1359,10 +1374,12 @@ def timeseries_raw_to_sci(
 
     Parameters
     ----------
-
+    All params are the same as pyglider.slocum.binary_to_timeseries
 
     Returns
     -------
+    outname : string
+        name of the newly written netcdf file
     """
 
     ds = xr.open_dataset(inname, decode_times=True)
