@@ -452,12 +452,7 @@ def binary_to_nc(
                 profile_filt_time=None,  # type: ignore
                 maxgap=maxgap_esd,
             )
-
-            _log.info(f"Post-processing science timeseries: {outname_tssci}")
             postproc_info["drop_vars"] = ["pressure"]
-            tssci = xr.load_dataset(outname_tssci)
-            tssci = postproc_sci_timeseries(tssci, postproc_info, **kwargs)
-            utils.to_netcdf_esd(tssci, outname_tssci)
 
         else:
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
@@ -467,11 +462,17 @@ def binary_to_nc(
                 deploymentyaml,
                 fnamesuffix=f"-{mode}-sci",
                 maxgap=maxgap_esd,
-                pp=postproc_info,
-                **kwargs,
             )
             # raw_to_sci_timeseries calls postproc_sci_timeseries internally
             tssci = xr.load_dataset(outname_tssci)
+
+        _log.info(f"Post-processing science timeseries: {outname_tssci}")
+        tssci = xr.load_dataset(outname_tssci)
+        tssci = postproc_sci_timeseries(tssci, postproc_info, **kwargs)
+        utils.to_netcdf_esd(tssci, outname_tssci)   
+        # # Perform ESD-specific post-processing
+        # _log.info("Post-processing science timeseries")
+        # ds = postproc_sci_timeseries(ds, pp, **kwargs)
 
         _log.info("final eng/sci timeseries checks")
         # Brief profile sanity check - check_profiles done in postproc-general
@@ -1345,8 +1346,6 @@ def timeseries_raw_to_sci(
     *,
     fnamesuffix="",
     maxgap=300,
-    pp: dict,
-    **kwargs,
 ):
     """
     Go from raw timeseries (from esdglider.glider.binary_to_raw)
@@ -1420,37 +1419,10 @@ def timeseries_raw_to_sci(
         "Dropping datapoints that have nan values for all of these vars: %s",
         ", ".join([str(i) for i in vars_sci]),
     )
-    # vars_ignore = list(set(vars_tokeep).difference(vars_sci))
-    # vars_ignore = list(set(vars_tokeep).intersection([
-    #     "depth", "profile_index", "profile_direction", "latitude", "longitude",
-    #     "heading", "pitch", "roll",
-    #     "water_velocity_eastward", "water_velocity_northward",
-    # ]))
-    # vars_sci = list(set(vars_tokeep).difference(set(vars_ignore)))
     ds = ds.dropna(dim="time", how="all", subset=vars_sci)
-
-    # Not necessary with subset arg
-    # ds = xr.combine_by_coords(
-    #     [ds[vars_ignore], ds_sci], join="inner", combine_attrs ="identical",
-    # )
-    # ds = utils.data_var_reorder(ds, vars_tokeep)
 
     if ("temperature" in ds) and ("conductivity" in ds) and ("pressure" in ds):
         ds = pgutils.get_derived_eos_raw(ds)
-
-    # Perform ESD-specific post-processing
-    _log.info("Post-processing science timeseries")
-    ds = postproc_sci_timeseries(ds, pp, **kwargs)
-
-    # if dstype == "eng":
-    #     _log.info(f"Post-processing engineering timeseries")
-    #     ds = postproc_eng_timeseries(ds, pp, **kwargs)
-    # elif dstype == "sci":
-    #     _log.info(f"Post-processing science timeseries")
-    #     ds = postproc_sci_timeseries(ds, pp, **kwargs)
-    # else:
-    #     _log.error("dstype %s", dstype)
-    #     raise ValueError("dstype must be either 'sci' or 'eng'")
 
     # Write out to file
     outname = f"{outdir}/{ds.attrs['deployment_name'] + fnamesuffix}.nc"
