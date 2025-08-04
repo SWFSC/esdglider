@@ -1431,6 +1431,10 @@ def timeseries_raw_to_sci(
         ds[i].attrs["method"] = "linear fill"
         # The var already has the yaml-specified attributes from binary_to_raw
 
+    # For consistency with pyglider
+    device_data = deployment['glider_devices']
+    ds = pgutils.fill_metadata(ds, deployment['metadata'], device_data)
+
     # Drop rows where all science vars are nan
     _log.info(
         "Dropping datapoints that have nan values for all of these vars: %s",
