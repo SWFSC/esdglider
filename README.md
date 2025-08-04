@@ -1,6 +1,6 @@
 # esdglider
 
-A Python toolbox for ESD glider data processing.
+A Python toolbox for glider data processing by the NOAA Fisheries [SWFSC](https://www.fisheries.noaa.gov/about/southwest-fisheries-science-center) Ecosystem Science Division.
 
 This repo was inspired by [cproofutils](https://github.com/c-proof/cproofutils) and [votoutils](https://github.com/voto-ocean-knowledge/votoutils), as well as informed by experiences developing [amlr-gliders](https://github.com/us-amlr/amlr-gliders). Although this repo is a collection of utility functions and functionality, it roughly follows structure and opinions outlined by [Cookiecutter Data Science](https://cookiecutter-data-science.drivendata.org/).
 

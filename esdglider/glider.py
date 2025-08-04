@@ -1345,6 +1345,7 @@ def binary_to_raw_timeseries(
     # Add metadata - using postproc_attrs for consistency
     pp["metadata_dict"] = deployment["metadata"]
     pp["device_dict"] = deployment["glider_devices"]
+    # postproc_attrs calls pgutils.fill_metadata
     ds = postproc_attrs(ds, pp)
 
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
@@ -1431,7 +1432,7 @@ def timeseries_raw_to_sci(
         ds[i].attrs["method"] = "linear fill"
         # The var already has the yaml-specified attributes from binary_to_raw
 
-    # For consistency with pyglider
+    # For consistency with pyglider, even though postproc_sci is run later
     device_data = deployment['glider_devices']
     ds = pgutils.fill_metadata(ds, deployment['metadata'], device_data)
 
