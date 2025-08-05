@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # FileDecompressor.decompress(dcd1)
     logging.info("decompressing all files in %s", binarydir)
     for fin in binarydir_files:
-        logging.debug(fin)
+        logging.debug("Working on %s", fin)
         if is_compressed(fin):
             decompress_file(os.path.join(binarydir, fin))
         else:
