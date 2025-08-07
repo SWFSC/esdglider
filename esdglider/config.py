@@ -178,6 +178,7 @@ def make_deployment_yaml(
     # glider_id = db_depl["Glider_ID"].values[0]
     glider_depl_id = db_depl["Glider_Deployment_ID"].values[0]
     project = db_depl["Project"].values[0]
+    sea_name = db_depl["Sea_Name"].values[0]
 
     # Get metadata info
     metadata["deployment_id"] = str(glider_depl_id)
@@ -223,6 +224,7 @@ def make_deployment_yaml(
     metadata["deployment_name"] = deployment_name
     metadata["os_version"] = str(db_depl["Software_Version"].values[0])
     metadata["project"] = project
+    metadata["sea_name"] = sea_name
     metadata["glider_name"] = deployment_split[0]
     if not any(db_devices["Device_Type"] == "Teledyne Glider Slocum G3"):
         raise ValueError(
@@ -233,12 +235,12 @@ def make_deployment_yaml(
         "Serial_Num",
     ].values[0]
 
-    if project == "FREEBYRD":
-        metadata["sea_name"] = "Southern Ocean"
-    elif project in ["ECOSWIM", "SANDIEGO", "REFOCUS"]:
-        metadata["sea_name"] = "Coastal Waters of California"
-    else:
-        metadata["sea_name"] = "<sea name>"
+    # if project == "FREEBYRD":
+    #     metadata["sea_name"] = "Southern Ocean"
+    # elif project in ["ECOSWIM", "SANDIEGO", "REFOCUS"]:
+    #     metadata["sea_name"] = "Coastal Waters of California"
+    # else:
+    #     metadata["sea_name"] = "<sea name>"
 
     deployment_yaml = {
         "metadata": dict(sorted(metadata.items(), key=lambda v: v[0].upper())),
@@ -292,10 +294,10 @@ def make_website_yaml(
         "Glider",
         "Start",
         "End",
-        "Location",
+        "Project",
+        "Region",
         "Sensors",
         "Deployment_Name",
-        "Project",
     ]
     # df_deployments = make_deployment_table(con=con, schema=schema)
     df_foryaml = df[depl_columns].copy()
@@ -519,6 +521,7 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
         "Deployment_Start": "Start",
         "Deployment_End": "End",
         "Location_Name": "Location", 
+        "Region_Name": "Region",
         "Deployment_Name": "Deployment_Name",
         "Deployment_Dives": "Dives",
         "Deployment_Days": "Days",
@@ -528,13 +531,10 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
         "Glider_ID": "Glider_ID",
     }
 
-    df_depl = (
-        vGlider_Deployment[columns_tokeep.keys()]
-        .rename(columns=columns_tokeep)
-    )
+    df_depl = vGlider_Deployment[columns_tokeep.keys()]
+    df_depl = df_depl.rename(columns=columns_tokeep)
 
     # TODO: add notes to the database
-    df_depl["Location"] = df_depl["Location"]
     df_depl["Notes"] = ""
     df_depl["Start"] = df_depl["Start"].dt.strftime("%Y-%m-%d")
     df_depl["End"] = df_depl["End"].dt.strftime("%Y-%m-%d")
@@ -565,15 +565,15 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
         axis=1,
     )
 
-    column_order_pre = ["Glider", "Start", "End", "Dates", "Location"]
-    column_order = (
-        column_order_pre
+    leading_cols = ["Glider", "Start", "End", "Dates", "Location", "Region"]
+    col_order = (
+        leading_cols
         + list(device_summ.columns)[1:]
-        + [col for col in df_depl.columns if col not in column_order_pre]
+        + [col for col in df_depl.columns if col not in leading_cols]
     )
 
     _log.info("Merging deployment and summarized device tables")
     out_table = pd.merge(df_depl, device_summ, on="Glider_Deployment_ID", how="left")
-    out_table = out_table[column_order].sort_values(by=["Start", "Glider"])
+    out_table = out_table[col_order].sort_values(by=["Start", "Glider"])
 
     return out_table

@@ -39,6 +39,14 @@ if __name__ == "__main__":
             x = df_depl.copy(deep=True)
             x = x.drop(["Dates", "Sensors"], axis=1)
 
+            leading_cols = ["Deployment_Name"]
+            col_order = (
+                leading_cols
+                + [col for col in x.columns if col not in leading_cols]
+            )
+            x = x[col_order]
+
+
             # Write Deployments table to fleet status
             wk_name = "Deployments-Database"
             logging.info("Updating the Fleet Status %s sheet", wk_name)
@@ -57,5 +65,5 @@ if __name__ == "__main__":
             #     showCustomUi=True
             # )
 
-            # Make website yaml
-            config.make_website_yaml(df_depl, yaml_path)
+            # # Make website yaml
+            # config.make_website_yaml(df_depl, yaml_path)
