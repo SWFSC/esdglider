@@ -497,11 +497,11 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
 
         """
         sensors = []
-        # for i in ["CTD", "Ecopuck", "Optode", "PAR"]:
-        #     # if ~is.nan(row[i] == "Yes":
-        #     if not pd.isna(row[i]):
-        #         sensors.append(i)
-        for i in ["CTD", "Ecopuck", "Optode", "PAR", "Acoustics", "Camera", "PAM"]:
+        for i in ["CTD", "Ecopuck", "Optode", "PAR"]:
+            if row[i] != "None":
+            # if not pd.isna(row[i]):
+                sensors.append(i)
+        for i in ["Acoustics", "Camera", "PAM"]:
             if row[i] != "None":
                 sensors.append(row[i])
         return ", ".join(sensors)
