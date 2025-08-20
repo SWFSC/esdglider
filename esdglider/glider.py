@@ -301,7 +301,7 @@ def binary_to_nc(
     sci_timeseries_pyglider : bool, default True
         Should the function use pyglider.slocum.binary_to_timeseries to create
         create the science timeseries (True),
-        or glider.timeseries_raw_to_sci (False)
+        or glider.raw_to_sci_timeseries (False)
     gridded_depth_measured : bool, default False
         Should the function pass the science timeseries directly to 
         pyglider.ncprocess.make_gridfiles (False), 
@@ -456,7 +456,7 @@ def binary_to_nc(
 
         else:
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
-            outname_tssci = timeseries_raw_to_sci(
+            outname_tssci = raw_to_sci_timeseries(
                 outname_tsraw,
                 tsdir,
                 deploymentyaml,
@@ -1321,16 +1321,20 @@ def binary_to_raw_timeseries(
     _log.info("The raw timeseries has %s data points", ds.time.shape[0])
 
     # Depth calculation #, and name management
-    ds = pgutils.get_glider_depth(ds).rename({"depth": "depth_ctd"})
     # ds = ds.rename({"depth_measured": "depth"})
+
+    # Calculate depth_ctd, profiles and distance_over_ground
+    ds = pgutils.get_glider_depth(ds).rename({"depth": "depth_ctd"})
+    ds = utils.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
+    ds = pgutils.get_distance_over_ground(ds)
 
     # Only keep depth_ctd values where pressure is not nan
     # TODO: is this using mean lat for everything??
     ds["depth_ctd"] = ds["depth_ctd"].where(~np.isnan(ds["pressure"]))
 
-    # Calculate profiles and distance_over_ground
-    ds = utils.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
-    ds = pgutils.get_distance_over_ground(ds)
+    # Only keep distance_over_ground values where lat/lon is not nan
+    ll_good = ~np.isnan(ds.latitude.values + ds.longitude.values)
+    ds["distance_over_ground"] = ds["distance_over_ground"].where(ll_good)
 
     new_start = [
         "latitude",
@@ -1355,7 +1359,7 @@ def binary_to_raw_timeseries(
     return outname
 
 
-def timeseries_raw_to_sci(
+def raw_to_sci_timeseries(
     inname,
     outdir,
     deploymentyaml,
@@ -1364,8 +1368,8 @@ def timeseries_raw_to_sci(
     maxgap=300,
 ):
     """
-    Go from raw timeseries (from esdglider.glider.binary_to_raw)
-    to processed science timeseries.
+    Go from raw timeseries (from esdglider.glider.binary_to_raw_timeseries)
+    to a processed science timeseries.
     This function can be used in cases where different science sensors are
     on at different times, e.g. PAM deployments, and thus it is not possible
     to get the full science timeseries using dbdreader.get_sync.

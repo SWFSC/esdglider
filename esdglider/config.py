@@ -12,7 +12,7 @@ from google.cloud import storage
 from esdglider.gcp import check_gcs_file_exists, check_gcs_directory_exists
 from esdglider.glider import get_path_glider_deployment
 from esdglider.imagery import get_path_imagery_deployment
-from esdglider.utils import split_deployment, year_path
+from esdglider.utils import split_deployment, year_path, dataframe_col_reorder
 
 _log = logging.getLogger(__name__)
 
@@ -178,6 +178,7 @@ def make_deployment_yaml(
     # glider_id = db_depl["Glider_ID"].values[0]
     glider_depl_id = db_depl["Glider_Deployment_ID"].values[0]
     project = db_depl["Project"].values[0]
+    sea_name = db_depl["Sea_Name"].values[0]
 
     # Get metadata info
     metadata["deployment_id"] = str(glider_depl_id)
@@ -223,6 +224,7 @@ def make_deployment_yaml(
     metadata["deployment_name"] = deployment_name
     metadata["os_version"] = str(db_depl["Software_Version"].values[0])
     metadata["project"] = project
+    metadata["sea_name"] = sea_name
     metadata["glider_name"] = deployment_split[0]
     if not any(db_devices["Device_Type"] == "Teledyne Glider Slocum G3"):
         raise ValueError(
@@ -233,12 +235,12 @@ def make_deployment_yaml(
         "Serial_Num",
     ].values[0]
 
-    if project == "FREEBYRD":
-        metadata["sea_name"] = "Southern Ocean"
-    elif project in ["ECOSWIM", "SANDIEGO", "REFOCUS"]:
-        metadata["sea_name"] = "Coastal Waters of California"
-    else:
-        metadata["sea_name"] = "<sea name>"
+    # if project == "FREEBYRD":
+    #     metadata["sea_name"] = "Southern Ocean"
+    # elif project in ["ECOSWIM", "SANDIEGO", "REFOCUS"]:
+    #     metadata["sea_name"] = "Coastal Waters of California"
+    # else:
+    #     metadata["sea_name"] = "<sea name>"
 
     deployment_yaml = {
         "metadata": dict(sorted(metadata.items(), key=lambda v: v[0].upper())),
@@ -292,10 +294,10 @@ def make_website_yaml(
         "Glider",
         "Start",
         "End",
-        "Location",
+        "Project",
+        "Region",
         "Sensors",
         "Deployment_Name",
-        "Project",
     ]
     # df_deployments = make_deployment_table(con=con, schema=schema)
     df_foryaml = df[depl_columns].copy()
@@ -496,19 +498,20 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
         """
         sensors = []
         for i in ["CTD", "Ecopuck", "Optode", "PAR"]:
-            if row[i] == "Yes":
+            if row[i] != "None":
+            # if not pd.isna(row[i]):
                 sensors.append(i)
         for i in ["Acoustics", "Camera", "PAM"]:
             if row[i] != "None":
                 sensors.append(row[i])
         return ", ".join(sensors)
 
-    def _tf_type(val, component):
-        """
-        Returns Yes/No, depending on if a specific component is present
-        val must be a key in db_components
-        """
-        return str(np.where(db_components[val] in component, "Yes", "No"))
+    # def _tf_type(val, component):
+    #     """
+    #     Returns Yes/No, depending on if a specific component is present
+    #     val must be a key in db_components
+    #     """
+    #     return str(np.where(db_components[val] in component, "Yes", "No"))
 
     ### Main function code
     _log.info("Get info from the deployment view")
@@ -519,6 +522,7 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
         "Deployment_Start": "Start",
         "Deployment_End": "End",
         "Location_Name": "Location", 
+        "Region_Name": "Region",
         "Deployment_Name": "Deployment_Name",
         "Deployment_Dives": "Dives",
         "Deployment_Days": "Days",
@@ -528,13 +532,10 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
         "Glider_ID": "Glider_ID",
     }
 
-    df_depl = (
-        vGlider_Deployment[columns_tokeep.keys()]
-        .rename(columns=columns_tokeep)
-    )
+    df_depl = vGlider_Deployment[columns_tokeep.keys()]
+    df_depl = df_depl.rename(columns=columns_tokeep)
 
     # TODO: add notes to the database
-    df_depl["Location"] = df_depl["Location"]
     df_depl["Notes"] = ""
     df_depl["Start"] = df_depl["Start"].dt.strftime("%Y-%m-%d")
     df_depl["End"] = df_depl["End"].dt.strftime("%Y-%m-%d")
@@ -546,34 +547,64 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
     _log.info("Get and summarize device info, for each deployment")
     Deployment_Device = pd.read_sql_table("vDeployment_Device", con, schema)
 
+    # x = Deployment_Device["Glider_Deployment_ID"].drop_duplicates().reset_index(drop=True)
+
+    # Get the serial numbers as columns for all Components 
+    # represented as keys in `toget`
+    y = Deployment_Device[["Glider_Deployment_ID", "Component", "Serial_Num"]]
+    toget = {"ctd": "CTD", "flbbcd": "Ecopuck", "oxygen": "Optode", "par": "PAR"}
+    comp_toget = [v for k, v in db_components.items() if k in toget.keys()]
+    y = y[y["Component"].isin(comp_toget)]
+    db_components_inv = {v: k for k, v in db_components.items()}
+    y["Component_Lbl"] = y["Component"].map(db_components_inv)
+    tofill = {v: "None" for k, v in db_components_inv.items()}
+    
+    device_summ_serial = (
+        y.pivot_table(
+            index="Glider_Deployment_ID", 
+            columns='Component_Lbl', 
+            values='Serial_Num', 
+            aggfunc="first"
+        )
+        .reset_index()
+        .fillna(tofill)
+        .rename(columns=toget)
+    )
+
+    # Aggregate non-serial_num columns
     device_summ = (
         Deployment_Device.groupby("Glider_Deployment_ID")
         .agg(
             Batteries=("Component", lambda x: _battery_type(x)),
-            CTD=("Component", lambda x: _tf_type("ctd", x.values)),
-            Ecopuck=("Component", lambda x: _tf_type("flbbcd", x.values)),
-            Optode=("Component", lambda x: _tf_type("oxygen", x.values)),
-            PAR=("Component", lambda x: _tf_type("par", x.values)),
+            # CTD=("Component", lambda x: _tf_type("ctd", x.values)),
+            # Ecopuck=("Component", lambda x: _tf_type("flbbcd", x.values)),
+            # Optode=("Component", lambda x: _tf_type("oxygen", x.values)),
+            # PAR=("Component", lambda x: _tf_type("par", x.values)),
             Acoustics=("Component", lambda x: _acoustics_type(x)),
             Camera=("Model", lambda x: _camera_type(x)),
             PAM=("Component", lambda x: _pam_type(x)),
         )
         .reset_index()
     )
-    device_summ["Sensors"] = device_summ.apply(
+
+    # Join with serial num columns, and make sensors
+    device_summ = pd.merge(device_summ, device_summ_serial, on="Glider_Deployment_ID", how="left")
+    leading_cols = ["Glider_Deployment_ID", "Batteries", "CTD", "Ecopuck", "Optode", "PAR"]
+    device_summ = dataframe_col_reorder(device_summ, leading_cols)
+    device_summ.loc[:, "Sensors"] = device_summ.apply(
         lambda row: _concatenate_sensors(row),
         axis=1,
     )
 
-    column_order_pre = ["Glider", "Start", "End", "Dates", "Location"]
-    column_order = (
-        column_order_pre
+    leading_cols = ["Deployment_Name", "Glider", "Start", "End", "Dates", "Location", "Region"]
+    col_order = (
+        leading_cols
         + list(device_summ.columns)[1:]
-        + [col for col in df_depl.columns if col not in column_order_pre]
+        + [col for col in df_depl.columns if col not in leading_cols]
     )
 
     _log.info("Merging deployment and summarized device tables")
     out_table = pd.merge(df_depl, device_summ, on="Glider_Deployment_ID", how="left")
-    out_table = out_table[column_order].sort_values(by=["Start", "Glider"])
+    out_table = out_table[col_order].sort_values(by=["Start", "Glider"])
 
     return out_table

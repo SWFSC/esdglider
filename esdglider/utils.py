@@ -458,6 +458,36 @@ def read_deploymentyaml(deploymentyaml: str):
     return deployment_
 
 
+def dataframe_col_reorder(df: pd.DataFrame, new_start):
+    """
+    Reorder the columns of a dataframe
+
+    new_start is a list of the data variable names from df that
+    will be moved to 'first' in the dataframe
+
+    Returns df, with reordered columns
+    """
+    cols_orig = df.columns
+    if not all([i in cols_orig for i in new_start]):
+        _log.error("new_start %s", new_start)
+        _log.error("df.columns %s", cols_orig)
+        raise ValueError("All values of new_start must be in df.columns")
+
+    new_order = new_start + [col for col in df.columns if col not in new_start]
+    df = df[new_order]
+
+    # Double check that all values are present in new ds
+    if not (
+        all(
+            [j in cols_orig for j in new_order]
+            + [j in new_order for j in cols_orig],
+        )
+    ):
+        raise ValueError("Error reordering data variables")
+
+    return df
+
+
 def data_var_reorder(ds, new_start):
     """
     Reorder the data variables of a dataset
