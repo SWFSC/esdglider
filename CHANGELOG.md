@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `esdglider` currently relies on the [smwoodman pyglider fork](https://github.com/smwoodman/pyglider). A PR is currently open [here](https://github.com/c-proof/pyglider/pull/227)
+- Fixed the gridding code to use proper methods for different input boolean flags
+- Changed the gridding code to use the new pyglider gridding function
 - Changed config module:
     - Functions that scrape info from the database to all expect a `sqlalchemy.engine.Connectable` object as the first input
     - Changed `instrument_attrs` to `_get_instrument_attrs`,  and `make_deployment_table` to `get_deployment_table`, for consistency with functions from other modules
