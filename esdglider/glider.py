@@ -41,14 +41,14 @@ bin_size: list
 depth_max: float
     The maximum value to use when making depth bins
 """
-gridded_exclude_vars = [
-    "distance_over_ground",
-    "heading",
-    "pitch",
-    "roll",
-    "waypoint_latitude",
-    "waypoint_longitude",
-]
+# gridded_exclude_vars = [
+#     "distance_over_ground",
+#     "heading",
+#     "pitch",
+#     "roll",
+#     "waypoint_latitude",
+#     "waypoint_longitude",
+# ]
 bin_size = [1, 5]
 depth_max = 1200.1
 
@@ -507,10 +507,10 @@ def binary_to_nc(
             raise FileNotFoundError(f"Could not find {outname_tssci}")
         
         if sci_timeseries_pyglider:
-            outnames = make_gridfiles_depth_measured(paths)
-        else:
             _log.info("Gridding science data using CTD-calculated depth")
             outnames = grid_esd(outname_tssci, paths=paths)
+        else:
+            outnames = make_gridfiles_depth_measured(paths)
         _log.debug("gridded outnames %s", "; ".join(outnames))
 
         # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
@@ -1510,7 +1510,7 @@ def grid_esd(inname, paths):
     """
 
     outnames = []
-    _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
+    # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
 
     for i in bin_size:
         _log.info("Generating %sm gridded data", i)
@@ -1520,7 +1520,7 @@ def grid_esd(inname, paths):
             paths["deploymentyaml"],
             depth_bins=np.arange(0, depth_max, i),
             fnamesuffix=f"-{paths['mode']}-{i}m",
-            exclude_vars=gridded_exclude_vars,
+            # exclude_vars=gridded_exclude_vars,
         )
         outnames.append(outname_gr)
 
