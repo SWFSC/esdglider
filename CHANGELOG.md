@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed the name of the function `glider.raw_to_sci_timeseries` to `glider.raw_to_sci_timeseries`, to be more consistent with `esdglider` and `pyglider`
 - Added a 'generate fleet status' python script, for updating the various tabs on the Fleet Status Google sheet with summaries from the database. 
 
+- Updating config website yaml
+
 
 ## [0.3.0] - 2025-07-22
 
