@@ -43,19 +43,41 @@ camera_models = {
 db_factory_cal = ["Factory - Initial", "Factory - Recalibration"]
 
 
-def instrument_attrs(key, devices, dev_df, cal_df):
+
+def _read_esdglider_yaml(yaml_name):
     """
-    component: str
+    Safely and consistently read a yaml file from the esdglider data folder
+    """
+    with as_file(files("esdglider.data") / yaml_name) as path:
+        with open(str(path), "r") as fin:
+            return yaml.safe_load(fin)
+
+
+def _get_instrument_attrs(
+    key: str, 
+    dev_df: pd.DataFrame, 
+    cal_df: pd.DataFrame
+):
+    """
+    Get instrument attributes from relevant database tables
+
+    Parameters
+    ----------
+    key: str
         Name of database component key, eg 'ctd' or 'oxygen'.
         Name must be a key in db_components
-    devices: dict
-        Devices dictionary, read in from yaml file
     dev_df: DataFrame
         Pandas dataframe of devices, filtered for Deployment ID
     cal_df: DataFrame
         Pandas dataframe of device calibrations, filtered for Deployment ID
+
+    Returns
+    -------
+    dictionary
+        Instrument attributes, to be added to the deployment yaml
     """
 
+    devices = _read_esdglider_yaml("glider-devices.yml")
     dev_components = dev_df["Component"]
     component = db_components[key]
     instr = devices[key]
@@ -97,37 +119,31 @@ def make_deployment_yaml(
     db_url: str | sqlalchemy.URL,
 ):
     """
+    Make the first draft deployment yaml. 
+    This yaml contains all relevant info from the Glider&Mooring database
+
     Parameters
     ----------
     deployment_name : str
-        name of the glider deployment. Eg, amlr01-20200101.
-        Only need the name of the deployment,
-        because the database contains the project
-    out_path : str
-        path to which to write the output yaml file
-    db_url : str
-        The database URL, which is passed to sqlalchemy.create_engine
-        to connect to the division database to extract glider info.
-        If None (default), no connection attempt will be made
+        name of the glider deployment, eg, amlr01-20200101
+    outdir : str
+        path to which to write the output yaml file. The full output file
+        path will be `os.path.join(outdir, f"{deployment_name}.yml")`
+    schema : string, default "dbo"
+        Database schema, passed to 'schema' arg of `pd.read_sql_table`
 
     Returns
     -------
-    str
-        Full path of the output (written) yaml file
+    dictionary
+        The dictionary that was written to the yaml file 
     """
 
     _log.info("Creating config file for deployment %s", deployment_name)
     _log.debug("Reading template yaml files")
 
-    def esdglider_yaml_read(yaml_name):
-        with as_file(files("esdglider.data") / yaml_name) as path:
-            with open(str(path), "r") as fin:
-                return yaml.safe_load(fin)
-
-    metadata = esdglider_yaml_read("metadata.yml")
-    netcdf_vars = esdglider_yaml_read("netcdf-variables-sci.yml")
-    prof_vars = esdglider_yaml_read("profile-variables.yml")
-    devices = esdglider_yaml_read("glider-devices.yml")
+    metadata = _read_esdglider_yaml("metadata.yml")
+    netcdf_vars = _read_esdglider_yaml("netcdf-variables-sci.yml")
+    prof_vars = _read_esdglider_yaml("profile-variables.yml")
 
     _log.debug("connecting to database, using the following: %s", db_url)
     engine = sqlalchemy.create_engine(db_url)
@@ -143,37 +159,40 @@ def make_deployment_yaml(
         schema="dbo",
     )
     Deployment_Device_Calibration = pd.read_sql_table(
-        "vDeployment_Device_Calibration",
-        con=engine,
-        schema="dbo",
+        "vDeployment_Device_Calibration", 
+        con, 
+        schema, 
     )
 
     # Filter for the glider deployment, using the deployment name
-    db_depl = Glider_Deployment[Glider_Deployment["Deployment_Name"] == deployment_name]
+    db_depl_mask = Glider_Deployment["Deployment_Name"] == deployment_name
+    db_depl = Glider_Deployment[db_depl_mask]
     _log.debug("database connection successful")
     # Confirm that exactly one deployment in the db matched deployment name
     if db_depl.shape[0] != 1:
         _log.error(
-            "Exactly one row from the Glider_Deployment table "
-            + f"must match the deployment name {deployment_name}. "
-            + f"Currently, {db_depl.shape[0]} rows matched",
+            "Exactly one row from the Glider_Deployment table must match "
+            + "the deployment name %s. Currently, %s rows matched",
+            deployment_name, 
+            db_depl.shape[0], 
         )
         raise ValueError("Invalid Glider_Deployment match")
 
     # Extract various deployment info
     # glider_id = db_depl["Glider_ID"].values[0]
-    glider_deployment_id = db_depl["Glider_Deployment_ID"].values[0]
+    glider_depl_id = db_depl["Glider_Deployment_ID"].values[0]
     project = db_depl["Project"].values[0]
+    sea_name = db_depl["Sea_Name"].values[0]
 
     # Get metadata info
-    metadata["deployment_id"] = str(glider_deployment_id)
+    metadata["deployment_id"] = str(glider_depl_id)
 
     # Filter the Devices table for this deployment
     db_devices = Deployment_Device[
-        Deployment_Device["Glider_Deployment_ID"] == glider_deployment_id
+        Deployment_Device["Glider_Deployment_ID"] == glider_depl_id
     ]
     db_cals = Deployment_Device_Calibration[
-        Deployment_Device_Calibration["Glider_Deployment_ID"] == glider_deployment_id
+        Deployment_Device_Calibration["Glider_Deployment_ID"] == glider_depl_id
     ]
     components = db_devices["Component"].values
 
@@ -184,9 +203,9 @@ def make_deployment_yaml(
     for key, value in db_components.items():
         if value in components:
             _log.info("Generating config for component %s", value)
-            instruments[f"instrument_{key}"] = instrument_attrs(
+            instruments[f"instrument_{key}"] = _get_instrument_attrs(
                 key,
-                devices,
+                # devices,
                 db_devices,
                 db_cals,
             )
@@ -207,24 +226,25 @@ def make_deployment_yaml(
 
     deployment_split = split_deployment(deployment_name)
     metadata["deployment_name"] = deployment_name
-    metadata["os_version"] = db_depl["Software_Version"].values[0]
+    metadata["os_version"] = str(db_depl["Software_Version"].values[0])
     metadata["project"] = project
+    metadata["sea_name"] = sea_name
     metadata["glider_name"] = deployment_split[0]
     if not any(db_devices["Device_Type"] == "Teledyne Glider Slocum G3"):
         raise ValueError(
-            "No device 'Teledyne Glider Slocum G3'. " + "Please add it to the build",
+            "No device 'Teledyne Glider Slocum G3'. Please add to the build",
         )
     metadata["glider_serial"] = db_devices.loc[
         db_devices["Device_Type"] == "Teledyne Glider Slocum G3",
         "Serial_Num",
     ].values[0]
 
-    if project == "FREEBYRD":
-        metadata["sea_name"] = "Southern Ocean"
-    elif project in ["ECOSWIM", "SANDIEGO", "REFOCUS"]:
-        metadata["sea_name"] = "Coastal Waters of California"
-    else:
-        metadata["sea_name"] = "<sea name>"
+    # if project == "FREEBYRD":
+    #     metadata["sea_name"] = "Southern Ocean"
+    # elif project in ["ECOSWIM", "SANDIEGO", "REFOCUS"]:
+    #     metadata["sea_name"] = "Coastal Waters of California"
+    # else:
+    #     metadata["sea_name"] = "<sea name>"
 
     deployment_yaml = {
         "metadata": dict(sorted(metadata.items(), key=lambda v: v[0].upper())),
@@ -233,36 +253,58 @@ def make_deployment_yaml(
         "profile_variables": prof_vars,
     }
 
-    yaml_file = os.path.join(out_path, f"{deployment_name}.yml")
+    yaml_file = os.path.join(outdir, f"{deployment_name}.yml")
     _log.info(f"writing {yaml_file}")
     with open(yaml_file, "w") as file:
         yaml.dump(deployment_yaml, file, sort_keys=False)
 
-    return yaml_file
+    return deployment_yaml
 
 
-def make_website_yaml(engine, out_path):
+def make_website_yaml(
+        df: pd.DataFrame, 
+        outdir: str, 
+        glider_bucket_name: str = "amlr-gliders-deployments-dev", 
+        acoustics_bucket_name: str = "amlr-gliders-acoustics-dev", 
+        imagery_bucket_name: str = "amlr-gliders-imagery-raw-dev",
+):
     """
     Scrape deployment data from the database,
     and write to a yaml file that will be parsed by the quarto website
+
+    Parameters
+    ----------
+    df : pandas DataFrame
+        Output of config.make_deployment_table
+    outdir : str
+        Directory to which to write the website yaml. The full output file
+        path will be `os.path.join(outdir, "esd-gliders.yml")`
+    glider_bucket_name : str
+        Name of the glider data bucket
+    acoustics_bucket_name : str
+        Name of the glider active acoustics data bucket
+    imagery_bucket_name : str
+        Name of the glider raw imagery bucket
+
+    Returns
+    -------
+    dictionary
+        The dictionary that was written to the yaml file 
     """
 
-    _log.debug("database engine %s", engine)
-    # _log.debug("connecting to database, using the following: %s", db_url)
-    # engine = sqlalchemy.create_engine(db_url)
-
-    _log.info("Get the info for each deployment from the glider database")
+    # _log.debug("database connection %s", con)
+    # _log.info("Get the info for each deployment from the glider database")
     depl_columns = [
         "Glider",
         "Start",
         "End",
-        "Location",
+        "Project",
+        "Region",
         "Sensors",
         "Deployment_Name",
-        "Project",
     ]
-    df_deployments = make_deployment_table(engine)
-    df_foryaml = df_deployments[depl_columns].copy()
+    # df_deployments = make_deployment_table(con=con, schema=schema)
+    df_foryaml = df[depl_columns].copy()
     # df_foryaml["Start"] = df_foryaml["Start"].dt.strftime('%Y-%m-%d')
     # df_foryaml["End"] = df_foryaml["End"].dt.strftime('%Y-%m-%d')
 
@@ -359,21 +401,30 @@ def make_website_yaml(engine, out_path):
 
     # Write to a yaml file
     yaml_data = df_foryaml.to_dict(orient="records")
-    yaml_file = os.path.join(out_path, "esd-gliders.yml")
+    yaml_file = os.path.join(outdir, "esd-gliders.yml")
     _log.info(f"writing {yaml_file}")
     with open(yaml_file, "w") as file:
         yaml.dump(yaml_data, file, sort_keys=False, default_flow_style=False)
 
-    # with open(yaml_file) as fin:
-    #     z = yaml.safe_load(fin)
-    # z_df = pd.DataFrame(z)
-
-    return yaml_file
+    return yaml_data
 
 
-def make_deployment_table(engine):
+def get_deployment_table(con: Connectable, schema: str = "dbo"):
     """
-    Generate a deployment summary table, to publish on the Fleet Status page
+    Generate a deployment summary table. 
+    This table is intended to be published on the Fleet Status sheet
+
+    Parameters
+    ----------
+    con : sqlalchemy Connectable
+        Database connection, passed to 'con' arg of `pd.read_sql_table`
+    schema : string, default "dbo"
+        Database schema, passed to 'schema' arg of `pd.read_sql_table`
+
+    Returns
+    -------
+    pandas DataFrame
+        Deployment summary table
     """
 
     ### Helper functions
@@ -459,32 +510,31 @@ def make_deployment_table(engine):
         """
         sensors = []
         for i in ["CTD", "Ecopuck", "Optode", "PAR"]:
-            if row[i] == "Yes":
+            if row[i] != "None":
+            # if not pd.isna(row[i]):
                 sensors.append(i)
         for i in ["Acoustics", "Camera", "PAM"]:
             if row[i] != "None":
                 sensors.append(row[i])
         return ", ".join(sensors)
 
-    def _tf_type(val, component):
-        """
-        Returns Yes/No, depending on if a specific component is present
-        val must be a key in db_components
-        """
-        return str(np.where(db_components[val] in component, "Yes", "No"))
+    # def _tf_type(val, component):
+    #     """
+    #     Returns Yes/No, depending on if a specific component is present
+    #     val must be a key in db_components
+    #     """
+    #     return str(np.where(db_components[val] in component, "Yes", "No"))
 
     ### Main function code
     _log.info("Get info from the deployment view")
-    vGlider_Deployment = pd.read_sql_table(
-        "vGlider_Deployment",
-        con=engine,
-        schema="dbo",
-    )
+    vGlider_Deployment = pd.read_sql_table("vGlider_Deployment", con, schema)
 
     columns_tokeep = {
         "Glider_Name": "Glider",
         "Deployment_Start": "Start",
         "Deployment_End": "End",
+        "Location_Name": "Location", 
+        "Region_Name": "Region",
         "Deployment_Name": "Deployment_Name",
         "Deployment_Dives": "Dives",
         "Deployment_Days": "Days",
@@ -494,16 +544,10 @@ def make_deployment_table(engine):
         "Glider_ID": "Glider_ID",
     }
 
-    df_depl = (
-        vGlider_Deployment[columns_tokeep.keys()]
-        .rename(
-            columns=columns_tokeep,
-        )
-        .copy()
-    )
+    df_depl = vGlider_Deployment[columns_tokeep.keys()]
+    df_depl = df_depl.rename(columns=columns_tokeep)
 
-    # TODO: add location and notes to the database
-    df_depl["Location"] = ""
+    # TODO: add notes to the database
     df_depl["Notes"] = ""
     df_depl["Start"] = df_depl["Start"].dt.strftime("%Y-%m-%d")
     df_depl["End"] = df_depl["End"].dt.strftime("%Y-%m-%d")
@@ -513,40 +557,66 @@ def make_deployment_table(engine):
     #     + " - " + df_depl["End"].dt.strftime('%Y-%m-%d'))
 
     _log.info("Get and summarize device info, for each deployment")
-    Deployment_Device = pd.read_sql_table(
-        "vDeployment_Device",
-        con=engine,
-        schema="dbo",
+    Deployment_Device = pd.read_sql_table("vDeployment_Device", con, schema)
+
+    # x = Deployment_Device["Glider_Deployment_ID"].drop_duplicates().reset_index(drop=True)
+
+    # Get the serial numbers as columns for all Components 
+    # represented as keys in `toget`
+    y = Deployment_Device[["Glider_Deployment_ID", "Component", "Serial_Num"]]
+    toget = {"ctd": "CTD", "flbbcd": "Ecopuck", "oxygen": "Optode", "par": "PAR"}
+    comp_toget = [v for k, v in db_components.items() if k in toget.keys()]
+    y = y[y["Component"].isin(comp_toget)]
+    db_components_inv = {v: k for k, v in db_components.items()}
+    y["Component_Lbl"] = y["Component"].map(db_components_inv)
+    tofill = {v: "None" for k, v in db_components_inv.items()}
+    
+    device_summ_serial = (
+        y.pivot_table(
+            index="Glider_Deployment_ID", 
+            columns='Component_Lbl', 
+            values='Serial_Num', 
+            aggfunc="first"
+        )
+        .reset_index()
+        .fillna(tofill)
+        .rename(columns=toget)
     )
 
+    # Aggregate non-serial_num columns
     device_summ = (
         Deployment_Device.groupby("Glider_Deployment_ID")
         .agg(
             Batteries=("Component", lambda x: _battery_type(x)),
-            CTD=("Component", lambda x: _tf_type("ctd", x.values)),
-            Ecopuck=("Component", lambda x: _tf_type("flbbcd", x.values)),
-            Optode=("Component", lambda x: _tf_type("oxygen", x.values)),
-            PAR=("Component", lambda x: _tf_type("par", x.values)),
+            # CTD=("Component", lambda x: _tf_type("ctd", x.values)),
+            # Ecopuck=("Component", lambda x: _tf_type("flbbcd", x.values)),
+            # Optode=("Component", lambda x: _tf_type("oxygen", x.values)),
+            # PAR=("Component", lambda x: _tf_type("par", x.values)),
             Acoustics=("Component", lambda x: _acoustics_type(x)),
             Camera=("Model", lambda x: _camera_type(x)),
             PAM=("Component", lambda x: _pam_type(x)),
         )
         .reset_index()
     )
-    device_summ["Sensors"] = device_summ.apply(
+
+    # Join with serial num columns, and make sensors
+    device_summ = pd.merge(device_summ, device_summ_serial, on="Glider_Deployment_ID", how="left")
+    leading_cols = ["Glider_Deployment_ID", "Batteries", "CTD", "Ecopuck", "Optode", "PAR"]
+    device_summ = dataframe_col_reorder(device_summ, leading_cols)
+    device_summ.loc[:, "Sensors"] = device_summ.apply(
         lambda row: _concatenate_sensors(row),
         axis=1,
     )
 
-    column_order_pre = ["Glider", "Start", "End", "Dates", "Location"]
-    column_order = (
-        column_order_pre
+    leading_cols = ["Deployment_Name", "Glider", "Start", "End", "Dates", "Location", "Region"]
+    col_order = (
+        leading_cols
         + list(device_summ.columns)[1:]
-        + [col for col in df_depl.columns if col not in column_order_pre]
+        + [col for col in df_depl.columns if col not in leading_cols]
     )
 
     _log.info("Merging deployment and summarized device tables")
     out_table = pd.merge(df_depl, device_summ, on="Glider_Deployment_ID", how="left")
-    out_table = out_table[column_order].sort_values(by=["Start", "Glider"])
+    out_table = out_table[col_order].sort_values(by=["Start", "Glider"])
 
     return out_table

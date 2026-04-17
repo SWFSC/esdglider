@@ -5,7 +5,25 @@ All notable changes to the esdglider package will be documented in this file. Se
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-04-17
+
+- `esdglider` currently relies on the [smwoodman pyglider fork](https://github.com/smwoodman/pyglider). A PR is currently open [here](https://github.com/c-proof/pyglider/pull/227)
+- Fixed the gridding code to use proper methods for different input boolean flags
+- Changed the gridding code to use the new pyglider gridding function
+- Changed config module:
+    - Functions that scrape info from the database to all expect a `sqlalchemy.engine.Connectable` object as the first input
+    - Changed `instrument_attrs` to `_get_instrument_attrs`,  and `make_deployment_table` to `get_deployment_table`, for consistency with functions from other modules
+    - Changed `get_deployment_table` to handle Location column, after updating the database
+    - `make_website_yaml` now takes a dataframe (the output of `get_deployment_table`) as an input, rather than a database connection
+    - The `make...yaml` functions now return the dictionary rather than the file path
+    - `_read_esdglider_yaml` is now a full internal function
+    - Added ability to use new Location table columns (Region_Name and Sea_Name)
+- Changed plots to use a set legend position when possible, and to remove the 'inflections' tvt plot as it is functionally a duplicate of the 'diveEnergy' tvt plot
+- Changed `glider.binary_to_nc` to make the gridded data files using `glider.make_gridfiles_depth_measured` if the argument 'sci_timeseries_pyglider' is True
+- Changed `glider` so that science post-processing happens consistently in `glider.binary_to_nc`, rather than `glider.timeseries_raw_to_sci`
+- Changed `binary_to_raw_timeseries` to only keep distance_over_ground values where latitude and longitude are not nan, to be consistent with depth_ctd
+- Changed the name of the function `glider.raw_to_sci_timeseries` to `glider.raw_to_sci_timeseries`, to be more consistent with `esdglider` and `pyglider`
+- Added a 'generate fleet status' python script, for updating the various tabs on the Fleet Status Google sheet with summaries from the database. 
 
 - Updating config website yaml
 

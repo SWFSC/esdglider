@@ -41,14 +41,14 @@ bin_size: list
 depth_max: float
     The maximum value to use when making depth bins
 """
-gridded_exclude_vars = [
-    "distance_over_ground",
-    "heading",
-    "pitch",
-    "roll",
-    "waypoint_latitude",
-    "waypoint_longitude",
-]
+# gridded_exclude_vars = [
+#     "distance_over_ground",
+#     "heading",
+#     "pitch",
+#     "roll",
+#     "waypoint_latitude",
+#     "waypoint_longitude",
+# ]
 bin_size = [1, 5]
 depth_max = 1200.1
 
@@ -258,6 +258,7 @@ def binary_to_nc(
     write_timeseries: bool = True,
     sci_timeseries_pyglider: bool = True,
     write_gridded: bool = True,
+    # gridded_depth_measured: bool = False, 
     file_info: str | None = None,
     **kwargs,
 ):
@@ -297,10 +298,14 @@ def binary_to_nc(
         using the science timeseries as the input.
         Both 1m and 5m gridded datasets are created.
         Note: if True then any existing files will be clobbered
-    sci_timeseries_pyglider : bool, default False
+    sci_timeseries_pyglider : bool, default True
         Should the function use pyglider.slocum.binary_to_timeseries to create
         create the science timeseries (True),
-        or glider.timeseries_raw_to_sci (False)
+        or glider.raw_to_sci_timeseries (False)
+    gridded_depth_measured : bool, default False
+        Should the function pass the science timeseries directly to 
+        pyglider.ncprocess.make_gridfiles (False), 
+        or instead use glider.make_gridfiles_depth_measured (True)
     file_path: str | None, default None
         The path of the parent processing script.
         If provided, will be included in the history attribute
@@ -447,26 +452,27 @@ def binary_to_nc(
                 profile_filt_time=None,  # type: ignore
                 maxgap=maxgap_esd,
             )
-
-            _log.info(f"Post-processing science timeseries: {outname_tssci}")
             postproc_info["drop_vars"] = ["pressure"]
-            tssci = xr.load_dataset(outname_tssci)
-            tssci = postproc_sci_timeseries(tssci, postproc_info, **kwargs)
-            utils.to_netcdf_esd(tssci, outname_tssci)
 
         else:
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
-            outname_tssci = timeseries_raw_to_sci(
+            outname_tssci = raw_to_sci_timeseries(
                 outname_tsraw,
                 tsdir,
                 deploymentyaml,
                 fnamesuffix=f"-{mode}-sci",
                 maxgap=maxgap_esd,
-                pp=postproc_info,
-                **kwargs,
             )
             # raw_to_sci_timeseries calls postproc_sci_timeseries internally
             tssci = xr.load_dataset(outname_tssci)
+
+        _log.info(f"Post-processing science timeseries: {outname_tssci}")
+        tssci = xr.load_dataset(outname_tssci)
+        tssci = postproc_sci_timeseries(tssci, postproc_info, **kwargs)
+        utils.to_netcdf_esd(tssci, outname_tssci)   
+        # # Perform ESD-specific post-processing
+        # _log.info("Post-processing science timeseries")
+        # ds = postproc_sci_timeseries(ds, pp, **kwargs)
 
         _log.info("final eng/sci timeseries checks")
         # Brief profile sanity check - check_profiles done in postproc-general
@@ -495,12 +501,17 @@ def binary_to_nc(
     # --------------------------------------------
     # Gridded data, 1m and 5m
     if write_gridded:
-        grid_esd(outname_tssci, paths=paths)
-
-        # utils.remove_file(outname_gr1m)
-        # utils.remove_file(outname_gr5m)
-        # if not os.path.isfile(outname_tssci):
-        #     raise FileNotFoundError(f"Could not find {outname_tssci}")
+        utils.remove_file(outname_gr1m)
+        utils.remove_file(outname_gr5m)
+        if not os.path.isfile(outname_tssci):
+            raise FileNotFoundError(f"Could not find {outname_tssci}")
+        
+        if sci_timeseries_pyglider:
+            _log.info("Gridding science data using CTD-calculated depth")
+            outnames = grid_esd(outname_tssci, paths=paths)
+        else:
+            outnames = make_gridfiles_depth_measured(paths)
+        _log.debug("gridded outnames %s", "; ".join(outnames))
 
         # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
 
@@ -849,6 +860,8 @@ def drop_ts_ranges(
         If not None and dstype is eng or sci, will join profiles
     outname : str | None (default None)
         If not None, then ds is written to this path using utils.to_netcdf_esd
+    kwargs
+        Passed to profile functions
 
     Returns
     -------
@@ -1111,12 +1124,12 @@ def binary_to_raw_timeseries(
     **kwargs,
 ):
     """
-    Extract raw, unprocessed glider data using dbdreader.
-    Adaptation of pyglider.slocum.binary_to_timeseries
+    An adaptation of pyglider.slocum.binary_to_timeseries to 
+    extract raw, unprocessed glider data using dbdreader.
     dbdreader only deals with flight and science computers,
     hence only classifying variables as 'eng' or 'sci'
 
-    the dbdreader MultiDBD.get() method is used,
+    The dbdreader MultiDBD.get() method is used,
     rather than get_sync, to read the parameters specified in
     deploymentyaml. The argument return_nans (of MultiDBD.get()) is set to
     True, so that there are two 'time bases' for the extracted data: one
@@ -1125,10 +1138,23 @@ def binary_to_raw_timeseries(
     and these values are the time index of the output file.
 
     No values are interpolated.
-    Times less than the yaml fil's 'deployment_min_dt' are still dropped.
+    Times before than the yaml file's 'deployment_min_dt' are still dropped.
 
-    pp is the ESD post-process dictionary
-    kwargs is passed to utils.findProfiles
+    Parameters
+    ----------
+    Majority of params are the same as pyglider.slocum.binary_to_timeseries
+    include_source : bool
+        Boolean indicating if the source file should be included in the raw ds.
+        Passed to dbdreader.MULTIDBD.get
+    pp : dict 
+        ESD post-processing dictionary (used by `postproc_attrs`)
+    kwargs 
+        arguments passed to utils.findProfiles
+
+    Returns
+    -------
+    outname : string
+        name of the newly written netcdf file
     """
 
     if not have_dbdreader:
@@ -1283,8 +1309,10 @@ def binary_to_raw_timeseries(
     # screen out-of-range times; these won't convert:
     ds["time"] = ds.time.where((ds.time > 0) & (ds.time < 6.4e9), np.nan)
     ds["time"] = (ds.time * 1e9).astype("datetime64[ns]")
-    min_dt_str = deployment["metadata"]["deployment_min_dt"]
-    ds = utils.drop_bogus_times(ds, min_dt=min_dt_str, max_drop=True)
+    if "deployment_min_dt" in deployment["metadata"].keys():
+        min_dt_str = deployment["metadata"]["deployment_min_dt"]
+        ds = utils.drop_bogus_times(ds, min_dt=min_dt_str, max_drop=True)
+    
     # ds = ds.where(ds.time >= np.datetime64(min_dt_str), drop=True)
     ds["time"].attrs = attr
 
@@ -1293,16 +1321,20 @@ def binary_to_raw_timeseries(
     _log.info("The raw timeseries has %s data points", ds.time.shape[0])
 
     # Depth calculation #, and name management
-    ds = pgutils.get_glider_depth(ds).rename({"depth": "depth_ctd"})
     # ds = ds.rename({"depth_measured": "depth"})
+
+    # Calculate depth_ctd, profiles and distance_over_ground
+    ds = pgutils.get_glider_depth(ds).rename({"depth": "depth_ctd"})
+    ds = utils.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
+    ds = pgutils.get_distance_over_ground(ds)
 
     # Only keep depth_ctd values where pressure is not nan
     # TODO: is this using mean lat for everything??
     ds["depth_ctd"] = ds["depth_ctd"].where(~np.isnan(ds["pressure"]))
 
-    # Calculate profiles and distance_over_ground
-    ds = utils.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
-    ds = pgutils.get_distance_over_ground(ds)
+    # Only keep distance_over_ground values where lat/lon is not nan
+    ll_good = ~np.isnan(ds.latitude.values + ds.longitude.values)
+    ds["distance_over_ground"] = ds["distance_over_ground"].where(ll_good)
 
     new_start = [
         "latitude",
@@ -1317,6 +1349,7 @@ def binary_to_raw_timeseries(
     # Add metadata - using postproc_attrs for consistency
     pp["metadata_dict"] = deployment["metadata"]
     pp["device_dict"] = deployment["glider_devices"]
+    # postproc_attrs calls pgutils.fill_metadata
     ds = postproc_attrs(ds, pp)
 
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
@@ -1326,19 +1359,17 @@ def binary_to_raw_timeseries(
     return outname
 
 
-def timeseries_raw_to_sci(
+def raw_to_sci_timeseries(
     inname,
     outdir,
     deploymentyaml,
     *,
     fnamesuffix="",
     maxgap=300,
-    pp: dict,
-    **kwargs,
 ):
     """
-    Go from raw timeseries (from esdglider.glider.binary_to_raw)
-    to processed science timeseries.
+    Go from raw timeseries (from esdglider.glider.binary_to_raw_timeseries)
+    to a processed science timeseries.
     This function can be used in cases where different science sensors are
     on at different times, e.g. PAM deployments, and thus it is not possible
     to get the full science timeseries using dbdreader.get_sync.
@@ -1348,10 +1379,12 @@ def timeseries_raw_to_sci(
 
     Parameters
     ----------
-
+    All params are the same as pyglider.slocum.binary_to_timeseries
 
     Returns
     -------
+    outname : string
+        name of the newly written netcdf file
     """
 
     ds = xr.open_dataset(inname, decode_times=True)
@@ -1403,42 +1436,19 @@ def timeseries_raw_to_sci(
         ds[i].attrs["method"] = "linear fill"
         # The var already has the yaml-specified attributes from binary_to_raw
 
+    # For consistency with pyglider, even though postproc_sci is run later
+    device_data = deployment['glider_devices']
+    ds = pgutils.fill_metadata(ds, deployment['metadata'], device_data)
+
     # Drop rows where all science vars are nan
     _log.info(
         "Dropping datapoints that have nan values for all of these vars: %s",
         ", ".join([str(i) for i in vars_sci]),
     )
-    # vars_ignore = list(set(vars_tokeep).difference(vars_sci))
-    # vars_ignore = list(set(vars_tokeep).intersection([
-    #     "depth", "profile_index", "profile_direction", "latitude", "longitude",
-    #     "heading", "pitch", "roll",
-    #     "water_velocity_eastward", "water_velocity_northward",
-    # ]))
-    # vars_sci = list(set(vars_tokeep).difference(set(vars_ignore)))
     ds = ds.dropna(dim="time", how="all", subset=vars_sci)
-
-    # Not necessary with subset arg
-    # ds = xr.combine_by_coords(
-    #     [ds[vars_ignore], ds_sci], join="inner", combine_attrs ="identical",
-    # )
-    # ds = utils.data_var_reorder(ds, vars_tokeep)
 
     if ("temperature" in ds) and ("conductivity" in ds) and ("pressure" in ds):
         ds = pgutils.get_derived_eos_raw(ds)
-
-    # Perform ESD-specific post-processing
-    _log.info("Post-processing science timeseries")
-    ds = postproc_sci_timeseries(ds, pp, **kwargs)
-
-    # if dstype == "eng":
-    #     _log.info(f"Post-processing engineering timeseries")
-    #     ds = postproc_eng_timeseries(ds, pp, **kwargs)
-    # elif dstype == "sci":
-    #     _log.info(f"Post-processing science timeseries")
-    #     ds = postproc_sci_timeseries(ds, pp, **kwargs)
-    # else:
-    #     _log.error("dstype %s", dstype)
-    #     raise ValueError("dstype must be either 'sci' or 'eng'")
 
     # Write out to file
     outname = f"{outdir}/{ds.attrs['deployment_name'] + fnamesuffix}.nc"
@@ -1482,6 +1492,10 @@ def decompress_dir(binarydir):
 
 def grid_esd(inname, paths):
     """
+    A consistent way of creating gridded datafiles for ESD. 
+    Note that this function uses the glider module-level variables: 
+    bin_size, depth_max, and gridded_exclude_vars. 
+
     Parameters
     ----------
     inname : str or Path
@@ -1500,6 +1514,8 @@ def grid_esd(inname, paths):
     """
 
     outnames = []
+    # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
+
     for i in bin_size:
         _log.info("Generating %sm gridded data", i)
         outname_gr = pgncprocess.make_gridfiles(
@@ -1508,7 +1524,7 @@ def grid_esd(inname, paths):
             paths["deploymentyaml"],
             depth_bins=np.arange(0, depth_max, i),
             fnamesuffix=f"-{paths['mode']}-{i}m",
-            exclude_vars=gridded_exclude_vars,
+            # exclude_vars=gridded_exclude_vars,
         )
         outnames.append(outname_gr)
 
@@ -1521,8 +1537,8 @@ def make_gridfiles_depth_measured(paths):
     if for instance the CTD was turned off during parts of a deployment, and
     thus the depth calculated from the CTD does not span the full timeseries.
 
-    A temporary nc file is written, to pass to
-    pyglider.ncprocess.make_gridfiles. The science dataset is not altered.
+    A temporary nc file is written, to pass to glider.grid_esd (and thus to 
+    pyglider.ncprocess.make_gridfiles). The science dataset is not altered.
 
     Parameters
     ----------
@@ -1536,24 +1552,26 @@ def make_gridfiles_depth_measured(paths):
     The output of grid_esd
     """
 
-    _log.info("Generating gridded files using measured_depth")
+    _log.info("Gridding science data using glider measured depth (m_depth)")
     outname_tssci = paths["tsscipath"]
-    outname_gr1m = paths["gr1path"]
-    outname_gr5m = paths["gr5path"]
 
-    utils.remove_file(outname_gr1m)
-    utils.remove_file(outname_gr5m)
+    # Leave these checks, in case this function is called directly
+    utils.remove_file(paths["gr1path"])
+    utils.remove_file(paths["gr5path"])
     if not os.path.isfile(outname_tssci):
         raise FileNotFoundError(f"Could not find {outname_tssci}")
 
-    _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
+    # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
 
     with tempfile.TemporaryDirectory() as temp_dir:
         # Creating temporary science dataset with measured depth as depth
         temp_file = os.path.join(temp_dir, os.path.basename(outname_tssci))
         _log.debug("temp_file %s", temp_file)
         ds_sci_tmp = xr.load_dataset(outname_tssci)
-        ds_sci_tmp = ds_sci_tmp.drop_vars(["depth"]).rename({"depth_measured": "depth"})
+        ds_sci_tmp = (
+            ds_sci_tmp.drop_vars(["depth"])
+            .rename({"depth_measured": "depth"})
+        )
 
         # Add a comment that the bins were created useing depth_measured
         tmp_comment = (
