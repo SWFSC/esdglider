@@ -5,6 +5,10 @@ All notable changes to the esdglider package will be documented in this file. Se
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+
+
 ## [0.4.0] - 2026-04-17
 
 - `esdglider` currently relies on the [smwoodman pyglider fork](https://github.com/smwoodman/pyglider). A PR is currently open [here](https://github.com/c-proof/pyglider/pull/227)
