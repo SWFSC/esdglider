@@ -1,7 +1,7 @@
 import logging
 import os
 import tempfile
-from importlib import metadata, resources
+from importlib import metadata
 
 import netCDF4
 import numpy as np
@@ -53,206 +53,11 @@ bin_size = [1, 5]
 depth_max = 1200.1
 
 
-def get_path_yaml(yaml_type: str) -> str:
-    """
-    Get the path to the specified yaml (raw or eng).
-    The yamls are included as part of the package data,
-    and contain the relevant NetCDF variables to extract from the binary files
-
-    Parameters
-    ----------
-    yaml_type : str
-        A string that defines the type of yaml to get.
-        Must be either 'raw' or 'eng'
-
-    Returns
-    -------
-    str
-        the path of the yaml
-    """
-    if yaml_type not in ["raw", "eng"]:
-        _log.error("yaml_type %s", yaml_type)
-        raise ValueError("yaml_type must be either 'raw' or 'eng'")
-
-    ref = resources.files("esdglider.data") / f"deployment-{yaml_type}-vars.yml"
-    with resources.as_file(ref) as path:
-        return str(path)
-
-
-def get_path_glider_deployment(
-    deployment_path: str,
-    deployment_name: str,
-    mode: str,
-) -> dict:
-    """
-    Get deployment-specific paths. Specifically, get all paths that are within
-    the deployment folder (deployment_path)
-
-    This function is typically called by get_path_glider()
-
-    Parameters
-    ----------
-    deployment_path : str
-        Path to the specific glider deployment
-    deployment_name : str
-        The glider deployment name
-    mode : str
-        Mode of the glider data being processed.
-        Must be either 'rt', for real-time, or 'delayed
-    deployments_path : str
-        The path to the top-level folder of the glider data.
-        This is intended to be the path to the mounted glider deployments bucket
-
-    Returns
-    -------
-        A dictionary with the relevant paths
-    """
-    binarydir = os.path.join(deployment_path, "data", "binary", mode)
-    rawyaml = get_path_yaml("raw")
-    engyaml = get_path_yaml("eng")
-
-    procl1dir = os.path.join(deployment_path, "data", "processed-L1")
-    procl2dir = os.path.join(deployment_path, "data", "processed-L2")
-    plotdir = os.path.join(deployment_path, "plots", mode)
-
-    # Separate, in case in the future they end up in their own directories
-    rawdir = procl1dir
-    tsdir = procl1dir
-    griddir = procl1dir
-    profdir = os.path.join(procl1dir, "ngdac", mode)
-
-    # Create common file names
-    path_raw = os.path.join(tsdir, f"{deployment_name}-{mode}-raw.nc")
-    path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
-    path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
-    path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
-    path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
-    path_prof_summ = os.path.join(tsdir, f"{deployment_name}-{mode}-profiles.csv")
-
-    return {
-        "binarydir": binarydir,
-        "rawyaml": rawyaml,
-        "engyaml": engyaml,
-        "rawdir": rawdir,
-        "tsdir": tsdir,
-        "griddir": griddir,
-        "profdir": profdir,
-        "plotdir": plotdir,
-        "procl1dir": procl1dir,
-        "procl2dir": procl2dir,
-        "tsrawpath": path_raw,
-        "tsscipath": path_sci,
-        "tsengpath": path_eng,
-        "gr1path": path_gr1,
-        "gr5path": path_gr5,
-        "profsummpath": path_prof_summ,
-    }
-
-
-def get_path_glider(
-    deployment_info: dict,
-    deployments_path: str,
-) -> dict:
-    """
-    Return a dictionary of paths for use by other esdglider functions.
-    These paths follow the directory structure outlined here:
-    https://swfsc.github.io/glider-lab-manual/content/data-management.html
-
-    Parameters
-    ----------
-    deployment_info : dict
-        A dictionary with the relevant deployment info. A dictionary is
-        used to make it easier if arguments are added or removed.
-        This dictionary must contain at least:
-        deploymentyaml : str
-            The filepath of the glider deployment yaml.
-            This file will have relevant info,
-            including deployment name (eg, amlr01-20210101) and project
-        mode : str
-            Mode of the glider data being processed.
-            Must be either 'rt', for real-time, or 'delayed
-    deployments_path : str
-        The path to the top-level folder of the glider data.
-        This is intended to be the path to the mounted glider deployments bucket
-
-    Returns
-    -------
-        A dictionary with the relevant paths
-    """
-
-    # Extract or calculate relevant info
-    deploymentyaml = deployment_info["deploymentyaml"]
-    mode = deployment_info["mode"]
-    deployment = utils.read_deploymentyaml(deploymentyaml)
-
-    deployment_name = deployment["metadata"]["deployment_name"]
-    project = deployment["metadata"]["project"]
-    year = utils.year_path(project, deployment_name)
-
-    # Check that relevant deployment path exists
-    glider_path = os.path.join(deployments_path, project, year, deployment_name)
-    if not os.path.isdir(glider_path):
-        raise FileNotFoundError(f"{glider_path} does not exist")
-
-    deployment_paths_out = get_path_glider_deployment(
-        glider_path,
-        deployment_name,
-        mode,
-    )
-
-    cacdir = os.path.join(deployments_path, "cache")
-    # binarydir = os.path.join(glider_path, "data", "binary", mode)
-    rawyaml = get_path_yaml("raw")
-    engyaml = get_path_yaml("eng")
-    logdir = os.path.join(deployments_path, "logs")
-
-    # procl1dir = os.path.join(glider_path, "data", "processed-L1")
-    # procl2dir = os.path.join(glider_path, "data", "processed-L2")
-    # plotdir = os.path.join(glider_path, "plots", mode)
-
-    # # Separate, in case in the future they end up in their own directories
-    # rawdir = procl1dir
-    # tsdir = procl1dir
-    # griddir = procl1dir
-    # profdir = os.path.join(procl1dir, "ngdac", mode)
-
-    # # Create common file names
-    # path_raw = os.path.join(tsdir, f"{deployment_name}-{mode}-raw.nc")
-    # path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
-    # path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
-    # path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
-    # path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
-    # path_prof_summ = os.path.join(tsdir, f"{deployment_name}-{mode}-profiles.csv")
-
-    out = {
-        "deploymentyaml": deploymentyaml,
-        "mode": mode,
-        "rawyaml": rawyaml,
-        "engyaml": engyaml,
-        "cacdir": cacdir,
-        "logdir": logdir,
-        # "binarydir": binarydir,
-        # "rawdir": rawdir,
-        # "tsdir": tsdir,
-        # "griddir": griddir,
-        # "profdir": profdir,
-        # "plotdir": plotdir,
-        # "procl1dir": procl1dir,
-        # "procl2dir": procl2dir,
-        # "tsrawpath": path_raw,
-        # "tsscipath": path_sci,
-        # "tsengpath": path_eng,
-        # "gr1path": path_gr1,
-        # "gr5path": path_gr5,
-        # "profsummpath": path_prof_summ,
-    }
-
-    return out | deployment_paths_out
-
-
 def binary_to_nc(
-    deployment_info: dict,
-    paths: dict,
+    # deployment_info: dict,
+    deployment_name: str, 
+    mode: str, 
+    glider_paths: dict,
     *,
     write_raw: bool = True,
     write_timeseries: bool = True,
@@ -280,10 +85,12 @@ def binary_to_nc(
             The filepath of the glider deployment yaml.
             This file will have relevant info,
             including deployment name (eg, amlr01-20210101) and project
-        mode : str
-            Mode of the glider data being processed.
-            Must be either 'rt', for real-time, or 'delayed
-    paths : dict
+    mode : str
+        Mode of the glider data being processed.
+        Must be either 'rt', for real-time, or 'delayed. 
+        This is a separate argument, so that the yaml file can be used
+        for processing both rt and delayed data from the same deployment
+    glider_paths : dict
         A dictionary of file/directory paths for various processing steps.
         Intended to be the output of get_path_glider()
         See this function for the expected key/value pairs
@@ -319,24 +126,24 @@ def binary_to_nc(
     and the 1m and 5m gridded files
     """
 
-    deploymentyaml = deployment_info["deploymentyaml"]
-    mode = deployment_info["mode"]
+    # deploymentyaml = deployment_info["deploymentyaml"]
+    # mode = deployment_info["mode"]
 
     # --------------------------------------------
     # Check files, and get vars + directory paths
-    if paths["deploymentyaml"] != deploymentyaml:
-        raise ValueError(
-            "Provided yaml path (%s) is not the same as the paths yaml path (%s)",
-            deploymentyaml,
-            paths["deploymentyaml"],
-        )
+    # if glider_paths["deploymentyaml"] != deploymentyaml:
+    #     raise ValueError(
+    #         "Provided yaml path (%s) is not the same as the paths yaml path (%s)",
+    #         deploymentyaml,
+    #         glider_paths["deploymentyaml"],
+    #     )
 
-    deployment = utils.read_deploymentyaml(deploymentyaml)
-    deployment_name = deployment["metadata"]["deployment_name"]
+    # deployment = utils.read_deploymentyaml(deploymentyaml)
+    # deployment_name = deployment["metadata"]["deployment_name"]
 
-    deploymentyaml = paths["deploymentyaml"]
-    rawdir = paths["rawdir"]
-    tsdir = paths["tsdir"]
+    deploymentyaml = glider_paths["deploymentyaml"]
+    rawdir = glider_paths["rawdir"]
+    tsdir = glider_paths["tsdir"]
     # griddir = paths["griddir"]
 
     # Check mode, set binary_search regex
@@ -351,27 +158,29 @@ def binary_to_nc(
     maxgap_esd = 60
 
     # Dictionary with info needed by post-processing functions
-    postproc_info = deployment_info | {
+    postproc_info = {
+        "deploymentyaml": deploymentyaml, 
+        "mode": mode, 
         "file_info": file_info,
         "metadata_dict": {"deployment_name": deployment_name},
         "device_dict": {},
-        "profile_summary_path": paths["profsummpath"],
+        "profile_summary_path": glider_paths["profsummpath"],
         "maxgap": maxgap_esd,
     }
 
     # --------------------------------------------
     # Raw
-    outname_tsraw = paths["tsrawpath"]
+    outname_tsraw = glider_paths["tsrawpath"]
     if write_raw:
         utils.remove_file(outname_tsraw)
         utils.makedirs_pass(rawdir)
 
         _log.info("Generating raw nc")
         outname_tsraw = binary_to_raw_timeseries(
-            paths["binarydir"],
-            paths["cacdir"],
+            glider_paths["binarydir"],
+            glider_paths["cacdir"],
             rawdir,
-            [deploymentyaml, paths["engyaml"], paths["rawyaml"]],
+            [deploymentyaml, glider_paths["engyaml"], glider_paths["rawyaml"]],
             search=binary_search,
             include_source=True,
             fnamesuffix=f"-{mode}-raw",
@@ -399,17 +208,26 @@ def binary_to_nc(
 
     else:
         _log.info("Not writing raw nc")
-        with xr.open_dataset(outname_tsraw) as tsraw:
-            # tsraw = xr.load_dataset(outname_tsraw)
-            postproc_info["deployment_start"] = tsraw.attrs["deployment_start"]
-            postproc_info["deployment_end"] = tsraw.attrs["deployment_end"]
+        try:
+            with xr.open_dataset(outname_tsraw) as tsraw:
+                # tsraw = xr.load_dataset(outname_tsraw)
+                postproc_info["deployment_start"] = tsraw.attrs["deployment_start"]
+                postproc_info["deployment_end"] = tsraw.attrs["deployment_end"]
+        except FileNotFoundError:
+            _log.debug("Not writing raw nc file, and file could not be found")
+            if write_timeseries:
+                _log.warning(
+                    f"The raw nc file ({outname_tsraw}) does not exist, "
+                    + "and thus postproc_info cannot be updated. "
+                    + "The timeseries file may have incorrect metadata")
 
     # --------------------------------------------
     # Timeseries
-    outname_tseng = paths["tsengpath"]
-    outname_tssci = paths["tsscipath"]
-    outname_gr1m = paths["gr1path"]
-    outname_gr5m = paths["gr5path"]
+    outname_tseng = glider_paths["tsengpath"]
+    outname_tssci = glider_paths["tsscipath"]
+    outname_gr1m = glider_paths["gr1path"]
+    outname_gr5m = glider_paths["gr5path"]
+
     if write_timeseries:
         # Delete previous files before starting run. Can't delete whole directory
         # Since gridded depend on ts, also delete gridded
@@ -422,10 +240,10 @@ def binary_to_nc(
         # Engineering - uses m_depth as time base
         _log.info("Generating engineering timeseries")
         outname_tseng = pgslocum.binary_to_timeseries(
-            paths["binarydir"],
-            paths["cacdir"],
+            glider_paths["binarydir"],
+            glider_paths["cacdir"],
             tsdir,
-            [deploymentyaml, paths["engyaml"]],
+            [deploymentyaml, glider_paths["engyaml"]],
             search=binary_search,
             fnamesuffix=f"-{mode}-eng",
             time_base="m_depth",
@@ -442,8 +260,8 @@ def binary_to_nc(
             # Science - uses sci_water_pressure as time_base sensor
             _log.info("Generating science timeseries")
             outname_tssci = pgslocum.binary_to_timeseries(
-                paths["binarydir"],
-                paths["cacdir"],
+                glider_paths["binarydir"],
+                glider_paths["cacdir"],
                 tsdir,
                 deploymentyaml,
                 search=binary_search,
@@ -508,9 +326,9 @@ def binary_to_nc(
         
         if sci_timeseries_pyglider:
             _log.info("Gridding science data using CTD-calculated depth")
-            outnames = grid_esd(outname_tssci, paths=paths)
+            outnames = grid_esd(outname_tssci, glider_paths=glider_paths)
         else:
-            outnames = make_gridfiles_depth_measured(paths)
+            outnames = make_gridfiles_depth_measured(glider_paths)
         _log.debug("gridded outnames %s", "; ".join(outnames))
 
         # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
@@ -1490,7 +1308,7 @@ def decompress_dir(binarydir):
     _log.info("There are now %s files in %s", len(binarydir_files), binarydir)
 
 
-def grid_esd(inname, paths):
+def grid_esd(inname, glider_paths):
     """
     A consistent way of creating gridded datafiles for ESD. 
     Note that this function uses the glider module-level variables: 
@@ -1501,7 +1319,7 @@ def grid_esd(inname, paths):
     inname : str or Path
         netcdf file to break into profiles.
         Passed directly to inname argument of pyglider.ncprocess.make_gridfiles
-    paths : dict
+    glider_paths : dict
         A dictionary of file/directory paths for various processing steps.
         Intended to be the output of get_path_glider()
         See this function for the expected key/value pairs
@@ -1520,10 +1338,10 @@ def grid_esd(inname, paths):
         _log.info("Generating %sm gridded data", i)
         outname_gr = pgncprocess.make_gridfiles(
             inname,
-            paths["griddir"],
-            paths["deploymentyaml"],
+            glider_paths["griddir"],
+            glider_paths["deploymentyaml"],
             depth_bins=np.arange(0, depth_max, i),
-            fnamesuffix=f"-{paths['mode']}-{i}m",
+            fnamesuffix=f"-{glider_paths['mode']}-{i}m",
             # exclude_vars=gridded_exclude_vars,
         )
         outnames.append(outname_gr)
@@ -1531,7 +1349,7 @@ def grid_esd(inname, paths):
     return outnames
 
 
-def make_gridfiles_depth_measured(paths):
+def make_gridfiles_depth_measured(glider_paths):
     """
     Make gridfiles using the measured depth. This function will be used
     if for instance the CTD was turned off during parts of a deployment, and
@@ -1542,7 +1360,7 @@ def make_gridfiles_depth_measured(paths):
 
     Parameters
     ----------
-    paths : dict
+    glider_paths : dict
         A dictionary of file/directory paths for various processing steps.
         Intended to be the output of get_path_glider()
         See this function for the expected key/value pairs
@@ -1553,11 +1371,11 @@ def make_gridfiles_depth_measured(paths):
     """
 
     _log.info("Gridding science data using glider measured depth (m_depth)")
-    outname_tssci = paths["tsscipath"]
+    outname_tssci = glider_paths["tsscipath"]
 
     # Leave these checks, in case this function is called directly
-    utils.remove_file(paths["gr1path"])
-    utils.remove_file(paths["gr5path"])
+    utils.remove_file(glider_paths["gr1path"])
+    utils.remove_file(glider_paths["gr5path"])
     if not os.path.isfile(outname_tssci):
         raise FileNotFoundError(f"Could not find {outname_tssci}")
 
@@ -1583,5 +1401,5 @@ def make_gridfiles_depth_measured(paths):
             ds_sci_tmp.attrs["comment"] += ". " + tmp_comment
         utils.to_netcdf_esd(ds_sci_tmp, temp_file)
 
-        outnames = grid_esd(temp_file, paths=paths)
+        outnames = grid_esd(temp_file, glider_paths=glider_paths)
     return outnames

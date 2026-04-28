@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-
+- Changed the name of the module `glider` to `slocum`
+- Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD directory structure
+- Changed assorted functions to take in the deployment name and mode directly, rather than a `deployment_info` dictionary
 
 ## [0.4.0] - 2026-04-17
 
@@ -28,7 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed `binary_to_raw_timeseries` to only keep distance_over_ground values where latitude and longitude are not nan, to be consistent with depth_ctd
 - Changed the name of the function `glider.raw_to_sci_timeseries` to `glider.raw_to_sci_timeseries`, to be more consistent with `esdglider` and `pyglider`
 - Added a 'generate fleet status' python script, for updating the various tabs on the Fleet Status Google sheet with summaries from the database. 
-
 - Updating config website yaml
 
 

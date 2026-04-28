@@ -10,7 +10,7 @@ from google.cloud import storage
 
 # from esdglider.acoustics import get_path_acoustics_deployment
 from esdglider.gcp import check_gcs_file_exists, check_gcs_directory_exists
-from esdglider.glider import get_path_glider_deployment
+from esdglider.paths import get_path_glider_deployment
 from esdglider.imagery import get_path_imagery_deployment
 from esdglider.utils import split_deployment, year_path, dataframe_col_reorder
 

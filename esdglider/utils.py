@@ -19,6 +19,7 @@ _log = logging.getLogger(__name__)
 Utilities, mostly specific to ESD needs and ways of processing
 """
 
+# Logistical utilities ########################################################
 
 # For IOOS-compliant encoding when writing to NetCDF
 def to_netcdf_esd(ds: xr.Dataset, outname: str):
@@ -568,18 +569,14 @@ def split_deployment(deployment_name):
     return deployment_split
 
 
-def year_path(project, deployment_name):
+def year_path(deployment_name):
     """
     From the glider project and deployment name (both strings),
     generate and return the year string to use in file paths
     for ESD glider deployments
 
-    For the FREEBYRD project, this will be the year of the second
-    half of the Antarctic season. For instance, hypothetical
-    FREEBYRD deployments amlr01-20181231 and amlr01-20190101 are both
-    during season '2018-19', and thus would return '2019'.
-
-    For all other projects, the value returned is simply the year.
+    Given Prod directory structure changes, for all deployments now
+    the value returned is simply the year.
     For example, ringo-20181231 would return 2018,
     and ringo-20190101 would return 2019
     """
@@ -588,14 +585,23 @@ def year_path(project, deployment_name):
     deployment_date = deployment_split[1]
     year = deployment_date[0:4]
 
-    if project == "FREEBYRD":
-        month = deployment_date[4:6]
-        if int(month) <= 7:
-            year = f"{int(year)}"
-        else:
-            year = f"{int(year) + 1}"
+    # if project == "FREEBYRD":
+    #     month = deployment_date[4:6]
+    #     if int(month) <= 7:
+    #         year = f"{int(year)}"
+    #     else:
+    #         year = f"{int(year) + 1}"
 
     return year
+
+
+def _parse_deployment_info(delpoyment_info: dict):
+    """
+    """
+    deploymentyaml = deployment_info["deploymentyaml"]
+    mode = deployment_info["mode"]
+
+    return deploymentyaml, mode
 
 
 def mkdir_pass(dir):
@@ -1076,8 +1082,9 @@ def check_depth(x: xr.DataArray, y: xr.DataArray, depth_ok=5) -> xr.Dataset:
             y.rename("depth_ctd"),
             x_interp.rename("depth_measured_interp"),
             depth_diff.rename("depth_diff"),
-            depth_diff_abs.rename("depth_diff_abs"),
+            depth_diff_abs.rename("depth_diff_abs"),            
         ],
+        join="outer", 
     )
 
     return ds
@@ -1125,7 +1132,9 @@ def get_sunrise_sunset(time, lat, lon):
     The glidertools function calculates the local sunrise/sunset of the
     glider location using the Skyfield package.
     However, it does not account for the local time, and thus the
-    joined sunrise/sunset times are often not right for the given local day
+    joined sunrise/sunset times are often not right for the given local day.
+    Would like to submit this as a PR to GLiderTools, but have
+    not hasd the bandwidth.
 
     Currently, this function groups the timestamps by local day,
     and calculates the mean lat/lon. These are passed to the skyfield package
@@ -1209,7 +1218,7 @@ def get_sunrise_sunset(time, lat, lon):
     df["time_local"] = df["time"].dt.tz_convert(tz.item())
     df["day_local"] = (
         df["time_local"].dt.tz_localize(None).values.astype("datetime64[D]")
-    )
+    ) # type: ignore
 
     # Group by local day
     grp_avg = (

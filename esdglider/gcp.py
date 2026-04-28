@@ -89,8 +89,8 @@ def gcs_mount_bucket(bucket, mountpoint, ro=False):
         _log.info("The mountpoint is not empty, exiting")
         return 0
 
-    # # Unmount bucket, just in case
-    # gcs_unmount_bucket(mountpoint)
+    # Unmount bucket, just in case
+    gcs_unmount_bucket(mountpoint)
 
     # Mount bucket using gcsfuse
     cmd = ["gcsfuse", "--implicit-dirs", bucket, mountpoint]
@@ -99,6 +99,24 @@ def gcs_mount_bucket(bucket, mountpoint, ro=False):
     subprocess.run(cmd)
 
     return 0
+    # # Run command, capture output (stdout/stderr), and format as strings (text=True)
+    # result = subprocess.run(cmd, capture_output=True, text=True)
+    # print(result)
+
+    # # Log standard output if it exists
+    # if result.stdout:
+    #     _log.info(f"gcsfuse stdout:\n{result.stdout.strip()}")
+    #     _log.info(f"gcsfuse stderr:\n{result.stderr.strip()}")
+
+    # # Log standard error if it exists
+    # if result.stderr:
+    #     # CLI tools like gcsfuse often write operational logs to stderr even on success
+    #     if result.returncode == 0:
+    #         _log.info(f"gcsfuse stderr:\n{result.stderr.strip()}")
+    #     else:
+    #         _log.error(f"gcsfuse failed with code {result.returncode}:\n{result.stderr.strip()}")
+
+    # return result.returncode
 
 
 def check_gcs_file_exists(bucket, file_path):
