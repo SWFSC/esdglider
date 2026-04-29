@@ -8,7 +8,7 @@ import logging
 import os
 from esdglider import gcp, paths, utils # type: ignore
 
-deployment_name = "amlr07-20221204"
+deployment_name = "amlr08-20220513"
 
 home = Path.home()
 mnt_path = home / "gcs-mnt"
@@ -21,74 +21,9 @@ num_cores = os.cpu_count()  # Uses all available cores
 global_file = home / f"{deployment_name}-deployment-metadata.json"
 index_file = home / f"{deployment_name}-index-metadata.jsonl"
 
-# def extract_metadata(file):
-#     logging.info(f"{file.name}---------------------")
-#     try:
-#         # open the image
-#         image = Image.open(file)
-#         metadata = {
-#             "Filename": file.name,
-#             "Directory": file.parent.name, 
-#             # "Size": image.size,
-#             "Height": image.height,
-#             "Width": image.width,
-#             "Format": image.format,
-#             "Mode": image.mode,
-#         }
-#         logging.debug(f"image params: {metadata}")
-
-#         # extracting the exif metadata
-#         exifdata = image.getexif()
-#         logging.debug("Starting exifdata")
-
-#         # looping through all the tags present in exifdata
-#         for tagid in exifdata:        
-#             # Get the tag name
-#             tagname = TAGS.get(tagid, tagid)
-#             if tagname == "ExifOffset":
-#                 continue
-
-#             # Get the value, and format it
-#             value = exifdata.get(tagid)
-#             logging.debug(f"{tagname}: {value}")
-#             if isinstance(value, bytes):
-#                 value = value.decode(errors='ignore').strip('\x00')
-#             elif hasattr(value, 'numerator'):
-#                 value = float(value) # type: ignore
-
-#             metadata[str(tagname)] = value
-
-#     except Exception as e:
-#         metadata = {"file": file, "error": str(e)}
-    
-#     return metadata
-
-
-# def run_pipeline(image_dir, file_path):
-#     # Supports both cases and png extensions
-#     extensions = {'.jpg', '.jpeg', '.png'}
-    
-#     # Gather all files that match the extension set
-#     files = [
-#         p for p in image_dir.rglob('*') 
-#         if p.suffix.lower() in extensions
-#     ]
-    
-#     if not files:
-#         return
-
-#     # Process and write results
-#     file_path.touch(exist_ok=True)
-#     with file_path.open(mode="a", encoding="utf-8") as f:
-#         with ProcessPoolExecutor(max_workers=num_cores) as executor:
-#             # tqdm is kept as a progress bar; if you want 0 output, remove the tqdm wrapper
-#             for result in tqdm(executor.map(extract_metadata, files), total=len(files), disable=False):
-#                 f.write(json.dumps(result) + "\n")
-
 def get_global_metadata(file):
     """Extracts deployment-wide tags from a single sample image."""
-    logging.info(f"Extracting deployment-level metadata from {file}")
-
+    logging.info("Extracting deployment-level metadata from %s", file)
     try:
         with Image.open(file) as img:            
             global_metadata = {
@@ -146,10 +81,12 @@ def extract_image_record(image_path):
 def run_pipeline(files, manifest_file, index_file):
     # Generate Manifest (from first valid image)
     global_metadata = get_global_metadata(files[0])
+    logging.info("Writing deployment-level metadata to %s", manifest_file)
     with manifest_file.open("w") as f:
         json.dump(global_metadata, f, indent=4)
 
     # Generate Index via Multiprocessing
+    logging.info(f"Extracting file-level metadata, and writing to %s", index_file)
     with index_file.open("a", encoding="utf-8") as f:
         with ProcessPoolExecutor(max_workers=num_cores) as executor:
             for result in tqdm(executor.map(extract_image_record, files), total=len(files)):
@@ -197,7 +134,5 @@ if __name__ == "__main__":
         logging.info("Checking for any questionable paths via length check")
         utils.check_string_length([str(i.name) for i in files])
 
-        print("done")
-
-        # run_pipeline(files, global_file, index_file)
+        run_pipeline(files, global_file, index_file)
         
