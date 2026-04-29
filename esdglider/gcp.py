@@ -85,12 +85,14 @@ def gcs_mount_bucket(bucket, mountpoint, ro=False):
     # Make mountpoint, if necessary
     if not os.path.exists(mountpoint):
         os.makedirs(mountpoint)
-    elif os.listdir(mountpoint) != []:
-        _log.info("The mountpoint is not empty, exiting")
-        return 0
+    # elif os.listdir(mountpoint) != []:
+    #     _log.info("The mountpoint is not empty, will try to unmount")
 
     # Unmount bucket, just in case
     gcs_unmount_bucket(mountpoint)
+    if os.listdir(mountpoint) != []:
+        _log.info("The mountpoint not empty after unmounting, exiting") 
+        return 0
 
     # Mount bucket using gcsfuse
     cmd = ["gcsfuse", "--implicit-dirs", bucket, mountpoint]

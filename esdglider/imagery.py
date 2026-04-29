@@ -72,13 +72,13 @@ def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):
 
     deployment = ds.attrs["deployment_name"]
     imagedir = paths["imagedir"]
-    metadir = paths["metadir"]
-    _log.info(f"Creating imagery metadata file for {deployment}")
+    ancillarydir = paths["ancillarydir"]
+    _log.info(f"Creating imagery ancillary data file for {deployment}")
     _log.info(f"Using images directory {imagedir}")
 
-    csv_file = os.path.join(metadir, f"{deployment}-imagery-metadata.csv")
+    csv_file =  paths["imgcsv"]
     if os.path.isfile(csv_file):
-        _log.info(f"Deleting old imagery metadata file: {csv_file}")
+        _log.info(f"Deleting old imagery ancillary data file: {csv_file}")
         os.remove(csv_file)
 
     # --------------------------------------------
@@ -94,7 +94,7 @@ def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):
                 "Zero image files were found. Did you provide "
                 + "the right path, and use the right file extension?",
             )
-            raise ValueError("No files for which to generate metadata")
+            raise ValueError("No files for which to generate ancillary data")
         imagery_files = [os.path.basename(path) for path in filepaths]
         imagery_dirs = [os.path.basename(os.path.dirname(path)) for path in filepaths]
 
@@ -103,27 +103,29 @@ def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):
     _log.debug("Processing imagery file names")
 
     # Check that all filenames have the same number of characters
-    imagery_files_nchar = [len(i) for i in imagery_files]
-    if not len(set(imagery_files_nchar)) == 1:
-        _log.warning(
-            "The imagery file names are not all the same length, "
-            + "and thus shuld be checked carefully",
-        )
-        nchar_mode = statistics.mode(imagery_files_nchar)
-        diff_idx = [i for i, f in enumerate(imagery_files) if len(f) != nchar_mode]
-        diff_files = [f"{imagery_dirs[i]}/{imagery_files[i]}" for i in diff_idx]
-        _log.warning(
-            "The following filenames are of a different length: %s",
-            ", ".join(diff_files),
-        )
+    utils.check_string_length(imagery_files)
+    # imagery_files_nchar = [len(i) for i in imagery_files]
+    # if not len(set(imagery_files_nchar)) == 1:
+    #     _log.warning(
+    #         "The imagery file names are not all the same length, "
+    #         + "and thus shuld be checked carefully",
+    #     )
+    #     nchar_mode = statistics.mode(imagery_files_nchar)
+    #     diff_idx = [i for i, f in enumerate(imagery_files) if len(f) != nchar_mode]
+    #     diff_files = [f"{imagery_dirs[i]}/{imagery_files[i]}" for i in diff_idx]
+    #     _log.warning(
+    #         "The following filenames are of a different length: %s",
+    #         ", ".join(diff_files),
+    #     )
 
     if dt_idx_start is None:
-        _log.info("Calculating the datetime index as the index after the space")
+        _log.info("Calculating the datetime index, ...")
+        # i0_split = imagery_files[0].split("-")
         space_idx = str.index(imagery_files[0], " ")
         if space_idx == -1:
             _log.error(
                 "The imagery file name year index could not be found, "
-                + "and thus the imagery metadata file cannot be generated",
+                + "and thus the imagery ancillary data file cannot be generated",
             )
             raise ValueError("Incompatible file name spaces")
         dt_idx_start = space_idx + 1
@@ -144,7 +146,7 @@ def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):
     ).sort_values(by="img_file", ignore_index=True)
 
     # --------------------------------------------
-    # Create metadata file
+    # Create ancillary data file
     _log.info("Interpolating glider data to image timestamps")
     ds_prof = ds[["profile_index", "profile_direction"]]
 
@@ -242,9 +244,9 @@ def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):
     df["time_local"] = tl_full
 
     # --------------------------------------------
-    # Export metadata file
-    utils.mkdir_pass(metadir)
-    _log.info(f"Writing imagery metadata to: {csv_file}")
+    # Export ancillary data file
+    utils.mkdir_pass(ancillarydir)
+    _log.info(f"Writing imagery ancillary data to: {csv_file}")
     df.to_csv(csv_file, index=False)
 
     return df

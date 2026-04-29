@@ -9,6 +9,7 @@ import gsw
 import numpy as np
 import pandas as pd
 import pytz
+import statistics
 import xarray as xr
 import yaml
 
@@ -595,13 +596,13 @@ def year_path(deployment_name):
     return year
 
 
-def _parse_deployment_info(delpoyment_info: dict):
-    """
-    """
-    deploymentyaml = deployment_info["deploymentyaml"]
-    mode = deployment_info["mode"]
+# def _parse_deployment_info(delpoyment_info: dict):
+#     """
+#     """
+#     deploymentyaml = deployment_info["deploymentyaml"]
+#     mode = deployment_info["mode"]
 
-    return deploymentyaml, mode
+#     return deploymentyaml, mode
 
 
 def mkdir_pass(dir):
@@ -1088,6 +1089,57 @@ def check_depth(x: xr.DataArray, y: xr.DataArray, depth_ok=5) -> xr.Dataset:
     )
 
     return ds
+
+
+def check_string_length(x: list) -> list:
+    """
+    Check that all strings in the given list are the same length
+
+    Returns a list of the elements of 
+    """
+    diff_files = []
+    x_nchar = [len(i) for i in x]
+    x_set = set(x_nchar)
+    if not len(x_set) == 1:
+        # What are the different string lengths, and how often do they occur
+        _log.warning(
+            "The given strings are not all the same length, "
+            + "and thus shuld be checked carefully. "
+            + "String length | number of strings with that length:"
+        )
+        big_count = 0
+        x_counts = collections.Counter(x_nchar)
+        for item, count in x_counts.items():
+            if count > 20:
+                big_count+=1
+            _log.warning(f"{item:<5} | {count:<8}")
+
+        # Get strings with different lengths
+        nchar_mode = statistics.mode(x_nchar)
+        diff_idx = [i for i, f in enumerate(x) if len(f) != nchar_mode]
+        diff_files = [x[j] for j in diff_idx]
+            
+        # Outputs for the user
+        if big_count > 1:
+            _log.warning(
+                "There are too many string to print all. "
+                + "Printing the first 10 for each string length"
+            )
+            for j in x_set:
+                _log.warning("Some file names of string length %s:", j)
+                j_idx = [i for i, f in enumerate(x) if len(f) == j]
+                j_files = [x[j] for j in j_idx[:10]]
+                for f in j_files:
+                    logging.warning("string: %s", f)
+        else:
+            # Print all the file names with different lengths
+            _log.warning(
+                "The following strings are of a different length: %s",
+                ", ".join(diff_files),
+            )
+        
+    return diff_files
+    
 
 
 def get_utc_offset_integer(timezone_name, dt_object, is_dst=None):
