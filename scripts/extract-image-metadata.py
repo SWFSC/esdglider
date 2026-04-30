@@ -8,7 +8,7 @@ import logging
 import os
 from esdglider import gcp, paths, utils # type: ignore
 
-deployment_name = "amlr08-20220513"
+deployment_name = "amlr08-20260321"
 
 home = Path.home()
 mnt_path = home / "gcs-mnt"
@@ -19,7 +19,7 @@ imagery_in_path = mnt_path / imagery_in_bucket_name
 num_cores = os.cpu_count()  # Uses all available cores
 # INPUT_DIR = Path("./images")
 global_file = home / f"{deployment_name}-deployment-metadata.json"
-index_file = home / f"{deployment_name}-index-metadata.jsonl"
+index_file = home / f"{deployment_name}-image-metadata.jsonl"
 
 def get_global_metadata(file):
     """Extracts deployment-wide tags from a single sample image."""
@@ -86,7 +86,8 @@ def run_pipeline(files, manifest_file, index_file):
         json.dump(global_metadata, f, indent=4)
 
     # Generate Index via Multiprocessing
-    logging.info(f"Extracting file-level metadata, and writing to %s", index_file)
+    logging.info("Extracting file-level metadata, and writing to %s", index_file)
+    logging.info("Using %s cores", num_cores)
     with index_file.open("a", encoding="utf-8") as f:
         with ProcessPoolExecutor(max_workers=num_cores) as executor:
             for result in tqdm(executor.map(extract_image_record, files), total=len(files)):
