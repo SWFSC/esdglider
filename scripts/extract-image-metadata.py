@@ -122,6 +122,8 @@ if __name__ == "__main__":
     if not files:
         logging.error("No files")
     else:
+        logging.info("There are %s files", len(files))
+
         # Check method 1 - substring
         logging.info("Checking for any questionable paths via substring check")
         sub_check = 'checkpoint'

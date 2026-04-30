@@ -33,14 +33,15 @@ def get_path_yaml(yaml_type: str) -> str:
         return str(path)
 
 
-def get_path_glider_deployment(
+def get_path_glider_data_out(
     deployment_name: str,
     mode: str,
-    glider_data_in_path: str, 
     glider_data_out_path: str, 
 ) -> dict:
     """
-    Get (i.e., generate) deployment-specific paths.
+    Get (i.e., generate) the glider 'data out' paths.
+    TODO: does this need to stay separate?    
+    
     These paths follow the directory structure outlined here:
     https://swfsc.github.io/glider-lab-manual/content/data-management.html
 
@@ -48,10 +49,7 @@ def get_path_glider_deployment(
 
     Parameters
     ----------
-    deployment_name, mode: see get_path_glider
-    glider_data_in_path : str
-        The path to the glider-specifc 'data in' folder. 
-        E.g., "swfscesd-glider-deployments-data-in/2022/amlr08-20220513"    
+    deployment_name, mode: see get_path_glider   
     glider_data_out_path : str
         The path to the glider-specifc 'data out' folder. 
         E.g., "swfscesd-glider-deployments-data-out/2022/amlr08-20220513"
@@ -62,10 +60,6 @@ def get_path_glider_deployment(
     glider-specific directory and file paths:
         list TODO
     """
-
-    binarydir = os.path.join(glider_data_in_path, "binary", mode)
-    # rawyaml = get_path_yaml("raw")
-    # engyaml = get_path_yaml("eng")
 
     procl0dir = os.path.join(glider_data_out_path, "processed-L0")
     procl1dir = os.path.join(glider_data_out_path, "processed-L1")
@@ -90,9 +84,6 @@ def get_path_glider_deployment(
     path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
 
     return {
-        "binarydir": binarydir,
-        # "rawyaml": rawyaml,
-        # "engyaml": engyaml,
         "rawdir": rawdir,
         "tsdir": tsdir,
         "griddir": griddir,
@@ -120,7 +111,7 @@ def get_path_glider(
     data_out_path: str, 
 ) -> dict:
     """
-    Return a dictionary of paths for use by other esdglider functions.
+    Return a dictionary of paths needed to process glider data.
     These paths follow the directory structure outlined here:
     https://swfsc.github.io/glider-lab-manual/content/data-management.html
 
@@ -144,88 +135,83 @@ def get_path_glider(
     -------
         A dictionary with the relevant paths
     """
-
-    # Deployment yaml
-    if not os.path.isdir(config_path):
-        raise FileNotFoundError(f"{config_path} does not exist")
-    deploymentyaml = os.path.join(config_path, f"{deployment_name}.yml")
-
-
-    # Glider data in and data out paths
-    year = utils.year_path(deployment_name)
-    glider_data_in_path = os.path.join(data_in_path, year, deployment_name)
-    if not os.path.isdir(glider_data_in_path):
-        raise FileNotFoundError(f"{glider_data_in_path} does not exist")
-    
-    glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
-    # if not os.path.isdir(glider_data_out_path):
-    #     raise FileNotFoundError(f"{glider_data_out_path} does not exist")
-
-    deployment_paths_out = get_path_glider_deployment(
-        deployment_name,
-        mode,
-        glider_data_in_path, 
-        glider_data_out_path, 
-    )
-
-    # cache path
-    if not os.path.isdir(cac_path):
-        raise FileNotFoundError(f"{cac_path} does not exist")
     
     # Mode
     if mode not in ["delayed", "rt"]:
         raise ValueError("mode must be either 'rt' or 'delayed'")
 
-    # package yamls
-    rawyaml = get_path_yaml("raw")
-    engyaml = get_path_yaml("eng")
+    # Deployment yaml
+    if not os.path.isdir(config_path):
+        _log.warning(f"{config_path} does not exist")
+    deploymentyaml = os.path.join(config_path, f"{deployment_name}.yml")
+
+    # cache path
+    if not os.path.isdir(cac_path):
+        _log.warning(f"{cac_path} does not exist")
+
+    # Glider data in and data out paths
+    year = utils.year_path(deployment_name)
+    glider_data_in_path = os.path.join(data_in_path, year, deployment_name)
+    if not os.path.isdir(glider_data_in_path):
+        _log.warning(f"{glider_data_in_path} does not exist")
+    
+    glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
+    # if not os.path.isdir(glider_data_out_path):
+    #     raise FileNotFoundError(f"{glider_data_out_path} does not exist")
+
+    glider_paths_data_out = get_path_glider_data_out(
+        deployment_name = deployment_name,
+        mode = mode,
+        glider_data_out_path = glider_data_out_path, 
+    )
 
     out = {
         "deploymentyaml": deploymentyaml,
         "mode": mode,
         "cacdir": cac_path,
-        "rawyaml": rawyaml,
-        "engyaml": engyaml,
+        "rawyaml": get_path_yaml("raw"),
+        "engyaml": get_path_yaml("eng"),
+        "binarydir": os.path.join(glider_data_in_path, "binary", mode), 
     } 
 
-    return out | deployment_paths_out
+    return out | glider_paths_data_out
 
 
-def get_path_acoustics_deployment(
-    deployment_path: str,
-    deployment_name: str,
-    mode: str,
-) -> dict:
-    """
-    Get deployment-specific acoustics paths.
-    Specifically, get all acoutics paths that are within
-    the given deployment folder (deployment_path)
+# def get_path_acoustics_deployment(
+#     deployment_path: str,
+#     deployment_name: str,
+#     mode: str,
+# ) -> dict:
+#     """
+#     Get deployment-specific acoustics paths.
+#     Specifically, get all acoutics paths that are within
+#     the given deployment folder (deployment_path)
 
-    This function is typically called by get_path_acoustics()
-    """
+#     This function is typically called by get_path_acoustics()
+#     """
 
-    metadir = os.path.join(deployment_path, "metadata")
-    echoviewdir = os.path.join(metadir, "echoview")
+#     metadir = os.path.join(deployment_path, "metadata")
+#     echoviewdir = os.path.join(metadir, "echoview")
 
-    regionspath = os.path.join(echoviewdir, f"{deployment_name}-regions.csv")
-    pitchpath = os.path.join(echoviewdir, f"{deployment_name}.pitch.csv")
-    rollpath = os.path.join(echoviewdir, f"{deployment_name}.roll.csv")
-    gpspath = os.path.join(echoviewdir, f"{deployment_name}.gps.csv")
-    depthpath = os.path.join(echoviewdir, f"{deployment_name}.depth.evl")
-    evrpathprefix = os.path.join(echoviewdir, deployment_name)
+#     regionspath = os.path.join(echoviewdir, f"{deployment_name}-regions.csv")
+#     pitchpath = os.path.join(echoviewdir, f"{deployment_name}.pitch.csv")
+#     rollpath = os.path.join(echoviewdir, f"{deployment_name}.roll.csv")
+#     gpspath = os.path.join(echoviewdir, f"{deployment_name}.gps.csv")
+#     depthpath = os.path.join(echoviewdir, f"{deployment_name}.depth.evl")
+#     evrpathprefix = os.path.join(echoviewdir, deployment_name)
 
-    return {
-        "rawdatadir": os.path.join(deployment_path, "data", mode),
-        "configdir": os.path.join(deployment_path, "config"),
-        "metadir": metadir,
-        "echoviewdir": echoviewdir,
-        "regionspath": regionspath,
-        "pitchpath": pitchpath,
-        "rollpath": rollpath,
-        "gpspath": gpspath,
-        "depthpath": depthpath,
-        "evrpathprefix": evrpathprefix,
-    }
+#     return {
+#         "rawdatadir": os.path.join(deployment_path, "data", mode),
+#         "configdir": os.path.join(deployment_path, "config"),
+#         "metadir": metadir,
+#         "echoviewdir": echoviewdir,
+#         "regionspath": regionspath,
+#         "pitchpath": pitchpath,
+#         "rollpath": rollpath,
+#         "gpspath": gpspath,
+#         "depthpath": depthpath,
+#         "evrpathprefix": evrpathprefix,
+#     }
 
 
 def get_path_acoustics(deployment_name: str, mode: str, acoustic_path: str):
@@ -255,13 +241,6 @@ def get_path_acoustics(deployment_name: str, mode: str, acoustic_path: str):
         A dictionary with the relevant acoustic paths
     """
 
-    # # Extract or calculate relevant info
-    # deploymentyaml = deployment_info["deploymentyaml"]
-    # mode = deployment_info["mode"]
-    # deployment = utils.read_deploymentyaml(deploymentyaml)
-
-    # deployment_name = deployment["metadata"]["deployment_name"]
-    # project = deployment["metadata"]["project"]
     year = utils.year_path(deployment_name)
 
     # Check that relevant deployment path exists
@@ -271,64 +250,78 @@ def get_path_acoustics(deployment_name: str, mode: str, acoustic_path: str):
         deployment_name,
     )
     if not os.path.isdir(acoustic_deployment_path):
-        raise FileNotFoundError(f"{acoustic_deployment_path} does not exist")
+        _log.warning(f"{acoustic_deployment_path} does not exist")
 
     # Return dictionary of file paths
-    deployment_paths_out = get_path_acoustics_deployment(
-        acoustic_deployment_path,
-        deployment_name,
-        mode,
-    )
-    return deployment_paths_out
+    # deployment_paths_out = get_path_acoustics_deployment(
+    #     acoustic_deployment_path,
+    #     deployment_name,
+    #     mode,
+    # )
+    metadir = os.path.join(acoustic_deployment_path, "metadata")
+    echoviewdir = os.path.join(metadir, "echoview")
 
-
-
-# TODO: update
-def get_path_imagery_deployment(
-    deployment_name: str,
-    imagery_glider_in_path: str,
-    glider_data_out_path: str,
-) -> dict:
-    """
-    Get deployment-specific imagery paths.
-    Specifically, get all imagery paths that are within
-    the given deployment folder (deployment_path)
-
-    This function is typically called by get_path_imagery()
-
-    Parameters
-    ----------
-    deployment_name, mode: see get_path_glider
-    glider_data_in_path : str
-        The path to the glider-specifc 'data in' folder. 
-        E.g., "swfscesd-glider-deployments-data-in/2022/amlr08-20220513"    
-    glider_data_out_path : str
-        The path to the glider-specifc 'data out' folder. 
-        E.g., "swfscesd-glider-deployments-data-out/2022/amlr08-20220513"
-
-    Returns
-    -------
-    A dictionary of strings that represent the relevant 
-    glider-specific directory and file paths: 
-        list TODO
-    """
-
-    ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
-    imgcsv = os.path.join(ancillarydir, f"{deployment_name}-imagery-ancillary.csv")
+    regionspath = os.path.join(echoviewdir, f"{deployment_name}-regions.csv")
+    pitchpath = os.path.join(echoviewdir, f"{deployment_name}.pitch.csv")
+    rollpath = os.path.join(echoviewdir, f"{deployment_name}.roll.csv")
+    gpspath = os.path.join(echoviewdir, f"{deployment_name}.gps.csv")
+    depthpath = os.path.join(echoviewdir, f"{deployment_name}.depth.evl")
+    evrpathprefix = os.path.join(echoviewdir, deployment_name)
 
     return {
-        "imagedir": os.path.join(imagery_glider_in_path, "images"),
-        # "configdir": os.path.join(imagery_glider_in_path, "config"), #TODO - tbd
-        "ancillarydir": ancillarydir,
-        "imgcsv": imgcsv,
+        "rawdatadir": os.path.join(acoustic_deployment_path, "data", mode),
+        "configdir": os.path.join(acoustic_deployment_path, "config"),
+        "metadir": metadir,
+        "echoviewdir": echoviewdir,
+        "regionspath": regionspath,
+        "pitchpath": pitchpath,
+        "rollpath": rollpath,
+        "gpspath": gpspath,
+        "depthpath": depthpath,
+        "evrpathprefix": evrpathprefix,
     }
+
+
+# def get_path_imagery_deployment(
+#     deployment_name: str,
+#     glider_data_out_path: str,
+# ) -> dict:
+#     """
+#     Get deployment-specific imagery paths.
+#     Specifically, get all imagery paths that are within
+#     the given deployment folder (deployment_path)
+
+#     This function is typically called by get_path_imagery()
+
+#     Parameters
+#     ----------
+#     deployment_name, mode: see get_path_glider
+#     glider_data_out_path : str
+#         The path to the glider-specifc 'data out' folder. 
+#         E.g., "swfscesd-glider-deployments-data-out/2022/amlr08-20220513"
+
+#     Returns
+#     -------
+#     A dictionary of strings that represent the relevant 
+#     glider-specific directory and file paths: 
+#         list TODO
+#     """
+
+#     ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+#     imgcsv = os.path.join(ancillarydir, f"{deployment_name}-imagery-ancillary.csv")
+
+#     return {
+#         "ancillarydir": ancillarydir,
+#         "imgcsv": imgcsv,
+#     }
 
 
 def get_path_imagery(
         deployment_name: str, 
         imagery_in_path: str, 
+        imagery_metadata_path: str, 
         data_out_path: str, 
-        ):
+    ) -> dict:
     """
     Return a dictionary of imagery-related paths
     These paths follow the directory structure outlined here:
@@ -339,41 +332,45 @@ def get_path_imagery(
     deployment_name : str
         The name of the deployment, e.g. amlr08-20220513
    imagery_in_path : str
-        The (local) path to the folder with the 'data in' (i.e., raw) imagery data
+        The (local) path to the folder with the 'data in' (i.e., raw) imagery
+   imagery_metadata_path : str
+        The (local) path to the folder with the imagery metadata files
     data_out_path : str
         The (local) path to the 'data out' folder
 
     Returns
     -------
     dict
-        A dictionary with the relevant paths, generated by
-        get_path_imagery_deployment
+        A dictionary with the relevant imagery-related paths,
+        for a given glider deployment
     """
 
-    # # Extract or calculate relevant info
-    # deploymentyaml = deployment_info["deploymentyaml"]
-    # # mode = deployment_info["mode"]
-    # deployment = utils.read_deploymentyaml(deploymentyaml)
-
-    # deployment_name = deployment["metadata"]["deployment_name"]
-    # project = deployment["metadata"]["project"]
     year = utils.year_path(deployment_name)
 
-    # Check that relevant deployment path exists
     imagery_glider_in_path = os.path.join(
         imagery_in_path,
         year,
         deployment_name,
     )
     if not os.path.isdir(imagery_glider_in_path):
-        raise FileNotFoundError(f"{imagery_glider_in_path} does not exist")
+        _log.warning("%s does not exist", imagery_glider_in_path)
+
+    imagery_glider_metadata_path = os.path.join(
+        imagery_metadata_path,
+        year,
+        deployment_name,
+    )
+    if not os.path.isdir(imagery_glider_in_path):
+        _log.warning("%s does not exist", imagery_glider_in_path)
 
     glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
+    ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+    imgcsv = os.path.join(ancillarydir, f"{deployment_name}-imagery-ancillary.csv")
 
-    # Return dictionary of file paths
-    deployment_paths_out = get_path_imagery_deployment(
-        deployment_name,
-        imagery_glider_in_path,
-        glider_data_out_path, 
-    )
-    return deployment_paths_out
+    return {
+        "imagedir": os.path.join(imagery_glider_in_path, "images"),
+        # "configdir": os.path.join(imagery_glider_in_path, "config"), 
+        "imagemetadir": imagery_glider_metadata_path, 
+        "ancillarydir": ancillarydir,
+        "imgcsv": imgcsv,
+    }

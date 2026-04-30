@@ -1269,8 +1269,8 @@ def get_sunrise_sunset(time, lat, lon):
     # Calculate a column for local day
     df["time_local"] = df["time"].dt.tz_convert(tz.item())
     df["day_local"] = (
-        df["time_local"].dt.tz_localize(None).values.astype("datetime64[D]")
-    ) # type: ignore
+        df["time_local"].dt.tz_localize(None).values.astype("datetime64[D]") # type: ignore
+    ) 
 
     # Group by local day
     grp_avg = (
