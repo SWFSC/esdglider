@@ -64,6 +64,7 @@ def binary_to_nc(
     sci_timeseries_pyglider: bool = True,
     write_gridded: bool = True,
     # gridded_depth_measured: bool = False, 
+    binary_search: str | None = None,
     file_info: str | None = None,
     **kwargs,
 ):
@@ -113,6 +114,12 @@ def binary_to_nc(
         Should the function pass the science timeseries directly to 
         pyglider.ncprocess.make_gridfiles (False), 
         or instead use glider.make_gridfiles_depth_measured (True)
+    binary_search : str | None, default None
+        A regex string of the binary file extensions for dbdreader to 
+        search for when reading in data. Passed directly to the 
+        'search' argument of pyglider.binary_to_timeseries. 
+        If 'None', then uses "*.[DEde][BCbc][Dd]" for delayed-mode data,
+        and "*.[STst][BCbc][Dd]" for real-time data
     file_path: str | None, default None
         The path of the parent processing script.
         If provided, will be included in the history attribute
@@ -148,9 +155,11 @@ def binary_to_nc(
 
     # Check mode, set binary_search regex
     if mode == "delayed":
-        binary_search = "*.[D|E|d|e][Bb][Dd]"
+        if binary_search is None:
+            binary_search = "*.[DEde][BCbc][Dd]"
     elif mode == "rt":
-        binary_search = "*.[S|T|s|t][Bb][Dd]"
+        if binary_search is None:
+            binary_search = "*.[STst][BCbc][Dd]"
     else:
         raise ValueError("mode must be either 'rt' or 'delayed'")
 

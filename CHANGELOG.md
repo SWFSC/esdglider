@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Changed the name of the module `glider` to `slocum`
-- Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD directory structure
+- Changed the name of the module `glider` to `slocum`, to refect that this module is specific to slocum data
+- Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD prod directory structure
 - Changed assorted functions to take in the deployment name and mode directly, rather than a `deployment_info` dictionary
+- Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
+    - Added functions to the `imagery` module and a script (`extract-image-metadata.py`) for extracting EXIF metadata from the imagery files, and writing these to the metadata bucket
+    - Removed `solocam_img_meta`, and added `solocam_dt_from_meta` to the `imagery` module for formatting the image datatimes
+    - Added `utils.check_string_length`, for checking that all strings in a list (e.g., solocam image file names) are the same length, and returning useful warning logs if not
+    - Changed `imagery.imagery_timeseries` to use `solocam_dt_from_meta` and `check_string_length`
 
 ## [0.4.0] - 2026-04-17
 

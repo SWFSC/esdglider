@@ -1,8 +1,9 @@
-import datetime
-import glob
+# import datetime
+from datetime import datetime
 import logging
 import os
-import statistics
+from PIL import Image
+from PIL.ExifTags import TAGS
 
 import numpy as np
 import pandas as pd
@@ -16,37 +17,80 @@ import esdglider.utils as utils
 _log = logging.getLogger(__name__)
 
 
-def solocam_filename_dt(filename, dt_idx_start, format="%Y%m%d-%H%M%S"):
+# def solocam_filename_dt(filename, dt_idx_start, format="%Y%m%d-%H%M%S"):
+#     """
+#     Parse solocam (imagery) filename to return associated datetime
+#     Requires index of start of datetime part of string
+
+#     Parameters
+#     ----------
+#     filename : str
+#         Full filename
+#     dt_idx_start : int
+#         The index of the start of the datetime string.
+#         The datetime includes this index, plus the next 15 characters
+#         Specifically: filename[dt_idx_start : (dt_idx_start + 15)]
+#     format : str
+#         format passed to datetime.strptime
+
+#     Returns
+#     -------
+#         The datetime extracted from the imagery filename,
+#         returned as a 'datetime64[s]' object
+#     """
+
+#     solocam_substr = filename[dt_idx_start : (dt_idx_start + 15)]
+#     _log.debug(f"datetime substring: {solocam_substr}")
+#     solocam_dt = datetime.strptime(solocam_substr, format)
+#     solocam_dt64s = np.datetime64(solocam_dt).astype("datetime64[s]")
+
+#     return solocam_dt64s
+
+
+def solocam_dt_from_meta(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
     """
     Parse solocam (imagery) filename to return associated datetime
     Requires index of start of datetime part of string
 
     Parameters
     ----------
-    filename : str
-        Full filename
-    dt_idx_start : int
-        The index of the start of the datetime string.
-        The datetime includes this index, plus the next 15 characters
-        Specifically: filename[dt_idx_start : (dt_idx_start + 15)]
+    path : str
+        Full filename of the image metadata file. This file will be read via:
+        `pd.read_json(path, lines=True)`
     format : str
         format passed to datetime.strptime
 
     Returns
     -------
-        The datetime extracted from the imagery filename,
-        returned as a 'datetime64[s]' object
+        A pandas dataframe with 3 columns:
+        - img_file: the image file name, dtype str
+        - img_dir: the image directory name, dtype str
+        - time: the image datetime, dtype datetime64[s]
     """
 
-    solocam_substr = filename[dt_idx_start : (dt_idx_start + 15)]
-    _log.debug(f"datetime substring: {solocam_substr}")
-    solocam_dt = datetime.datetime.strptime(solocam_substr, format)
-    solocam_dt64s = np.datetime64(solocam_dt).astype("datetime64[s]")
+    _log.info("Reading image metadata file from %s", path)
+    img_meta_df = pd.read_json(path, lines=True)
 
-    return solocam_dt64s
+    imagery_files = list(img_meta_df["n"].values)
+    utils.check_string_length(imagery_files)
+
+    df_columns = {
+        "n": "img_file", 
+        "p": "img_dir", 
+        "dt": "time_str", 
+    }
+    df = (
+        img_meta_df
+        .rename(columns=df_columns)
+        .sort_values(by="img_file", ignore_index=True)
+    )
+    df["time_dt"] = df['time_str'].apply(lambda x: datetime.strptime(x, format))
+    df["time"] = df["time_dt"].astype("datetime64[s]")
+
+    return df[["img_file", "img_dir", "time"]]
 
 
-def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):
+def imagery_timeseries(ds, img_paths, ext=None, dt_idx_start=None):
     """
     Matches up imagery files with data from pyglider by imagery filename
     Uses interpolated variables (hardcoded in function)
@@ -55,11 +99,12 @@ def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):
     Parameters
     ----------
     ds : xarray Dataset
-        from science timeseries NetCDF
-    imagery_dir : str
-        path to folder with images, specifically the 'Dir####' folders
+        science timeseries NetCDF
+    img_paths : dict
+        dictionary of iamge paths, from paths.get_path_imagery
     ext : str, optional
-        Imagery file extension. Default is 'jpg'.
+        Imagery file extension. Default is None; if None, then will
+        search for the following extensions: '.jpg', '.jpeg', '.png'
     dt_idx_start : int | None
         The index of the beginning of the timestamp in the image file name.
         If None, then the index is determined as the index after the
@@ -71,79 +116,87 @@ def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):
     """
 
     deployment = ds.attrs["deployment_name"]
-    imagedir = paths["imagedir"]
-    ancillarydir = paths["ancillarydir"]
+    # imagedir = img_paths["imagedir"]
+    metadir = img_paths["metadir"]
+    ancdir = img_paths["ancdir"]
+    
     _log.info(f"Creating imagery ancillary data file for {deployment}")
-    _log.info(f"Using images directory {imagedir}")
+    # _log.info(f"Using images directory {imagedir}")
+    _log.info(f"Using image metadata directory {metadir}")
 
-    csv_file =  paths["imgcsv"]
+    csv_file =  img_paths["imgcsv"]
     if os.path.isfile(csv_file):
         _log.info(f"Deleting old imagery ancillary data file: {csv_file}")
         os.remove(csv_file)
 
-    # --------------------------------------------
-    # Checks
-    if not os.path.isdir(imagedir):
-        raise FileNotFoundError(f"{imagedir} does not exist")
-    else:
-        # NOTE: this should probably be a separate function, and return a tuple
-        filepaths = glob.glob(f"{imagedir}/**/*.{ext}", recursive=True)
-        _log.debug(f"Found {len(filepaths)} files with the extension {ext}")
-        if len(filepaths) == 0:
-            _log.error(
-                "Zero image files were found. Did you provide "
-                + "the right path, and use the right file extension?",
-            )
-            raise ValueError("No files for which to generate ancillary data")
-        imagery_files = [os.path.basename(path) for path in filepaths]
-        imagery_dirs = [os.path.basename(os.path.dirname(path)) for path in filepaths]
+    # # --------------------------------------------
+    # # Checks
+    # if not os.path.isdir(imagedir):
+    #     raise FileNotFoundError(f"{imagedir} does not exist")
+    # else:
+    #     # NOTE: this should probably be a separate function, and return a tuple
+    #     filepaths = glob.glob(f"{imagedir}/**/*.{ext}", recursive=True)
+    #     _log.debug(f"Found {len(filepaths)} files with the extension {ext}")
+    #     if len(filepaths) == 0:
+    #         _log.error(
+    #             "Zero image files were found. Did you provide "
+    #             + "the right path, and use the right file extension?",
+    #         )
+    #         raise ValueError("No files for which to generate ancillary data")
+    #     imagery_files = [os.path.basename(path) for path in filepaths]
+    #     imagery_dirs = [os.path.basename(os.path.dirname(path)) for path in filepaths]
 
     # --------------------------------------------
     # Extract info from imagery file names
     _log.debug("Processing imagery file names")
+    df = solocam_dt_from_meta(img_paths["imgmetapath"])
 
-    # Check that all filenames have the same number of characters
-    utils.check_string_length(imagery_files)
-    # imagery_files_nchar = [len(i) for i in imagery_files]
-    # if not len(set(imagery_files_nchar)) == 1:
-    #     _log.warning(
-    #         "The imagery file names are not all the same length, "
-    #         + "and thus shuld be checked carefully",
-    #     )
-    #     nchar_mode = statistics.mode(imagery_files_nchar)
-    #     diff_idx = [i for i, f in enumerate(imagery_files) if len(f) != nchar_mode]
-    #     diff_files = [f"{imagery_dirs[i]}/{imagery_files[i]}" for i in diff_idx]
-    #     _log.warning(
-    #         "The following filenames are of a different length: %s",
-    #         ", ".join(diff_files),
-    #     )
 
-    if dt_idx_start is None:
-        _log.info("Calculating the datetime index, ...")
-        # i0_split = imagery_files[0].split("-")
-        space_idx = str.index(imagery_files[0], " ")
-        if space_idx == -1:
-            _log.error(
-                "The imagery file name year index could not be found, "
-                + "and thus the imagery ancillary data file cannot be generated",
-            )
-            raise ValueError("Incompatible file name spaces")
-        dt_idx_start = space_idx + 1
-    _log.debug("dt_idx_start %s", dt_idx_start)
+    # # imagery_files = 
+    # _log.debug("Processing imagery file names")
 
-    imagery_files_dt = np.array(
-        [solocam_filename_dt(i, dt_idx_start) for i in imagery_files],
-    )
+    # # Check that all filenames have the same number of characters
+    # utils.check_string_length(imagery_files)
+    # # imagery_files_nchar = [len(i) for i in imagery_files]
+    # # if not len(set(imagery_files_nchar)) == 1:
+    # #     _log.warning(
+    # #         "The imagery file names are not all the same length, "
+    # #         + "and thus shuld be checked carefully",
+    # #     )
+    # #     nchar_mode = statistics.mode(imagery_files_nchar)
+    # #     diff_idx = [i for i, f in enumerate(imagery_files) if len(f) != nchar_mode]
+    # #     diff_files = [f"{imagery_dirs[i]}/{imagery_files[i]}" for i in diff_idx]
+    # #     _log.warning(
+    # #         "The following filenames are of a different length: %s",
+    # #         ", ".join(diff_files),
+    # #     )
 
-    # TODO: filter for dates after deployment_min_dt?
+    # if dt_idx_start is None:
+    #     _log.info("Calculating the datetime index, ...")
+    #     # i0_split = imagery_files[0].split("-")
+    #     space_idx = str.index(imagery_files[0], " ")
+    #     if space_idx == -1:
+    #         _log.error(
+    #             "The imagery file name year index could not be found, "
+    #             + "and thus the imagery ancillary data file cannot be generated",
+    #         )
+    #         raise ValueError("Incompatible file name spaces")
+    #     dt_idx_start = space_idx + 1
+    # _log.debug("dt_idx_start %s", dt_idx_start)
 
-    df = pd.DataFrame(
-        data={
-            "img_file": imagery_files,
-            "img_dir": imagery_dirs,
-            "time": imagery_files_dt,
-        },
-    ).sort_values(by="img_file", ignore_index=True)
+    # imagery_files_dt = np.array(
+    #     [solocam_filename_dt(i, dt_idx_start) for i in imagery_files],
+    # )
+
+    # # TODO: filter for dates after deployment_min_dt?
+
+    # df = pd.DataFrame(
+    #     data={
+    #         "img_file": imagery_files,
+    #         "img_dir": imagery_dirs,
+    #         "time": imagery_files_dt,
+    #     },
+    # ).sort_values(by="img_file", ignore_index=True)
 
     # --------------------------------------------
     # Create ancillary data file
@@ -245,8 +298,104 @@ def imagery_timeseries(ds, paths, ext="jpg", dt_idx_start=None):
 
     # --------------------------------------------
     # Export ancillary data file
-    utils.mkdir_pass(ancillarydir)
+    utils.mkdir_pass(ancdir)
     _log.info(f"Writing imagery ancillary data to: {csv_file}")
     df.to_csv(csv_file, index=False)
 
     return df
+
+
+def extract_deployment_metadata(image_path: str, deployment_name: str):
+    """
+    Extracts deployment-wide tags, i.e. metadata, from a single image.
+
+    This function was written by Gemini, and adapted by Sam Woodman
+
+    Parameters
+    ----------
+    image_path : str
+        The path to the imagery file from which to get 'global', 
+        i.e., deployment-level, metadata
+    deployment_name : str
+        The name of the deployment
+
+    Returns
+    -------
+    A dictionary with the deployment-level metadata. These data include
+    the EXIF metadata tags from WASSOC, as well as the following:
+        - Deployment name
+        - image height, in pixels
+        - image width, in pixels
+        - image format (e.g., JPEG, PNG)
+        - image mode (e.g., RGB, or L (grayscale))
+    """
+    logging.info("Extracting deployment-level metadata from %s", image_path)
+    try:
+        with Image.open(image_path) as img:            
+            global_metadata = {
+                "Deployment": deployment_name,
+                "Height": img.height,
+                "Width": img.width,
+                "Format": img.format,
+                "Mode": img.mode,
+            }
+
+            exifdata = img.getexif()
+            for tagid in exifdata:        
+                # Get the tag name
+                tagname = TAGS.get(tagid, tagid)
+
+                # Get the value, and format it
+                value = exifdata.get(tagid)
+                logging.debug(f"{tagname}: {value}")
+                if isinstance(value, bytes):
+                    value = value.decode(errors='ignore').strip('\x00')
+                elif hasattr(value, 'numerator'):
+                    value = float(value) # type: ignore
+
+                global_metadata[str(tagname)] = value
+
+    except Exception as e:
+        global_metadata = {"file": image_path, "error": str(e)}    
+
+    return global_metadata
+
+
+def extract_image_metadata(image_path):
+    """
+    Worker function for per-image high-frequency data.
+    
+    This function was written by Gemini, and adapted by Sam Woodman
+
+    Parameters
+    ----------
+    image_path : str
+        The path to the imagery file from which to extract metadata
+
+    Returns
+    -------
+    A dictionary with the following image-level key-value pairs:
+        - f: file name
+        - p: directory name
+        - dt: Datetime string, from the tag ID 306 ('Datetime')
+    """
+    
+    try:
+        with Image.open(image_path) as img:
+            raw_exif = img.getexif()
+            
+            # Extract just the datetime
+            # Tag 36867 is DateTimeOriginal
+            dt = raw_exif.get(36867) or raw_exif.get(306) # Fallback to DateTime
+            
+            if hasattr(dt, 'decode'): dt = dt.decode() # type: ignore
+            dt_str = str(dt).strip('\x00') if dt else "UNKNOWN"
+
+            return {
+                "n": image_path.name,            # Filename
+                "p": image_path.parent.name,     # Immediate parent directory
+                "dt": dt_str                     # DateTime
+            }
+        
+    except Exception:
+        return {"n": image_path.name, "error": "failed"}

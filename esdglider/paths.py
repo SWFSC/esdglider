@@ -319,7 +319,7 @@ def get_path_acoustics(deployment_name: str, mode: str, acoustic_path: str):
 def get_path_imagery(
         deployment_name: str, 
         imagery_in_path: str, 
-        imagery_metadata_path: str, 
+        imagery_meta_path: str, 
         data_out_path: str, 
     ) -> dict:
     """
@@ -333,7 +333,7 @@ def get_path_imagery(
         The name of the deployment, e.g. amlr08-20220513
    imagery_in_path : str
         The (local) path to the folder with the 'data in' (i.e., raw) imagery
-   imagery_metadata_path : str
+   imagery_meta_path : str
         The (local) path to the folder with the imagery metadata files
     data_out_path : str
         The (local) path to the 'data out' folder
@@ -355,13 +355,22 @@ def get_path_imagery(
     if not os.path.isdir(imagery_glider_in_path):
         _log.warning("%s does not exist", imagery_glider_in_path)
 
-    imagery_glider_metadata_path = os.path.join(
-        imagery_metadata_path,
+    imagery_glider_meta_path = os.path.join(
+        imagery_meta_path,
         year,
         deployment_name,
     )
     if not os.path.isdir(imagery_glider_in_path):
         _log.warning("%s does not exist", imagery_glider_in_path)
+
+    depl_meta_path = os.path.join(
+        imagery_glider_meta_path, 
+        f"{deployment_name}-deployment-metadata.json"
+    )
+    img_meta_path = os.path.join(
+        imagery_glider_meta_path, 
+        f"{deployment_name}-image-metadata.jsonl"
+    )
 
     glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
     ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
@@ -370,7 +379,9 @@ def get_path_imagery(
     return {
         "imagedir": os.path.join(imagery_glider_in_path, "images"),
         # "configdir": os.path.join(imagery_glider_in_path, "config"), 
-        "imagemetadir": imagery_glider_metadata_path, 
-        "ancillarydir": ancillarydir,
+        "metadir": imagery_glider_meta_path, 
+        "deplmetapath": depl_meta_path, 
+        "imgmetapath": img_meta_path, 
+        "ancdir": ancillarydir,
         "imgcsv": imgcsv,
     }
