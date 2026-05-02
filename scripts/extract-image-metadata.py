@@ -6,7 +6,7 @@ import logging
 import os
 from esdglider import gcp, imagery, paths, utils # type: ignore
 
-deployment_name = "amlr08-20260321"
+deployment_name = "george-20240907"
 
 home = Path.home()
 mnt_path = home / "gcs-mnt"
@@ -35,9 +35,9 @@ def run_pipeline(files, deployment_name, depl_meta_file, img_meta_file, num_core
     deployment_name : str
         name of the deployment
     depl_meta_file : str
-        path of the deployment-level metadata file
+        Path object of the deployment-level metadata file
     img_meta_file : str
-        path of the image-level metadata file    
+        Path object of the image-level metadata file    
     num_cores : int | None
         Number of cores to use for extracing image datetime from metadata
         If None, uses all available cores (i.e., os.cpu_count())
@@ -51,13 +51,15 @@ def run_pipeline(files, deployment_name, depl_meta_file, img_meta_file, num_core
         num_cores = os.cpu_count()
 
     # Generate Manifest (from first valid image)
-    depl_metadata = imagery.extract_depl_metadata(files[0], deployment_name)
+    depl_metadata = imagery.extract_deployment_metadata(files[0], deployment_name)
     logging.info("Writing deployment-level metadata to %s", depl_meta_file)
+    depl_meta_file.parent.mkdir(parents=True, exist_ok=True)
     with depl_meta_file.open("w") as f:
         json.dump(depl_metadata, f, indent=4)
 
     # Generate Index via Multiprocessing
     logging.info("Extracting file-level metadata, and writing to %s", img_meta_file)
+    img_meta_file.parent.mkdir(parents=True, exist_ok=True)
     logging.info("Using %s cores", num_cores)
     with img_meta_file.open("a", encoding="utf-8") as f:
         with ProcessPoolExecutor(max_workers=num_cores) as executor:
@@ -118,8 +120,8 @@ if __name__ == "__main__":
         run_pipeline(
             files=files, 
             deployment_name=deployment_name, 
-            depl_meta_file=img_paths["deplmetapath"], 
-            img_meta_file=img_paths["imgmetapath"], 
+            depl_meta_file=Path(img_paths["deplmetapath"]), 
+            img_meta_file=Path(img_paths["imgmetapath"]), 
             num_cores=os.cpu_count()
         )
         
