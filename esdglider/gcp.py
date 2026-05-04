@@ -56,16 +56,32 @@ def access_secret_version(project_id, secret_id, version_id="latest"):
 # GCS bucket mount management
 # NOTE: these functions are from
 #  https://github.com/us-amlr/shaip/blob/main/shaip/utils.py
-def gcs_unmount_bucket(mountpoint):
+def gcs_unmount_bucket(mountpoint: str):
     """
     Run the command to unmount a GCS bucket mounted
     at path 'mountpoint' (a string) using gcsfuse
     https://cloud.google.com/storage/docs/gcs-fuse
     """
-    subprocess.run(["fusermount", "-u", mountpoint])
 
-    return 0
+    mountpoint = str(mountpoint)
+    # subprocess.run(["fusermount", "-u", mountpoint])
+    #
+    # return 0
+    cmd = ["fusermount", "-u", mountpoint]
+    _log.info(f"Unmounting with: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
 
+    # Log standard output if it exists
+    if result.stdout:
+        _log.debug(f"fusermount stdout:\n{result.stdout.strip()}")
+
+    # Log standard error if it exists
+    if result.stderr:
+        if result.returncode == 0:
+            _log.debug(f"fusermount stderr:\n{result.stderr.strip()}")
+        else:
+            _log.error(f"fusermount failed with code {result.returncode}:\n{result.stderr.strip()}")
+    return result.returncode
 
 def gcs_mount_bucket(bucket, mountpoint, ro=False):
     """
@@ -82,29 +98,55 @@ def gcs_mount_bucket(bucket, mountpoint, ro=False):
     ro : boolean
         Indicates if bucket should be mounted as read only
     """
+
+    bucket = str(bucket)
+    mountpoint = str(mountpoint)
+    _log.info("Trying to mount bucket %s", bucket)
+
     # Make mountpoint, if necessary
     if not os.path.exists(mountpoint):
         os.makedirs(mountpoint)
-    # elif os.listdir(mountpoint) != []:
-    #     _log.info("The mountpoint is not empty, will try to unmount")
-
-    # Unmount bucket, just in case
-    gcs_unmount_bucket(mountpoint)
-    if os.listdir(mountpoint) != []:
-        _log.info("The mountpoint not empty after unmounting, exiting") 
+    elif os.listdir(mountpoint) != []:
+        _log.warning("The mountpoint is not empty, will NOT try to unmount")
         return 0
+
+    # # Unmount bucket, just in case
+    # gcs_unmount_bucket(mountpoint)
+    # retcode = gcs_unmount_bucket(mountpoint)
+    # if retcode != 0 and os.listdir(mountpoint) != []:
+    #     _log.error("The mountpoint isnot empty after trying to unmount, exiting")
+    #     return 1
+
+    # if os.listdir(mountpoint) != []:
+    #     _log.error("The mountpoint is not empty after unmounting, exiting")
+    #     return 1
 
     # Mount bucket using gcsfuse
     cmd = ["gcsfuse", "--implicit-dirs", bucket, mountpoint]
     if ro:
         cmd[2:2] = ["-o", "ro"]
-    subprocess.run(cmd)
+    # subprocess.run(cmd)
+    #
+    # return 0
+    _log.info(f"Mounting with: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
 
-    return 0
     # # Run command, capture output (stdout/stderr), and format as strings (text=True)
     # result = subprocess.run(cmd, capture_output=True, text=True)
     # print(result)
+    # Log standard output if it exists
+    if result.stdout:
+        _log.debug(f"gcsfuse stdout:\n{result.stdout.strip()}")
 
+    # Log standard error if it exists
+    if result.stderr:
+        # CLI tools like gcsfuse often write operational logs to stderr even on success
+        if result.returncode == 0:
+            _log.debug(f"gcsfuse stderr:\n{result.stderr.strip()}")
+        else:
+            _log.error(f"gcsfuse failed with code {result.returncode}:\n{result.stderr.strip()}")
+
+    return result.returncode
     # # Log standard output if it exists
     # if result.stdout:
     #     _log.info(f"gcsfuse stdout:\n{result.stdout.strip()}")
