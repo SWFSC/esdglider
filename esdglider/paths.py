@@ -1,10 +1,15 @@
 import logging
 import os
 from importlib import resources
+from pathlib import Path
 
 import esdglider.utils as utils
 
 _log = logging.getLogger(__name__)
+
+def _check_dir_exists(dir_path, description):
+    if not os.path.isdir(dir_path):
+        _log.warning(f"The {description} ('{dir_path}') does not exist")
 
 
 def get_path_yaml(yaml_type: str) -> str:
@@ -105,10 +110,10 @@ def get_path_glider_data_out(
 def get_path_glider(
     deployment_name: str, 
     mode: str, 
-    cac_path: str,
-    config_path: str, 
-    data_in_path: str, 
-    data_out_path: str, 
+    cac_path: str | Path = "",
+    config_path: str | Path = "", 
+    data_in_path: str | Path = "", 
+    data_out_path: str | Path = "", 
 ) -> dict:
     """
     Return a dictionary of paths needed to process glider data.
@@ -135,29 +140,37 @@ def get_path_glider(
     -------
         A dictionary with the relevant paths
     """
+
+    # Temporary, until going full pathlib
+    cac_path = str(cac_path)
+    config_path = str(config_path)
+    data_in_path = str(data_in_path)
+    data_out_path = str(data_out_path)
     
     # Mode
     if mode not in ["delayed", "rt"]:
         raise ValueError("mode must be either 'rt' or 'delayed'")
 
     # Deployment yaml
-    if not os.path.isdir(config_path):
-        _log.warning(f"{config_path} does not exist")
-    deploymentyaml = os.path.join(config_path, f"{deployment_name}.yml")
+    deploymentyaml = os.path.join(config_path, f"{deployment_name}.yml")    
+    if not os.path.isfile(deploymentyaml):
+        _log.warning("The deployment yaml ('%s') does not exist", 
+                     deploymentyaml)
 
     # cache path
-    if not os.path.isdir(cac_path):
-        _log.warning(f"{cac_path} does not exist")
+    _check_dir_exists(cac_path, "provided cac_path")
 
     # Glider data in and data out paths
     year = utils.year_path(deployment_name)
     glider_data_in_path = os.path.join(data_in_path, year, deployment_name)
-    if not os.path.isdir(glider_data_in_path):
-        _log.warning(f"{glider_data_in_path} does not exist")
+    _check_dir_exists(glider_data_in_path, "derived glider data in path")
+    # if not os.path.isdir(glider_data_in_path):
+    #     _log.warning(f"The derived glider data in path ({glider_data_in_path} does not exist")
     
     glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
+    _check_dir_exists(glider_data_out_path, "derived glider data out path")
     # if not os.path.isdir(glider_data_out_path):
-    #     raise FileNotFoundError(f"{glider_data_out_path} does not exist")
+    #     _log.warning(f"The derived glider data out path ({glider_data_out_path} does not exist")
 
     glider_paths_data_out = get_path_glider_data_out(
         deployment_name = deployment_name,
@@ -214,7 +227,10 @@ def get_path_glider(
 #     }
 
 
-def get_path_acoustics(deployment_name: str, mode: str, acoustic_path: str):
+def get_path_acoustics(
+        deployment_name: str, 
+        mode: str, 
+        acoustic_path: str | Path):
     """
     Return a dictionary of acoustic-related paths
     These paths follow the directory structure outlined here:
@@ -240,6 +256,9 @@ def get_path_acoustics(deployment_name: str, mode: str, acoustic_path: str):
     dict
         A dictionary with the relevant acoustic paths
     """
+        
+    # Temporary, until going full pathlib
+    acoustic_path = str(acoustic_path)
 
     year = utils.year_path(deployment_name)
 
@@ -249,8 +268,9 @@ def get_path_acoustics(deployment_name: str, mode: str, acoustic_path: str):
         year,
         deployment_name,
     )
-    if not os.path.isdir(acoustic_deployment_path):
-        _log.warning(f"{acoustic_deployment_path} does not exist")
+    _check_dir_exists(acoustic_deployment_path, "derived acoustic deployment")
+    # if not os.path.isdir(acoustic_deployment_path):
+    #     _log.warning(f"The derived acoustic path ({acoustic_deployment_path}) does not exist")
 
     # Return dictionary of file paths
     # deployment_paths_out = get_path_acoustics_deployment(
@@ -318,9 +338,9 @@ def get_path_acoustics(deployment_name: str, mode: str, acoustic_path: str):
 
 def get_path_imagery(
         deployment_name: str, 
-        imagery_in_path: str, 
-        imagery_meta_path: str, 
-        data_out_path: str, 
+        imagery_in_path: str | Path = "", 
+        imagery_meta_path: str | Path = "", 
+        data_out_path: str | Path = "", 
     ) -> dict:
     """
     Return a dictionary of imagery-related paths
@@ -345,6 +365,11 @@ def get_path_imagery(
         for a given glider deployment
     """
 
+    # Temporary, until going full pathlib
+    imagery_in_path = str(imagery_in_path)
+    imagery_meta_path = str(imagery_meta_path)
+    data_out_path = str(data_out_path)
+    
     year = utils.year_path(deployment_name)
 
     imagery_glider_in_path = os.path.join(
@@ -352,16 +377,18 @@ def get_path_imagery(
         year,
         deployment_name,
     )
-    if not os.path.isdir(imagery_glider_in_path):
-        _log.warning("%s does not exist", imagery_glider_in_path)
+    _check_dir_exists(imagery_glider_in_path, "imagery data in")
+    # if not os.path.isdir(imagery_glider_in_path):
+    #     _log.warning("%s does not exist", imagery_glider_in_path)
 
     imagery_glider_meta_path = os.path.join(
         imagery_meta_path,
         year,
         deployment_name,
     )
-    if not os.path.isdir(imagery_glider_in_path):
-        _log.warning("%s does not exist", imagery_glider_in_path)
+    _check_dir_exists(imagery_glider_meta_path, "imagery metadata")
+    # if not os.path.isdir(imagery_glider_in_path):
+    #     _log.warning("%s does not exist", imagery_glider_in_path)
 
     depl_meta_path = os.path.join(
         imagery_glider_meta_path, 
@@ -373,6 +400,9 @@ def get_path_imagery(
     )
 
     glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
+    _check_dir_exists(glider_data_out_path, "derived glider data out")
+
+
     ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
     imgcsv = os.path.join(ancillarydir, f"{deployment_name}-imagery-ancillary.csv")
 
