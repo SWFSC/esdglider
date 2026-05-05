@@ -107,8 +107,11 @@ def gcs_mount_bucket(bucket, mountpoint, ro=False):
     if not os.path.exists(mountpoint):
         os.makedirs(mountpoint)
     elif os.listdir(mountpoint) != []:
-        _log.warning("The mountpoint is not empty, will NOT try to unmount")
-        return 0
+        _log.info("The mountpoint is not empty; trying to unmount")
+        gcs_unmount_bucket(mountpoint)
+        if os.listdir(mountpoint) != []:
+            _log.warning("The mountpoint is still not empty; not mounting")
+            return 0
 
     # # Unmount bucket, just in case
     # gcs_unmount_bucket(mountpoint)
