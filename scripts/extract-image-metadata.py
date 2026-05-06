@@ -4,9 +4,11 @@ from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
 import logging
 import os
+from subprocess import run
 from esdglider import gcp, imagery, paths, utils # type: ignore
 
-deployment_name = "george-20240907"
+deployment_name = "amlr03-20231128"
+run_pipeline_bool = True
 
 home = Path.home()
 mnt_path = home / "gcs-mnt"
@@ -50,6 +52,14 @@ def run_pipeline(files, deployment_name, depl_meta_file, img_meta_file, num_core
     if num_cores is None:
         num_cores = os.cpu_count()
 
+    if depl_meta_file.is_file():
+        logging.error(f"depl_meta_file file ({depl_meta_file}) already exists")
+        return  
+
+    if img_meta_file.is_file():
+        logging.error(f"img_meta_file file ({img_meta_file}) already exists")
+        return
+
     # Generate Manifest (from first valid image)
     depl_metadata = imagery.extract_deployment_metadata(files[0], deployment_name)
     logging.info("Writing deployment-level metadata to %s", depl_meta_file)
@@ -75,12 +85,12 @@ if __name__ == "__main__":
 
     ### Mount bucket, and get paths
     gcp.gcs_mount_bucket(imagery_in_bucket_name, imagery_in_path, ro=True)
-    gcp.gcs_mount_bucket(imagery_meta_bucket_name, imagery_meta_path, ro=False)
+    # gcp.gcs_mount_bucket(imagery_meta_bucket_name, imagery_meta_path, ro=False)
 
     img_paths = paths.get_path_imagery(
         deployment_name=deployment_name, 
         imagery_in_path=imagery_in_path, 
-        imagery_meta_path=imagery_meta_path, 
+        imagery_meta_path=imagery_meta_bucket_name, 
         data_out_path="", 
     )
     
@@ -117,11 +127,31 @@ if __name__ == "__main__":
         logging.info("Checking for any questionable paths via length check")
         utils.check_string_length([str(i.name) for i in files])
 
-        run_pipeline(
-            files=files, 
-            deployment_name=deployment_name, 
-            depl_meta_file=Path(img_paths["deplmetapath"]), 
-            img_meta_file=Path(img_paths["imgmetapath"]), 
-            num_cores=os.cpu_count()
-        )
+        tmp_folder = home / "tmp-meta" / deployment_name
+        depl_meta_file = (tmp_folder / Path(img_paths["deplmetapath"]).name)
+        img_meta_file = (tmp_folder / Path(img_paths["imgmetapath"]).name)
+
+        if run_pipeline_bool:
+            run_pipeline(
+                files=files, 
+                deployment_name=deployment_name, 
+                depl_meta_file=depl_meta_file, 
+                img_meta_file=img_meta_file, 
+                # depl_meta_file=Path(img_paths["deplmetapath"]), 
+                # img_meta_file=Path(img_paths["imgmetapath"]), 
+                num_cores=os.cpu_count()
+            )
+
+            # print(f"gcloud storage mv {str(depl_meta_file)} gs://{img_paths["deplmetapath"]}")
+            # print(f"gcloud storage mv {str(img_meta_file)} gs://{img_paths["imgmetapath"]}")
+
+            # run(f"gcloud storage mv {str(depl_meta_file)} gs://{img_paths["deplmetapath"]}")
+            # run(f"gcloud storage mv {str(img_meta_file)} gs://{img_paths["imgmetapath"]}")
+
+            meta_dir = home / "tmp-meta" / deployment_name
+            cmd_str = f"gcloud storage mv {meta_dir} gs://{imagery_meta_bucket_name}/{utils.year_path(deployment_name)}/"
+            logging.info(f"Running command: {cmd_str}")
+            run(cmd_str, shell = True)
+
+            meta_dir.rmdir()
         
