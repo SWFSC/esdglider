@@ -1556,6 +1556,9 @@ def sci_timesection_gt_plot(
     if var in ["profile_index"]:
         _log.info("Skipping %s because it is not relevant", var)
         return
+    if np.count_nonzero(~np.isnan(ds[var].values)) == 0:
+        _log.info("Variable %s has no valid data. Skipping plot", var)
+        return
 
     _log.info(
         f"Making sci timesection plot for variable {var}, using glidertools",

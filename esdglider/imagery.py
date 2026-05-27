@@ -90,7 +90,7 @@ def solocam_dt_from_meta(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
     return df[["img_file", "img_dir", "time"]]
 
 
-def imagery_timeseries(ds, img_paths, ext=None, dt_idx_start=None):
+def imagery_timeseries(ds, img_paths):
     """
     Matches up imagery files with data from pyglider by imagery filename
     Uses interpolated variables (hardcoded in function)
@@ -101,14 +101,7 @@ def imagery_timeseries(ds, img_paths, ext=None, dt_idx_start=None):
     ds : xarray Dataset
         science timeseries NetCDF
     img_paths : dict
-        dictionary of iamge paths, from paths.get_path_imagery
-    ext : str, optional
-        Imagery file extension. Default is None; if None, then will
-        search for the following extensions: '.jpg', '.jpeg', '.png'
-    dt_idx_start : int | None
-        The index of the beginning of the timestamp in the image file name.
-        If None, then the index is determined as the index after the
-        space in the file name
+        dictionary of image paths, from paths.get_path_imagery
 
     Returns
     -------

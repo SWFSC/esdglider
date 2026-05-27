@@ -63,6 +63,7 @@ def binary_to_nc(
     write_timeseries: bool = True,
     sci_timeseries_pyglider: bool = True,
     write_gridded: bool = True,
+    check_cdom: bool = False,
     # gridded_depth_measured: bool = False, 
     binary_search: str | None = None,
     file_info: str | None = None,
@@ -110,6 +111,8 @@ def binary_to_nc(
         Should the function use pyglider.slocum.binary_to_timeseries to create
         create the science timeseries (True),
         or glider.raw_to_sci_timeseries (False)
+    check_cdom : bool, default False
+        Should the function use check_cdom_esd 
     gridded_depth_measured : bool, default False
         Should the function pass the science timeseries directly to 
         pyglider.ncprocess.make_gridfiles (False), 
@@ -215,6 +218,12 @@ def binary_to_nc(
         utils.check_profiles(prof_summ)
         utils.check_depth(tsraw["depth_measured"], tsraw["depth_ctd"])
 
+        # CDOM check
+        if check_cdom:
+            utils.check_cdom(tsraw)
+            utils.to_netcdf_esd(tsraw, outname_tsraw)
+
+
     else:
         _log.info("Not writing raw nc")
         try:
@@ -297,9 +306,6 @@ def binary_to_nc(
         tssci = xr.load_dataset(outname_tssci)
         tssci = postproc_sci_timeseries(tssci, postproc_info, **kwargs)
         utils.to_netcdf_esd(tssci, outname_tssci)   
-        # # Perform ESD-specific post-processing
-        # _log.info("Post-processing science timeseries")
-        # ds = postproc_sci_timeseries(ds, pp, **kwargs)
 
         _log.info("final eng/sci timeseries checks")
         # Brief profile sanity check - check_profiles done in postproc-general
@@ -637,7 +643,6 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
     ds = utils.data_var_reorder(ds, new_start)
 
     _log.debug("end sci postproc: ds has %s values", len(ds.time))
-    # utils.to_netcdf_esd(ds, ds_file)
 
     return ds
 
@@ -1320,7 +1325,7 @@ def decompress_dir(binarydir):
 def grid_esd(inname, glider_paths):
     """
     A consistent way of creating gridded datafiles for ESD. 
-    Note that this function uses the glider module-level variables: 
+    Note that this function uses the module-level variables: 
     bin_size, depth_max, and gridded_exclude_vars. 
 
     Parameters

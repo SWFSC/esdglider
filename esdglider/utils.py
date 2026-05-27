@@ -5,6 +5,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+import ast
 import gsw
 import numpy as np
 import pandas as pd
@@ -1027,6 +1028,7 @@ def check_profiles(df: pd.DataFrame) -> pd.DataFrame:
             ", ".join([str(i) for i in tas_check.profile_index.values]),
         )
 
+    _log.info("Completed profile checks")
     return df
 
 
@@ -1088,6 +1090,7 @@ def check_depth(x: xr.DataArray, y: xr.DataArray, depth_ok=5) -> xr.Dataset:
         join="outer", 
     )
 
+    _log.info("Completed depth checks (measured vs CTD)")
     return ds
 
 
@@ -1337,3 +1340,245 @@ def get_sunrise_sunset(time, lat, lon):
     )
 
     return sunrise_local, sunset_local, time_local
+
+
+def check_cdom(ds: xr.Dataset) -> xr.Dataset:
+    """
+    Check cdom values. Specifcally:
+        1) Remove values collected with instrument serviced between 
+            January 2021 and July 2023
+        2) Apply Reference Adjustment Factor (RAF) of 5.62 to the CDOM data, 
+            if instrument serviced before January 2023
+
+    If either case, update metadata: 
+        - comment within instrument_flbbcd attribute
+        - cdom comment attribute
+
+    Parameters
+    ----------
+    ds: `xarray.Dataset`
+        processed glider data; expected to be science timeseries
+
+    Returns
+    -------
+        dataset, corrected as necessary
+    """
+
+    _log.info("Starting CDOM correction check")
+    if "instrument_flbbcd" in ds.attrs:
+        # Get calibration date
+        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
+        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
+        _log.debug("instrument_flbbcd calibration date %s", 
+                   cdate.strftime("%Y-%m-%d"))
+
+        # Check for out-of-tolerance         
+        if datetime(2021, 1, 1) <= cdate <= datetime(2023, 7, 31):
+            cdom_oot_message = (
+                " Per Sea-Bird Scientific notice 'Out-of-tolerance UV LED', " 
+                + "these CDOM data were irretrievable, and have been removed"
+            )
+            _log.info(
+                "Based on instrument_flbbcd calibration date, "
+                + "CDOM data is irretrievable. Removing"
+            )
+
+            ds['cdom'].values[:] = np.nan
+            ds["cdom"].attrs["comment"] += cdom_oot_message
+            instr_attrs["comment"] += cdom_oot_message
+            ds.attrs["instrument_flbbcd"] = str(instr_attrs)
+
+        else:
+            # If not oot, then check if Reference Adjustment Factor (RAF) needed
+            if cdate < datetime(2023, 1, 13):                
+                cdom_raf_message = (
+                    " Per Sea-Bird Scientific notice 'Incorrect CDOM values', " 
+                    + "applied Reference Adjustment Factor (RAF) of 5.62. " 
+                    + "to the data: CDOM adjusted = 5.62 * CDOM"
+                )            
+                _log.info(
+                    "Based on instrument_flbbcd calibration date, "
+                    + "need to apply RAF to CDOM data. Applying"
+                )
+                
+                ds['cdom'] = ds['cdom'] * 5.62
+                ds["cdom"].attrs["comment"] += cdom_raf_message
+                instr_attrs["comment"] += cdom_raf_message
+                ds.attrs["instrument_flbbcd"] = str(instr_attrs)
+
+            else:
+                _log.info(
+                    "instrument_flbbcd calibration date is outside of "
+                    + "the Sea-Bird correction windows, "
+                    + "and thus no values need correction"
+                )
+
+    else:
+        _log.info("No instrument_flbbcd, and thus no CDOM correction needed")
+
+    return ds
+
+
+def get_flbbcd_date(ds: xr.Dataset) -> datetime:    
+    """
+    Get the calibration date for the FLBBCD instrument, 
+    if it exists in the dataset attributes
+
+    Parameters
+    ----------
+    ds: `xarray.Dataset`
+        processed glider data; expected to be science timeseries
+
+    Returns
+    -------
+    datetime or None
+        The calibration date for the FLBBCD instrument, if it exists in the dataset attributes; otherwise, None
+    """
+    if "instrument_flbbcd" in ds.attrs:
+        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
+        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
+        return cdate
+    else:
+        return None
+
+
+def check_cdom_date(ds: xr.Dataset) -> str:
+    """
+    """
+    if "instrument_flbbcd" in ds.attrs:
+        # Get calibration date
+        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
+        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
+        _log.debug("instrument_flbbcd calibration date %s", 
+                   cdate.strftime("%Y-%m-%d"))
+
+        # Check for out-of-tolerance         
+        if datetime(2021, 1, 1) <= cdate <= datetime(2023, 7, 31):
+            return "oot"
+        if cdate < datetime(2023, 1, 13):
+            return "raf"
+
+    else:
+        return "none"
+
+
+def check_cdom_esd(ds_paths: dict) -> tuple:
+    """
+    ESD-specific wrapper around check_cdom
+
+    Run both the raw and science timeseries through check_cdom, 
+    and write to original provided path using to_netcdf_esd
+
+    Parameters
+    ----------
+    ds_paths : dict
+        A dictionary with at least the nc file paths:
+        - 'outname_tssci': path to the science timeseries dataset
+        - 'outname_tsraw': path to the raw timeseries dataset
+
+    Returns
+    -------
+    Tuple (ds_raw, ds_sci) with CDOM-checked datasets 
+    """
+
+    _log.info("Doing CDOM correction check for raw dataset")
+    ds_raw = xr.load_dataset(ds_paths["outname_tsraw"])
+    ds_raw = check_cdom(ds_raw)
+    to_netcdf_esd(ds_raw, ds_paths["outname_tsraw"])
+
+    _log.info("Doing CDOM correction check for science dataset")
+    ds_sci = xr.load_dataset(ds_paths["outname_tssci"])
+    ds_sci = check_cdom(ds_sci)
+    to_netcdf_esd(ds_sci, ds_paths["outname_tssci"])
+
+    return ds_raw, ds_sci
+
+
+def calc_flbbcd(
+    ds: xr.Dataset, 
+    chlor_calib: tuple,
+    cdom_calib: tuple,
+    bb_calib: tuple, 
+) -> xr.Dataset:
+    """
+    Calculate corrected FLBBCD output values 
+
+    In some ESD glider deployments, 
+    the cwo (clean water offset) and sf (scaling factor) values
+    for FLBBCD variables were not properly set in the slocum autoexec files. 
+    Thus, the output values for 'chlorophyll', 'cdom', and 'backscatter_700'
+    need to be recalculated using the raw signal and correct cwo/sf values. 
+    All three values are calculated using the same formula:
+    output value = sf * (signal value - cwo).
+
+    ds_raw: `xarray.Dataset`
+        raw glider timeseries
+    ds_sci: `xarray.Dataset`
+        science glider timeseries        
+    {var}_calib: tuple: (cwo, sf)
+        Tuple of variable calibration values: clean water offset, and scaling factor
+        Same structure for each of chlorophyll, cdom, and backscatter.
+        These values come from the calibration sheet
+
+    Returns
+    -------
+    xarray.Dataset
+        Dataset with corrected FLBBCD output values and comments
+    """
+
+    _log.info("Recalculating FLBBCD output values")
+    msg = " Recalculated using signal values and esdglider.calc_flbbcd"
+
+    if all(v in ds.data_vars for v in ["chlorophyll", "chlorophyll_signal"]):
+        _log.debug("Recalculating chlorophyll")
+        ds["chlorophyll"] = chlor_calib[2] * (ds["chlorophyll_signal"] - chlor_calib[1])
+        ds["chlorophyll"].attrs["comment"] += msg
+
+    if all(v in ds.data_vars for v in ["cdom", "cdom_signal"]):
+        _log.debug("Recalculating cdom")
+        ds["cdom"] = cdom_calib[2] * (ds["cdom_signal"] - cdom_calib[1])
+        ds["cdom"].attrs["comment"] += msg
+
+    if all(v in ds.data_vars for v in ["backscatter_700", "backscatter_700_signal"]):
+        _log.debug("Recalculating backscatter_700")
+        ds["backscatter_700"] = bb_calib[2] * (ds["backscatter_700_signal"] - bb_calib[1])
+        ds["backscatter_700"].attrs["comment"] += msg
+
+    return ds
+
+
+def calc_flbbcd_esd(
+    ds_raw: xr.Dataset, 
+    ds_sci: xr.Dataset, 
+    chlor_calib: tuple,
+    cdom_calib: tuple,
+    bb_calib: tuple, 
+) -> tuple:
+    """
+    ESD-specific wrapper around calc_flbbcd. 
+
+    Rather than calculating corrected FLBBCD output values 
+    for the science timeseries from interpolated signal values, 
+    calculate corrected FLBBCD output values using the raw dataset, 
+    and then interpolate these values to the science timeseries.
+
+    Parameters
+    ----------
+    ds_raw: `xarray.Dataset`
+        raw glider timeseries
+    ds_sci: `xarray.Dataset`
+        science glider timeseries        
+    {var}_calib: tuple: (cwo, sf)
+        See `calc_flbbcd`
+
+    Returns
+    -------
+    Tuple (ds_raw, ds_sci) with corrected FLBBCD output values 
+    """
+
+    # Calculate corrected raw values
+    ds_raw = calc_flbbcd(ds_raw, chlor_calib, cdom_calib, bb_calib)
+
+    # Interpolate raw values for science timeseries. Add comments
+
+    return ds_raw, ds_sci
