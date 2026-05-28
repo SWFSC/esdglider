@@ -14,8 +14,7 @@ Then loop through the deployments, and look at GCP to see what output
 files have been created. Add this info to the yaml.
 Write this yaml top the glider-lab-manual repo to be displayed
 
-This script will normally have to be run
-from a local computer to access the database
+This script has to be run from a location with database access
 
 'db/glider-db-prod.txt' is the database URL, used to create the
 sqlalchemy engine. It should not be committed to GitHub.
@@ -65,6 +64,7 @@ if __name__ == "__main__":
             cals = cals[cals_columns].sort_values(["Component", "Serial_Num", "Calibration_Date"])
             cals["Calibration_Date"] = cals["Calibration_Date"].dt.strftime("%Y-%m-%d")
             cals["Calibration_Created_Dt"] = cals["Calibration_Created_Dt"].dt.strftime("%Y-%m-%d %H:%M:%S")
+            cals = cals.fillna("")
             write_to_sheet(sh, "Devices-Calibrations", cals)
 
 

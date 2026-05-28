@@ -35,7 +35,7 @@ pip install -e esdglider
 You can then use esdglider functions in your scripts. For instance:
 
 ```python
-from esdglider.glider import binary_to_nc
+from esdglider.slocum import binary_to_nc
 ```
 
 For developers, the pyproject.toml and setup.py files specify for pip how to install the esdglider package. See [here](https://packaging.python.org/en/latest/tutorials/packaging-projects/) and [here](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) for more info.
@@ -58,9 +58,10 @@ dependencies:
 * **data**: folder for data included in the package
 * **config**: functions for creating ESD metadata files, typically by interacting with the Glider & Mooring database
 * **gcp**: functions specific to interacting with ESD's Google Cloud Platform (GCP) project
-* **glider**: processing functions for slocum glider data, for instance generating slocum glider data paths or writing NetCDF files
 * **imagery**: functions for generating metadata for image processing
+* **paths**: functions for generating file and directory paths, based on the ESD glider data management plan
 * **rt**: functions for handling real-time glider data, including scraping data from the SFMC or doing real-time data file management
+* **slocum**: processing functions for slocum glider data, for instance generating slocum glider data paths or writing NetCDF files
 * **utils**: utility functions for glider data shenanigans
 
 ## Notebooks
