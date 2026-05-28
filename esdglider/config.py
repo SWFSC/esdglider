@@ -10,8 +10,8 @@ from google.cloud import storage
 
 # from esdglider.acoustics import get_path_acoustics_deployment
 from esdglider.gcp import check_gcs_file_exists, check_gcs_directory_exists
-from esdglider.paths import get_path_glider_deployment
-from esdglider.imagery import get_path_imagery_deployment
+from esdglider.paths import get_path_glider, get_path_imagery 
+# from esdglider.imagery import get_path_imagery_deployment
 from esdglider.utils import split_deployment, year_path, dataframe_col_reorder
 
 _log = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ camera_models = {
     "glidercam": "Glidercam",
     "shadowgraph-narrow": "Shadowgraph camera wa-solo-sg-11cm",
     "shadowgraph-wide": "Shadowgraph camera wa-solo-sg-14cm",
+    "shadowgraph-v3": "Shadowgraph-v3",
 }
 
 # Calibration type name from Calibration_Type table
@@ -260,9 +261,9 @@ def make_deployment_yaml(
 def make_website_yaml(
         df: pd.DataFrame, 
         outdir: str, 
-        glider_bucket_name: str = "amlr-gliders-deployments-dev", 
-        acoustics_bucket_name: str = "amlr-gliders-acoustics-dev", 
-        imagery_bucket_name: str = "amlr-gliders-imagery-raw-dev",
+        glider_data_out_bucket_name: str, 
+        aa_in_bucket_name: str, 
+        imagery_in_bucket_name: str, 
 ):
     """
     Scrape deployment data from the database,
@@ -271,16 +272,16 @@ def make_website_yaml(
     Parameters
     ----------
     df : pandas DataFrame
-        Output of config.make_deployment_table
+        Intended to be output of config.make_deployment_table
     outdir : str
         Directory to which to write the website yaml. The full output file
         path will be `os.path.join(outdir, "esd-gliders.yml")`
-    glider_bucket_name : str
-        Name of the glider data bucket
-    acoustics_bucket_name : str
-        Name of the glider active acoustics data bucket
-    imagery_bucket_name : str
-        Name of the glider raw imagery bucket
+    glider_data_out_bucket_name : str
+        Name of the glider data out bucket
+    aa_in_bucket_name : str
+        Name of the glider active acoustics data in bucket
+    imagery_in_bucket_name : str
+        Name of the glider raw imagery (data in) bucket
 
     Returns
     -------
@@ -321,9 +322,9 @@ def make_website_yaml(
 
     _log.debug("Creating connections to GCS buckets")
     storage_client = storage.Client()
-    glider_bucket = storage_client.bucket(glider_bucket_name)
-    acoustics_bucket = storage_client.bucket(acoustics_bucket_name)
-    imagery_bucket = storage_client.bucket(imagery_bucket_name)
+    glider_data_out_bucket = storage_client.bucket(glider_data_out_bucket_name)
+    # aa_in_bucket = storage_client.bucket(aa_in_bucket_name)
+    imagery_in_bucket = storage_client.bucket(imagery_in_bucket_name)
 
     def href_url(url_pre, bucket_name, path, text):
         out = f"<a href='{url_pre}/{bucket_name}/{path}'>{text}</a>"
@@ -333,58 +334,59 @@ def make_website_yaml(
         # Prep
         deployment_name = d["Deployment_Name"]
         _log.info("Working on deployment %s", deployment_name)
-        project = d["Project"]
-        year = year_path(project, deployment_name)
+        # project = d["Project"]
+        year = year_path(deployment_name)
         mode = "delayed"
-        path_pre = os.path.join(project, year, deployment_name).replace("\\", "/")
+        path_pre = os.path.join(year, deployment_name).replace("\\", "/")
         # paths_acoustics = get_path_acoustics_deployment(path_pre, deployment_name, mode)
-        paths_glider = get_path_glider_deployment(path_pre, deployment_name, mode)
-        paths_imagery = get_path_imagery_deployment(path_pre, deployment_name)
+        glider_paths = get_path_glider(deployment_name, mode)
+        # aa_paths = get_path_aa(deployment_name)
+        img_paths = get_path_imagery(deployment_name)
         _log.debug("url/path prefix %s", path_pre)
         
-        ### Files
-        # Check for science timeseries
-        tssci_file = paths_glider["tsscipath"].replace("\\", "/")
-        if check_gcs_file_exists(glider_bucket, tssci_file):
-            url = href_url(auth_url, glider_bucket_name, tssci_file, "timeseries-sci")
-            df_foryaml.loc[i, "gcp_link_tssci"] = url  # type: ignore
-
-        # Check for gr5 dataset
-        gr5_file = paths_glider["gr5path"].replace("\\", "/")
-        if check_gcs_file_exists(glider_bucket, gr5_file):
-            url = href_url(auth_url, glider_bucket_name, gr5_file, "gridded-5m")
-            df_foryaml.loc[i, "gcp_link_gr5"] = url  # type: ignore
-
-        # Check for acoustics NetCDF (hold)
-
-        # Check for imagery metadata CSV
-        imgcsv_file = paths_imagery["imgcsv"].replace("\\", "/")
-        if check_gcs_file_exists(imagery_bucket, imgcsv_file):
-            url = href_url(auth_url, imagery_bucket_name, imgcsv_file, "imagery-csv")
-            df_foryaml.loc[i, "gcp_link_imgcsv"] = url  # type: ignore
-
-
-        ### Directories
-        # Check for plots
-        plots_path = paths_glider["plotdir"].replace("\\", "/")
-        if check_gcs_directory_exists(glider_bucket, plots_path):
-            url = href_url(console_url, glider_bucket_name, plots_path, "plots")
-            df_foryaml.loc[i, "gcp_dir_link_plots"] = url  # type: ignore
-
-        # Check for NetCDF files timeseries
-        procl1_path = paths_glider["procl1dir"].replace("\\", "/")
-        if check_gcs_directory_exists(glider_bucket, procl1_path):
-            url = href_url(console_url, glider_bucket_name, procl1_path, "glider")
+        ### Check for File and Directories
+        # Check for general outdir
+        outdir_path = glider_paths["outdir"].replace("\\", "/")
+        if check_gcs_directory_exists(glider_data_out_bucket, outdir_path):
+            url = href_url(console_url, glider_data_out_bucket_name, outdir_path, "glider")
             df_foryaml.loc[i, "gcp_dir_link_glider"] = url  # type: ignore
 
-        # Check for acoustics
-        if check_gcs_directory_exists(acoustics_bucket, path_pre):
-            url = href_url(console_url, acoustics_bucket_name, path_pre, "acoustics")
-            df_foryaml.loc[i, "gcp_dir_link_acoustics"] = url  # type: ignore
+            ## If outdir exists, check for various subdirs
+            # Check for plots
+            plots_path = glider_paths["plotdir"].replace("\\", "/")
+            if check_gcs_directory_exists(glider_data_out_bucket, plots_path):
+                url = href_url(console_url, glider_data_out_bucket_name, plots_path, "plots")
+                df_foryaml.loc[i, "gcp_dir_link_plots"] = url  # type: ignore
+
+            # Check for science timeseries
+            tssci_file = glider_paths["tsscipath"].replace("\\", "/")
+            if check_gcs_file_exists(glider_data_out_bucket, tssci_file):
+                url = href_url(auth_url, glider_data_out_bucket_name, tssci_file, "timeseries-sci")
+                df_foryaml.loc[i, "gcp_link_tssci"] = url  # type: ignore
+
+            # Check for gr5 dataset
+            gr5_file = glider_paths["gr5path"].replace("\\", "/")
+            if check_gcs_file_exists(glider_data_out_bucket, gr5_file):
+                url = href_url(auth_url, glider_data_out_bucket_name, gr5_file, "gridded-5m")
+                df_foryaml.loc[i, "gcp_link_gr5"] = url  # type: ignore
+
+            # Check for acoustics NetCDF (hold)
+
+            # Check for imagery metadata CSV
+            imgcsv_file = img_paths["imgcsv"].replace("\\", "/")
+            if check_gcs_file_exists(imagery_in_bucket, imgcsv_file):
+                url = href_url(auth_url, imagery_in_bucket_name, imgcsv_file, "imagery-csv")
+                df_foryaml.loc[i, "gcp_link_imgcsv"] = url  # type: ignore
+
+        # # Check for acoustics data in
+        # if check_gcs_directory_exists(aa_in_bucket, path_pre):
+        #     url = href_url(console_url, aa_in_bucket_name, path_pre, "acoustics")
+        #     df_foryaml.loc[i, "gcp_dir_link_acoustics"] = url  # type: ignore
 
         # Check for imagery
-        if check_gcs_directory_exists(imagery_bucket, path_pre):
-            url = href_url(console_url, imagery_bucket_name, path_pre, "imagery")
+        images_path = img_paths["imagedir"].replace("\\", "/")
+        if check_gcs_directory_exists(imagery_in_bucket, images_path):
+            url = href_url(console_url, imagery_in_bucket_name, images_path, "images")
             df_foryaml.loc[i, "gcp_dir_link_imagery"] = url  # type: ignore
 
     # Write to a yaml file
@@ -460,13 +462,16 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
         gc_count = model.str.contains(camera_models["glidercam"]).sum()
         sg_n_count = model.str.contains(camera_models["shadowgraph-narrow"]).sum()
         sg_w_count = model.str.contains(camera_models["shadowgraph-wide"]).sum()
-        if gc_count == 1 and sg_n_count == 0 and sg_w_count == 0:
+        sg_v3_count = model.str.contains(camera_models["shadowgraph-v3"]).sum()
+        if gc_count == 1 and sg_n_count == 0 and sg_w_count == 0 and sg_v3_count == 0:
             camera_str = "Glidercam"
-        elif gc_count == 0 and sg_n_count == 1 and sg_w_count == 0:
+        elif gc_count == 0 and sg_n_count == 1 and sg_w_count == 0 and sg_v3_count == 0:
             camera_str = "Shadowgraph-narrow"
-        elif gc_count == 0 and sg_n_count == 0 and sg_w_count == 1:
+        elif gc_count == 0 and sg_n_count == 0 and sg_w_count == 1 and sg_v3_count == 0:
             camera_str = "Shadowgraph-wide"
-        elif (gc_count + sg_n_count + sg_w_count) > 1:
+        elif gc_count == 0 and sg_n_count == 0 and sg_w_count == 0 and sg_v3_count == 1:
+            camera_str = "Shadowgraph-v3"
+        elif (gc_count + sg_n_count + sg_w_count + sg_v3_count) > 1:
             camera_str = "MULTIPLE"
         else:
             camera_str = "None"

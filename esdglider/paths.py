@@ -185,6 +185,7 @@ def get_path_glider(
         "rawyaml": get_path_yaml("raw"),
         "engyaml": get_path_yaml("eng"),
         "binarydir": os.path.join(glider_data_in_path, "binary", mode), 
+        "outdir": glider_data_out_path, 
     } 
 
     return out | glider_paths_data_out
@@ -227,7 +228,7 @@ def get_path_glider(
 #     }
 
 
-def get_path_acoustics(
+def get_path_aa(
         deployment_name: str, 
         mode: str, 
         acoustic_path: str | Path):

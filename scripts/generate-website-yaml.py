@@ -1,6 +1,6 @@
 import logging
 
-import gspread
+# import gspread
 import sqlalchemy
 
 import esdglider.config as config
@@ -13,8 +13,7 @@ Then loop through the deployments, and look at GCP to see what output
 files have been created. Add this info to the yaml.
 Write this yaml top the glider-lab-manual repo to be displayed
 
-This script will normally have to be run
-from a local computer to access the database
+This script has to be run from a location that can access the database
 
 'db/glider-db-prod.txt' is the database URL, used to create the
 sqlalchemy engine. It should not be committed to GitHub.
@@ -38,4 +37,10 @@ if __name__ == "__main__":
             df_depl = config.get_deployment_table(connection)
 
             # Make website yaml
-            config.make_website_yaml(df_depl, yaml_path)
+            config.make_website_yaml(
+                df=df_depl, 
+                outdir=yaml_path, 
+                glider_data_out_bucket_name="swfscesd-glider-deployments-data-out", 
+                aa_in_bucket_name="swfscesd-glider-active-acoustics-data-in", 
+                imagery_in_bucket_name="swfscesd-glider-imagery-data-in", 
+            )
