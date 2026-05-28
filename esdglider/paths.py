@@ -230,7 +230,9 @@ def get_path_glider(
 def get_path_acoustics(
         deployment_name: str, 
         mode: str, 
-        acoustic_path: str | Path):
+        acoustic_in_path: str | Path, 
+        data_out_path: str | Path = "", 
+    ) -> dict:
     """
     Return a dictionary of acoustic-related paths
     These paths follow the directory structure outlined here:
@@ -238,18 +240,15 @@ def get_path_acoustics(
 
     Parameters
     ----------
-    deployment_info : dict
-        A dictionary with the relevant deployment info. Specifically:
-        deploymentyaml : str
-            The filepath of the glider deployment yaml.
-            This file will have relevant info,
-            including deployment name (eg, amlr01-20210101) and project
-        mode : str
-            Mode of the glider data being processed.
-            Must be either 'rt', for real-time, or 'delayed
-    acoustic_path : str
-        The path to the top-level folder of the acoustic data.
-        This is intended to be the path to the mounted acoustic bucket
+    deployment_name : str
+        The name of the deployment, e.g. amlr08-20220513
+    mode : str
+        Mode of the glider data being processed.
+        Must be either 'rt', for real-time, or 'delayed
+    acoustic_in_path : str
+        The (local) path to the folder with the 'data in' (i.e., raw) acoustic data
+    data_out_path : str
+        The (local) path to the glider 'data out' folder
 
     Returns
     -------
@@ -258,17 +257,18 @@ def get_path_acoustics(
     """
         
     # Temporary, until going full pathlib
-    acoustic_path = str(acoustic_path)
+    acoustic_in_path = str(acoustic_in_path)
+    data_out_path = str(data_out_path)
 
     year = utils.year_path(deployment_name)
 
     # Check that relevant deployment path exists
-    acoustic_deployment_path = os.path.join(
-        acoustic_path,
+    acoustic_glider_in_path = os.path.join(
+        acoustic_in_path,
         year,
         deployment_name,
     )
-    _check_dir_exists(acoustic_deployment_path, "derived acoustic deployment")
+    _check_dir_exists(acoustic_glider_in_path, "derived acoustic deployment")
     # if not os.path.isdir(acoustic_deployment_path):
     #     _log.warning(f"The derived acoustic path ({acoustic_deployment_path}) does not exist")
 
@@ -278,8 +278,11 @@ def get_path_acoustics(
     #     deployment_name,
     #     mode,
     # )
-    metadir = os.path.join(acoustic_deployment_path, "metadata")
-    echoviewdir = os.path.join(metadir, "echoview")
+    # metadir = os.path.join(acoustic_deployment_path, "metadata")
+    glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
+
+    ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+    echoviewdir = os.path.join(ancillarydir, "echoview")
 
     regionspath = os.path.join(echoviewdir, f"{deployment_name}-regions.csv")
     pitchpath = os.path.join(echoviewdir, f"{deployment_name}.pitch.csv")
@@ -289,9 +292,9 @@ def get_path_acoustics(
     evrpathprefix = os.path.join(echoviewdir, deployment_name)
 
     return {
-        "rawdatadir": os.path.join(acoustic_deployment_path, "data", mode),
-        "configdir": os.path.join(acoustic_deployment_path, "config"),
-        "metadir": metadir,
+        "rawdatadir": os.path.join(acoustic_glider_in_path, "data", mode),
+        "configdir": os.path.join(acoustic_glider_in_path, "config"),
+        "ancdir": ancillarydir,
         "echoviewdir": echoviewdir,
         "regionspath": regionspath,
         "pitchpath": pitchpath,
@@ -351,12 +354,12 @@ def get_path_imagery(
     ----------
     deployment_name : str
         The name of the deployment, e.g. amlr08-20220513
-   imagery_in_path : str
+    imagery_in_path : str
         The (local) path to the folder with the 'data in' (i.e., raw) imagery
-   imagery_meta_path : str
+    imagery_meta_path : str
         The (local) path to the folder with the imagery metadata files
     data_out_path : str
-        The (local) path to the 'data out' folder
+        The (local) path to the glider 'data out' folder
 
     Returns
     -------

@@ -76,9 +76,9 @@ def regions_evr(ds: xr.Dataset, evr_file_prefix: str) -> pd.DataFrame:
     return regions_df
 
 
-def echoview_metadata(ds: xr.Dataset, paths: dict):
+def ancillary_echoview(ds: xr.Dataset, aa_paths: dict):
     """
-    Create metadata files for Echoview acoustics data processing
+    Create ancillary files for Echoview acoustics data processing
 
     Parameters
     ----------
@@ -94,16 +94,15 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
     """
 
     deployment_name = ds.attrs["deployment_name"]
-    _log.info(f"Creating echoview metadata for {deployment_name}")
+    _log.info(f"Creating echoview ancillary data files for {deployment_name}")
 
     # Prep - making paths, variables, etc used throughout
-    # path_echoview = os.path.join(paths["metadir"], "echoview")
-    path_echoview = paths["echoviewdir"]
+    path_echoview = aa_paths["echoviewdir"]
     utils.rmtree(path_echoview)
-    utils.mkdir_pass(paths["metadir"])
+    utils.mkdir_pass(aa_paths["ancdir"])
     utils.mkdir_pass(path_echoview)
     # file_echoview_pre = os.path.join(path_echoview, deployment_name)
-    _log.info(f"Will write echoview metadata files to {path_echoview}")
+    _log.info(f"Will write echoview ancillary data files to {path_echoview}")
 
     ds_dt = ds.time.values.astype("datetime64[s]").astype(datetime.datetime)
     mdy_str = [i.strftime("%m/%d/%Y") for i in ds_dt]
@@ -111,13 +110,13 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
 
     # Regions
     _log.info("Processing regions files")
-    regions_df = regions_evr(ds, paths["evrpathprefix"])
+    regions_df = regions_evr(ds, aa_paths["evrpathprefix"])
     # regions_df_path = f"{file_echoview_pre}-regions.csv"
-    regions_csv = paths["regionspath"]
+    regions_csv = aa_paths["regionspath"]
     _log.info("Writing regions CSV to %s", regions_csv)
     regions_df.to_csv(regions_csv, index=False)
 
-    _log.info("Other echoview metadata files")
+    _log.info("Other echoview ancillary data files")
     # Pitch
     _log.debug("pitch")
     pitch_df = pd.DataFrame(
@@ -128,7 +127,7 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
         },
     )
     # pitch_df.to_csv(f"{file_echoview_pre}.pitch.csv", index=False)
-    pitch_df.to_csv(paths["pitchpath"], index=False)
+    pitch_df.to_csv(aa_paths["pitchpath"], index=False)
 
     # Roll
     _log.debug("roll")
@@ -140,7 +139,7 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
         },
     )
     # roll_df.to_csv(f"{file_echoview_pre}.roll.csv", index=False)
-    roll_df.to_csv(paths["rollpath"], index=False)
+    roll_df.to_csv(aa_paths["rollpath"], index=False)
 
     # GPS
     _log.debug("gps")
@@ -152,7 +151,7 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
             "Longitude": ds["longitude"].values,
         },
     )
-    gps_df.to_csv(paths["gpspath"], index=False)
+    gps_df.to_csv(aa_paths["gpspath"], index=False)
     # gps_df.to_csv(f"{file_echoview_pre}.gps.csv", index=False)
 
     # Depth
@@ -165,10 +164,10 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
             "repthree": 3,
         },
     )
-    depth_file = paths["depthpath"]  # f"{file_echoview_pre}.depth.evl"
+    depth_file = aa_paths["depthpath"]  # f"{file_echoview_pre}.depth.evl"
     depth_df.to_csv(depth_file, index=False, header=False, sep="\t")
     utils.line_prepender(depth_file, str(len(depth_df.index)))
     utils.line_prepender(depth_file, "EVBD 3 8.0.73.30735")
 
     # Wrap up
-    _log.info("Finished writing echoview metadata files")
+    _log.info("Finished writing echoview ancillary data files")
