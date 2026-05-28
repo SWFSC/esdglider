@@ -1,10 +1,10 @@
 import logging
 import os
-import pathlib
+from pathlib import Path
 
 from dbdreader.decompress import decompress_file, is_compressed
 
-from esdglider import gcp, glider
+from esdglider import gcp, paths
 
 """
 This script is intended to help users quickly generate decompressed
@@ -12,7 +12,16 @@ binary files, as a light wrapper around dbdreader functions.
 """
 
 deployment_name = "george-20240907"
-config_path = "/home/sam_woodman_noaa_gov/glider-lab/deployment-configs"
+mode = "delayed"
+
+home = Path.home()
+
+mnt_path = home / "gcs-mnt"
+config_path = home / "glider-lab" / "deployment-configs"
+cac_path = home / "standard-glider-files" / "Cache"
+
+data_in_bucket_name = "swfscesd-glider-deployments-data-in"
+data_in_path = mnt_path / data_in_bucket_name
 
 deployment_info = {
     "deployment_name": deployment_name,
@@ -22,26 +31,32 @@ deployment_info = {
 log_file_name = f"{deployment_name}-delayed-decompress.log"
 
 if __name__ == "__main__":
-    bucket_name = "amlr-gliders-deployments-dev"
-    deployments_path = os.path.join("/home/sam_woodman_noaa_gov", bucket_name)
-    gcp.gcs_mount_bucket(bucket_name, deployments_path, ro=False)
+    # bucket_name = "amlr-gliders-deployments-dev"
+    # deployments_path = os.path.join("/home/sam_woodman_noaa_gov", bucket_name)
+    gcp.gcs_mount_bucket(data_in_bucket_name, data_in_path, ro=True)
 
-    paths = glider.get_path_glider(deployment_info, deployments_path)
+    glider_paths = paths.get_path_glider(
+        deployment_name = deployment_name, 
+        mode = mode, 
+        config_path = config_path, 
+        data_in_path = data_in_path, 
+        cac_path = cac_path, 
+    )
 
     logging.basicConfig(
-        filename=os.path.join(paths["logdir"], log_file_name),
-        filemode="w",
+        # filename=os.path.join(glider_paths["logdir"], log_file_name),
+        # filemode="w",
         format="%(module)s:%(asctime)s:%(levelname)s:%(message)s [line %(lineno)d]",
         level=logging.INFO,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    binarydir = paths["binarydir"]
+    binarydir = glider_paths["binarydir"]
     binarydir_files = os.listdir(binarydir)
     logging.info("There are %s total files in %s", len(binarydir_files), binarydir)
 
-    dcd_files = list(pathlib.Path(binarydir).glob("*.dcd"))
-    ecd_files = list(pathlib.Path(binarydir).glob("*.ecd"))
+    dcd_files = list(Path(binarydir).glob("*.dcd"))
+    ecd_files = list(Path(binarydir).glob("*.ecd"))
     logging.info("There are %s dcd files", len(dcd_files))
     logging.info("There are %s ecd files", len(ecd_files))
 

@@ -5,10 +5,12 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+import ast
 import gsw
 import numpy as np
 import pandas as pd
 import pytz
+import statistics
 import xarray as xr
 import yaml
 
@@ -19,6 +21,7 @@ _log = logging.getLogger(__name__)
 Utilities, mostly specific to ESD needs and ways of processing
 """
 
+# Logistical utilities ########################################################
 
 # For IOOS-compliant encoding when writing to NetCDF
 def to_netcdf_esd(ds: xr.Dataset, outname: str):
@@ -568,18 +571,14 @@ def split_deployment(deployment_name):
     return deployment_split
 
 
-def year_path(project, deployment_name):
+def year_path(deployment_name):
     """
     From the glider project and deployment name (both strings),
     generate and return the year string to use in file paths
     for ESD glider deployments
 
-    For the FREEBYRD project, this will be the year of the second
-    half of the Antarctic season. For instance, hypothetical
-    FREEBYRD deployments amlr01-20181231 and amlr01-20190101 are both
-    during season '2018-19', and thus would return '2019'.
-
-    For all other projects, the value returned is simply the year.
+    Given Prod directory structure changes, for all deployments now
+    the value returned is simply the year.
     For example, ringo-20181231 would return 2018,
     and ringo-20190101 would return 2019
     """
@@ -588,14 +587,23 @@ def year_path(project, deployment_name):
     deployment_date = deployment_split[1]
     year = deployment_date[0:4]
 
-    if project == "FREEBYRD":
-        month = deployment_date[4:6]
-        if int(month) <= 7:
-            year = f"{int(year)}"
-        else:
-            year = f"{int(year) + 1}"
+    # if project == "FREEBYRD":
+    #     month = deployment_date[4:6]
+    #     if int(month) <= 7:
+    #         year = f"{int(year)}"
+    #     else:
+    #         year = f"{int(year) + 1}"
 
     return year
+
+
+# def _parse_deployment_info(delpoyment_info: dict):
+#     """
+#     """
+#     deploymentyaml = deployment_info["deploymentyaml"]
+#     mode = deployment_info["mode"]
+
+#     return deploymentyaml, mode
 
 
 def mkdir_pass(dir):
@@ -1020,6 +1028,7 @@ def check_profiles(df: pd.DataFrame) -> pd.DataFrame:
             ", ".join([str(i) for i in tas_check.profile_index.values]),
         )
 
+    _log.info("Completed profile checks")
     return df
 
 
@@ -1076,11 +1085,64 @@ def check_depth(x: xr.DataArray, y: xr.DataArray, depth_ok=5) -> xr.Dataset:
             y.rename("depth_ctd"),
             x_interp.rename("depth_measured_interp"),
             depth_diff.rename("depth_diff"),
-            depth_diff_abs.rename("depth_diff_abs"),
+            depth_diff_abs.rename("depth_diff_abs"),            
         ],
+        join="outer", 
     )
 
+    _log.info("Completed depth checks (measured vs CTD)")
     return ds
+
+
+def check_string_length(x: list) -> list:
+    """
+    Check that all strings in the given list are the same length
+
+    Returns a list of the elements of 
+    """
+    diff_files = []
+    x_nchar = [len(i) for i in x]
+    x_set = set(x_nchar)
+    if not len(x_set) == 1:
+        # What are the different string lengths, and how often do they occur
+        _log.warning(
+            "The given strings are not all the same length, "
+            + "and thus shuld be checked carefully. "
+            + "String length | number of strings with that length:"
+        )
+        big_count = 0
+        x_counts = collections.Counter(x_nchar)
+        for item, count in x_counts.items():
+            if count > 20:
+                big_count+=1
+            _log.warning(f"{item:<5} | {count:<8}")
+
+        # Get strings with different lengths
+        nchar_mode = statistics.mode(x_nchar)
+        diff_idx = [i for i, f in enumerate(x) if len(f) != nchar_mode]
+        diff_files = [x[j] for j in diff_idx]
+            
+        # Outputs for the user
+        if big_count > 1:
+            _log.warning(
+                "There are too many string to print all. "
+                + "Printing the first 10 for each string length"
+            )
+            for j in x_set:
+                _log.warning("Some file names of string length %s:", j)
+                j_idx = [i for i, f in enumerate(x) if len(f) == j]
+                j_files = [x[j] for j in j_idx[:10]]
+                for f in j_files:
+                    logging.warning("string: %s", f)
+        else:
+            # Print all the file names with different lengths
+            _log.warning(
+                "The following strings are of a different length: %s",
+                ", ".join(diff_files),
+            )
+        
+    return diff_files
+    
 
 
 def get_utc_offset_integer(timezone_name, dt_object, is_dst=None):
@@ -1125,7 +1187,9 @@ def get_sunrise_sunset(time, lat, lon):
     The glidertools function calculates the local sunrise/sunset of the
     glider location using the Skyfield package.
     However, it does not account for the local time, and thus the
-    joined sunrise/sunset times are often not right for the given local day
+    joined sunrise/sunset times are often not right for the given local day.
+    Would like to submit this as a PR to GLiderTools, but have
+    not hasd the bandwidth.
 
     Currently, this function groups the timestamps by local day,
     and calculates the mean lat/lon. These are passed to the skyfield package
@@ -1208,8 +1272,8 @@ def get_sunrise_sunset(time, lat, lon):
     # Calculate a column for local day
     df["time_local"] = df["time"].dt.tz_convert(tz.item())
     df["day_local"] = (
-        df["time_local"].dt.tz_localize(None).values.astype("datetime64[D]")
-    )
+        df["time_local"].dt.tz_localize(None).values.astype("datetime64[D]") # type: ignore
+    ) 
 
     # Group by local day
     grp_avg = (
@@ -1276,3 +1340,245 @@ def get_sunrise_sunset(time, lat, lon):
     )
 
     return sunrise_local, sunset_local, time_local
+
+
+def check_cdom(ds: xr.Dataset) -> xr.Dataset:
+    """
+    Check cdom values. Specifcally:
+        1) Remove values collected with instrument serviced between 
+            January 2021 and July 2023
+        2) Apply Reference Adjustment Factor (RAF) of 5.62 to the CDOM data, 
+            if instrument serviced before January 2023
+
+    If either case, update metadata: 
+        - comment within instrument_flbbcd attribute
+        - cdom comment attribute
+
+    Parameters
+    ----------
+    ds: `xarray.Dataset`
+        processed glider data; expected to be science timeseries
+
+    Returns
+    -------
+        dataset, corrected as necessary
+    """
+
+    _log.info("Starting CDOM correction check")
+    if "instrument_flbbcd" in ds.attrs:
+        # Get calibration date
+        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
+        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
+        _log.debug("instrument_flbbcd calibration date %s", 
+                   cdate.strftime("%Y-%m-%d"))
+
+        # Check for out-of-tolerance         
+        if datetime(2021, 1, 1) <= cdate <= datetime(2023, 7, 31):
+            cdom_oot_message = (
+                " Per Sea-Bird Scientific notice 'Out-of-tolerance UV LED', " 
+                + "these CDOM data were irretrievable, and have been removed"
+            )
+            _log.info(
+                "Based on instrument_flbbcd calibration date, "
+                + "CDOM data is irretrievable. Removing"
+            )
+
+            ds['cdom'].values[:] = np.nan
+            ds["cdom"].attrs["comment"] += cdom_oot_message
+            instr_attrs["comment"] += cdom_oot_message
+            ds.attrs["instrument_flbbcd"] = str(instr_attrs)
+
+        else:
+            # If not oot, then check if Reference Adjustment Factor (RAF) needed
+            if cdate < datetime(2023, 1, 13):                
+                cdom_raf_message = (
+                    " Per Sea-Bird Scientific notice 'Incorrect CDOM values', " 
+                    + "applied Reference Adjustment Factor (RAF) of 5.62. " 
+                    + "to the data: CDOM adjusted = 5.62 * CDOM"
+                )            
+                _log.info(
+                    "Based on instrument_flbbcd calibration date, "
+                    + "need to apply RAF to CDOM data. Applying"
+                )
+                
+                ds['cdom'] = ds['cdom'] * 5.62
+                ds["cdom"].attrs["comment"] += cdom_raf_message
+                instr_attrs["comment"] += cdom_raf_message
+                ds.attrs["instrument_flbbcd"] = str(instr_attrs)
+
+            else:
+                _log.info(
+                    "instrument_flbbcd calibration date is outside of "
+                    + "the Sea-Bird correction windows, "
+                    + "and thus no values need correction"
+                )
+
+    else:
+        _log.info("No instrument_flbbcd, and thus no CDOM correction needed")
+
+    return ds
+
+
+def get_flbbcd_date(ds: xr.Dataset) -> datetime:    
+    """
+    Get the calibration date for the FLBBCD instrument, 
+    if it exists in the dataset attributes
+
+    Parameters
+    ----------
+    ds: `xarray.Dataset`
+        processed glider data; expected to be science timeseries
+
+    Returns
+    -------
+    datetime or None
+        The calibration date for the FLBBCD instrument, if it exists in the dataset attributes; otherwise, None
+    """
+    if "instrument_flbbcd" in ds.attrs:
+        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
+        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
+        return cdate
+    else:
+        return None
+
+
+def check_cdom_date(ds: xr.Dataset) -> str:
+    """
+    """
+    if "instrument_flbbcd" in ds.attrs:
+        # Get calibration date
+        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
+        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
+        _log.debug("instrument_flbbcd calibration date %s", 
+                   cdate.strftime("%Y-%m-%d"))
+
+        # Check for out-of-tolerance         
+        if datetime(2021, 1, 1) <= cdate <= datetime(2023, 7, 31):
+            return "oot"
+        if cdate < datetime(2023, 1, 13):
+            return "raf"
+
+    else:
+        return "none"
+
+
+def check_cdom_esd(ds_paths: dict) -> tuple:
+    """
+    ESD-specific wrapper around check_cdom
+
+    Run both the raw and science timeseries through check_cdom, 
+    and write to original provided path using to_netcdf_esd
+
+    Parameters
+    ----------
+    ds_paths : dict
+        A dictionary with at least the nc file paths:
+        - 'outname_tssci': path to the science timeseries dataset
+        - 'outname_tsraw': path to the raw timeseries dataset
+
+    Returns
+    -------
+    Tuple (ds_raw, ds_sci) with CDOM-checked datasets 
+    """
+
+    _log.info("Doing CDOM correction check for raw dataset")
+    ds_raw = xr.load_dataset(ds_paths["outname_tsraw"])
+    ds_raw = check_cdom(ds_raw)
+    to_netcdf_esd(ds_raw, ds_paths["outname_tsraw"])
+
+    _log.info("Doing CDOM correction check for science dataset")
+    ds_sci = xr.load_dataset(ds_paths["outname_tssci"])
+    ds_sci = check_cdom(ds_sci)
+    to_netcdf_esd(ds_sci, ds_paths["outname_tssci"])
+
+    return ds_raw, ds_sci
+
+
+def calc_flbbcd(
+    ds: xr.Dataset, 
+    chlor_calib: tuple,
+    cdom_calib: tuple,
+    bb_calib: tuple, 
+) -> xr.Dataset:
+    """
+    Calculate corrected FLBBCD output values 
+
+    In some ESD glider deployments, 
+    the cwo (clean water offset) and sf (scaling factor) values
+    for FLBBCD variables were not properly set in the slocum autoexec files. 
+    Thus, the output values for 'chlorophyll', 'cdom', and 'backscatter_700'
+    need to be recalculated using the raw signal and correct cwo/sf values. 
+    All three values are calculated using the same formula:
+    output value = sf * (signal value - cwo).
+
+    ds_raw: `xarray.Dataset`
+        raw glider timeseries
+    ds_sci: `xarray.Dataset`
+        science glider timeseries        
+    {var}_calib: tuple: (cwo, sf)
+        Tuple of variable calibration values: clean water offset, and scaling factor
+        Same structure for each of chlorophyll, cdom, and backscatter.
+        These values come from the calibration sheet
+
+    Returns
+    -------
+    xarray.Dataset
+        Dataset with corrected FLBBCD output values and comments
+    """
+
+    _log.info("Recalculating FLBBCD output values")
+    msg = " Recalculated using signal values and esdglider.calc_flbbcd"
+
+    if all(v in ds.data_vars for v in ["chlorophyll", "chlorophyll_signal"]):
+        _log.debug("Recalculating chlorophyll")
+        ds["chlorophyll"] = chlor_calib[2] * (ds["chlorophyll_signal"] - chlor_calib[1])
+        ds["chlorophyll"].attrs["comment"] += msg
+
+    if all(v in ds.data_vars for v in ["cdom", "cdom_signal"]):
+        _log.debug("Recalculating cdom")
+        ds["cdom"] = cdom_calib[2] * (ds["cdom_signal"] - cdom_calib[1])
+        ds["cdom"].attrs["comment"] += msg
+
+    if all(v in ds.data_vars for v in ["backscatter_700", "backscatter_700_signal"]):
+        _log.debug("Recalculating backscatter_700")
+        ds["backscatter_700"] = bb_calib[2] * (ds["backscatter_700_signal"] - bb_calib[1])
+        ds["backscatter_700"].attrs["comment"] += msg
+
+    return ds
+
+
+def calc_flbbcd_esd(
+    ds_raw: xr.Dataset, 
+    ds_sci: xr.Dataset, 
+    chlor_calib: tuple,
+    cdom_calib: tuple,
+    bb_calib: tuple, 
+) -> tuple:
+    """
+    ESD-specific wrapper around calc_flbbcd. 
+
+    Rather than calculating corrected FLBBCD output values 
+    for the science timeseries from interpolated signal values, 
+    calculate corrected FLBBCD output values using the raw dataset, 
+    and then interpolate these values to the science timeseries.
+
+    Parameters
+    ----------
+    ds_raw: `xarray.Dataset`
+        raw glider timeseries
+    ds_sci: `xarray.Dataset`
+        science glider timeseries        
+    {var}_calib: tuple: (cwo, sf)
+        See `calc_flbbcd`
+
+    Returns
+    -------
+    Tuple (ds_raw, ds_sci) with corrected FLBBCD output values 
+    """
+
+    # Calculate corrected raw values
+    ds_raw = calc_flbbcd(ds_raw, chlor_calib, cdom_calib, bb_calib)
+
+    # Interpolate raw values for science timeseries. Add comments
+
+    return ds_raw, ds_sci

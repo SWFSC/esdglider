@@ -39,7 +39,8 @@ longitude:
 # science data parameters.
 #   NOTE: if adding new science parameters, then update plots.sci_colors
 #   NOTE: pyglider.utils.get_derived_eos_raw internally calculates:
-#   salinity, potential density, density, and potential temperature
+#     salinity, potential density, density, and potential temperature, 
+#     and thus these are not included here
 conductivity:
   source:  sci_water_cond
   long_name:    water conductivity

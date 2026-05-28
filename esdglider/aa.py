@@ -11,98 +11,6 @@ import esdglider.utils as utils
 _log = logging.getLogger(__name__)
 
 
-def get_path_acoustics_deployment(
-    deployment_path: str,
-    deployment_name: str,
-    mode: str,
-) -> dict:
-    """
-    Get deployment-specific acoustics paths.
-    Specifically, get all acoutics paths that are within
-    the given deployment folder (deployment_path)
-
-    This function is typically called by get_path_acoustics()
-    """
-
-    metadir = os.path.join(deployment_path, "metadata")
-    echoviewdir = os.path.join(metadir, "echoview")
-
-    regionspath = os.path.join(echoviewdir, f"{deployment_name}-regions.csv")
-    pitchpath = os.path.join(echoviewdir, f"{deployment_name}.pitch.csv")
-    rollpath = os.path.join(echoviewdir, f"{deployment_name}.roll.csv")
-    gpspath = os.path.join(echoviewdir, f"{deployment_name}.gps.csv")
-    depthpath = os.path.join(echoviewdir, f"{deployment_name}.depth.evl")
-    evrpathprefix = os.path.join(echoviewdir, deployment_name)
-
-    return {
-        "rawdatadir": os.path.join(deployment_path, "data", mode),
-        "configdir": os.path.join(deployment_path, "config"),
-        "metadir": metadir,
-        "echoviewdir": echoviewdir,
-        "regionspath": regionspath,
-        "pitchpath": pitchpath,
-        "rollpath": rollpath,
-        "gpspath": gpspath,
-        "depthpath": depthpath,
-        "evrpathprefix": evrpathprefix,
-    }
-
-
-def get_path_acoustics(deployment_info: dict, acoustic_path: str):
-    """
-    Return a dictionary of acoustic-related paths
-    These paths follow the directory structure outlined here:
-    https://swfsc.github.io/glider-lab-manual/content/data-management.html
-
-    Parameters
-    ----------
-    deployment_info : dict
-        A dictionary with the relevant deployment info. Specifically:
-        deploymentyaml : str
-            The filepath of the glider deployment yaml.
-            This file will have relevant info,
-            including deployment name (eg, amlr01-20210101) and project
-        mode : str
-            Mode of the glider data being processed.
-            Must be either 'rt', for real-time, or 'delayed
-    acoustic_path : str
-        The path to the top-level folder of the acoustic data.
-        This is intended to be the path to the mounted acoustic bucket
-
-    Returns
-    -------
-    dict
-        A dictionary with the relevant acoustic paths
-    """
-
-    # Extract or calculate relevant info
-    deploymentyaml = deployment_info["deploymentyaml"]
-    mode = deployment_info["mode"]
-    deployment = utils.read_deploymentyaml(deploymentyaml)
-
-    deployment_name = deployment["metadata"]["deployment_name"]
-    project = deployment["metadata"]["project"]
-    year = utils.year_path(project, deployment_name)
-
-    # Check that relevant deployment path exists
-    acoustic_deployment_path = os.path.join(
-        acoustic_path,
-        project,
-        year,
-        deployment_name,
-    )
-    if not os.path.isdir(acoustic_deployment_path):
-        raise FileNotFoundError(f"{acoustic_deployment_path} does not exist")
-
-    # Return dictionary of file paths
-    deployment_paths_out = get_path_acoustics_deployment(
-        acoustic_deployment_path,
-        deployment_name,
-        mode,
-    )
-    return deployment_paths_out
-
-
 def regions_evr(ds: xr.Dataset, evr_file_prefix: str) -> pd.DataFrame:
     """
     From the science timeseries dataset: 1) calculate dive/climb regions,
@@ -168,9 +76,9 @@ def regions_evr(ds: xr.Dataset, evr_file_prefix: str) -> pd.DataFrame:
     return regions_df
 
 
-def echoview_metadata(ds: xr.Dataset, paths: dict):
+def ancillary_echoview(ds: xr.Dataset, aa_paths: dict):
     """
-    Create metadata files for Echoview acoustics data processing
+    Create ancillary files for Echoview acoustics data processing
 
     Parameters
     ----------
@@ -186,16 +94,15 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
     """
 
     deployment_name = ds.attrs["deployment_name"]
-    _log.info(f"Creating echoview metadata for {deployment_name}")
+    _log.info(f"Creating echoview ancillary data files for {deployment_name}")
 
     # Prep - making paths, variables, etc used throughout
-    # path_echoview = os.path.join(paths["metadir"], "echoview")
-    path_echoview = paths["echoviewdir"]
+    path_echoview = aa_paths["echoviewdir"]
     utils.rmtree(path_echoview)
-    utils.mkdir_pass(paths["metadir"])
+    utils.mkdir_pass(aa_paths["ancdir"])
     utils.mkdir_pass(path_echoview)
     # file_echoview_pre = os.path.join(path_echoview, deployment_name)
-    _log.info(f"Will write echoview metadata files to {path_echoview}")
+    _log.info(f"Will write echoview ancillary data files to {path_echoview}")
 
     ds_dt = ds.time.values.astype("datetime64[s]").astype(datetime.datetime)
     mdy_str = [i.strftime("%m/%d/%Y") for i in ds_dt]
@@ -203,13 +110,13 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
 
     # Regions
     _log.info("Processing regions files")
-    regions_df = regions_evr(ds, paths["evrpathprefix"])
+    regions_df = regions_evr(ds, aa_paths["evrpathprefix"])
     # regions_df_path = f"{file_echoview_pre}-regions.csv"
-    regions_csv = paths["regionspath"]
+    regions_csv = aa_paths["regionspath"]
     _log.info("Writing regions CSV to %s", regions_csv)
     regions_df.to_csv(regions_csv, index=False)
 
-    _log.info("Other echoview metadata files")
+    _log.info("Other echoview ancillary data files")
     # Pitch
     _log.debug("pitch")
     pitch_df = pd.DataFrame(
@@ -220,7 +127,7 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
         },
     )
     # pitch_df.to_csv(f"{file_echoview_pre}.pitch.csv", index=False)
-    pitch_df.to_csv(paths["pitchpath"], index=False)
+    pitch_df.to_csv(aa_paths["pitchpath"], index=False)
 
     # Roll
     _log.debug("roll")
@@ -232,7 +139,7 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
         },
     )
     # roll_df.to_csv(f"{file_echoview_pre}.roll.csv", index=False)
-    roll_df.to_csv(paths["rollpath"], index=False)
+    roll_df.to_csv(aa_paths["rollpath"], index=False)
 
     # GPS
     _log.debug("gps")
@@ -244,7 +151,7 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
             "Longitude": ds["longitude"].values,
         },
     )
-    gps_df.to_csv(paths["gpspath"], index=False)
+    gps_df.to_csv(aa_paths["gpspath"], index=False)
     # gps_df.to_csv(f"{file_echoview_pre}.gps.csv", index=False)
 
     # Depth
@@ -257,10 +164,10 @@ def echoview_metadata(ds: xr.Dataset, paths: dict):
             "repthree": 3,
         },
     )
-    depth_file = paths["depthpath"]  # f"{file_echoview_pre}.depth.evl"
+    depth_file = aa_paths["depthpath"]  # f"{file_echoview_pre}.depth.evl"
     depth_df.to_csv(depth_file, index=False, header=False, sep="\t")
     utils.line_prepender(depth_file, str(len(depth_df.index)))
     utils.line_prepender(depth_file, "EVBD 3 8.0.73.30735")
 
     # Wrap up
-    _log.info("Finished writing echoview metadata files")
+    _log.info("Finished writing echoview ancillary data files")

@@ -5,6 +5,19 @@ All notable changes to the esdglider package will be documented in this file. Se
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+- Changed the name of the module `glider` to `slocum`, to refect that this module is specific to slocum data
+- Changed the name of the module `acoustics` to `aa`, to refect that this module is specific to active acoustic data
+- Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD prod directory structure. 
+- Changed assorted functions to take in the deployment name and mode directly, rather than a `deployment_info` dictionary
+- Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
+    - Added functions to the `imagery` module and a script (`extract-image-metadata.py`) for extracting EXIF metadata from the imagery files, and writing these to the metadata bucket
+    - Removed `solocam_img_meta`, and added `solocam_dt_from_meta` to the `imagery` module for formatting the image datatimes
+    - Added `utils.check_string_length`, for checking that all strings in a list (e.g., solocam image file names) are the same length, and returning useful warning logs if not
+    - Changed `imagery.imagery_timeseries` to use `solocam_dt_from_meta` and `check_string_length`
+- Changed `gcp` mount and unmount functions to capture gcsfuse output and send to the logger
+
 ## [0.4.0] - 2026-04-17
 
 - `esdglider` currently relies on the [smwoodman pyglider fork](https://github.com/smwoodman/pyglider). A PR is currently open [here](https://github.com/c-proof/pyglider/pull/227)
@@ -24,7 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed `binary_to_raw_timeseries` to only keep distance_over_ground values where latitude and longitude are not nan, to be consistent with depth_ctd
 - Changed the name of the function `glider.raw_to_sci_timeseries` to `glider.raw_to_sci_timeseries`, to be more consistent with `esdglider` and `pyglider`
 - Added a 'generate fleet status' python script, for updating the various tabs on the Fleet Status Google sheet with summaries from the database. 
-
 - Updating config website yaml
 
 

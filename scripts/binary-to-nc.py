@@ -5,7 +5,8 @@ import logging
 import os
 import sys
 
-import esdglider.glider as glider
+import esdglider.slocum as slocum
+import esdglider.paths as paths
 
 
 def main(args):
@@ -25,13 +26,13 @@ def main(args):
             f"{args.deployment_name}.yml",
         ),
     }
-    paths = glider.get_path_glider(deployment_info, args.deployments_path)
+    paths_glider = paths.get_path_glider(deployment_info, args.deployments_path)
 
     file_info = f"https://github.com/SWFSC/glider-lab: {os.path.basename(__file__)}"
 
-    glider.binary_to_nc(
+    slocum.binary_to_nc(
         deployment_info=deployment_info,
-        paths=paths,
+        paths_glider=paths_glider,
         write_raw=args.write_timeseries,
         write_timeseries=args.write_timeseries,
         write_gridded=args.write_gridded,

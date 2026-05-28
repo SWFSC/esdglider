@@ -13,9 +13,9 @@ from a local computer to access the database
 sqlalchemy engine. It should not be committed to GitHub.
 """
 
-deployment_name = "calanus-20250617"
-# path_config = "C:/Users/sam.woodman/Downloads"
-path_config = "C:/SMW/Gliders_Moorings/Gliders/glider-lab/deployment-configs"
+deployment_name = "calanus-20260403"
+path_config = "C:/Users/sam.woodman/Downloads"
+# path_config = "C:/Users/sam.woodman/Documents/GitHub/glider-lab/deployment-configs"
 
 if __name__ == "__main__":
     logging.basicConfig(

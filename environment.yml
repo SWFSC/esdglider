@@ -13,11 +13,13 @@ dependencies:
   - SQLAlchemy
   - pyodbc
   - numpy
-  - pandas
+  - pandas=3.0
   - xarray
   - scipy
   - matplotlib
   - pyyaml
+  - pytz
+  - pillow=12
 
   - GliderTools
   - cmocean
