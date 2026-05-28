@@ -231,7 +231,7 @@ def get_path_glider(
 def get_path_aa(
         deployment_name: str, 
         mode: str, 
-        acoustic_in_path: str | Path, 
+        aa_in_path: str | Path, 
         data_out_path: str | Path = "", 
     ) -> dict:
     """
@@ -246,7 +246,7 @@ def get_path_aa(
     mode : str
         Mode of the glider data being processed.
         Must be either 'rt', for real-time, or 'delayed
-    acoustic_in_path : str
+    aa_in_path : str
         The (local) path to the folder with the 'data in' (i.e., raw) acoustic data
     data_out_path : str
         The (local) path to the glider 'data out' folder
@@ -258,18 +258,18 @@ def get_path_aa(
     """
         
     # Temporary, until going full pathlib
-    acoustic_in_path = str(acoustic_in_path)
+    aa_in_path = str(aa_in_path)
     data_out_path = str(data_out_path)
 
     year = utils.year_path(deployment_name)
 
     # Check that relevant deployment path exists
-    acoustic_glider_in_path = os.path.join(
-        acoustic_in_path,
+    aa_glider_in_path = os.path.join(
+        aa_in_path,
         year,
         deployment_name,
     )
-    _check_dir_exists(acoustic_glider_in_path, "derived acoustic deployment")
+    _check_dir_exists(aa_glider_in_path, "derived acoustic deployment")
     # if not os.path.isdir(acoustic_deployment_path):
     #     _log.warning(f"The derived acoustic path ({acoustic_deployment_path}) does not exist")
 
@@ -293,8 +293,8 @@ def get_path_aa(
     evrpathprefix = os.path.join(echoviewdir, deployment_name)
 
     return {
-        "rawdatadir": os.path.join(acoustic_glider_in_path, "data", mode),
-        "configdir": os.path.join(acoustic_glider_in_path, "config"),
+        "rawdatadir": os.path.join(aa_glider_in_path, "data", mode),
+        "configdir": os.path.join(aa_glider_in_path, "config"),
         "ancdir": ancillarydir,
         "echoviewdir": echoviewdir,
         "regionspath": regionspath,

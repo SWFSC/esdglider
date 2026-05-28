@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - Changed the name of the module `glider` to `slocum`, to refect that this module is specific to slocum data
+- Changed the name of the module `acoustics` to `aa`, to refect that this module is specific to active acoustic data
 - Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD prod directory structure. 
 - Changed assorted functions to take in the deployment name and mode directly, rather than a `deployment_info` dictionary
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
