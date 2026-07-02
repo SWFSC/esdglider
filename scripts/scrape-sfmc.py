@@ -4,7 +4,7 @@ import argparse
 import logging
 import sys
 
-import esdglider.rt as rt
+import esdglider.slocum.rt as rt
 
 
 def main(args):
