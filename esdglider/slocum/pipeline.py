@@ -874,9 +874,8 @@ def check_flbbcd_autoexec(
 
     
 
-def calc_flbbcd_raw_sci(
-    ds_raw: xr.Dataset, 
-    ds_sci: xr.Dataset, 
+def correct_flbbcd_raw_sci(
+    glider_paths: dict, 
     chlor_cal: tuple | None = None,
     cdom_cal: tuple | None = None,
     bb_cal: tuple | None = None,
@@ -907,6 +906,12 @@ def calc_flbbcd_raw_sci(
     Tuple (ds_raw, ds_sci) with corrected FLBBCD output values 
     """
 
+    # Read in datasets
+    outname_tsraw = glider_paths["tsrawpath"]
+    outname_tssci = glider_paths["tsscipath"]
+    ds_raw = xr.load_dataset(outname_tsraw)
+    ds_sci = xr.load_dataset(outname_tssci)
+
     # Get calibration values
     if chlor_cal is None or cdom_cal is None or bb_cal is None:
         with open(paths.get_path_flbbcd_calibrations(), "r") as fin:
@@ -929,7 +934,7 @@ def calc_flbbcd_raw_sci(
                     "No calibration values found for FLBBCD with serial number %s and calibration date %s. Exiting", 
                     sn, cdate
                 )
-                return ds_raw, ds_sci
+                return outname_tsraw, outname_tssci
 
     # Calculate corrected raw values
     ds_raw_cor = utils.calc_flbbcd(ds_raw, chlor_cal, cdom_cal, bb_cal)
@@ -954,11 +959,14 @@ def calc_flbbcd_raw_sci(
 
             # Update ds object with values and attributes
             ds_sci_cor[var].values = val_interp
-            if not ds_sci_cor[var].attrs["comment"].strip():
-                ds_sci_cor[var].attrs["comment"] = msg
-            else:
-                ds_sci_cor[var].attrs["comment"] += " " + msg
+            ds_sci_cor[var].attrs["comment"] = utils.append_string(
+                ds_sci_cor[var].attrs["comment"], msg)
 
     ds_sci_cor = utils.drop_bogus(ds_sci_cor)
 
-    return ds_raw_cor, ds_sci_cor
+    _log.info("Writing corrected raw and science timeseries to netcdf")
+    utils.to_netcdf_esd(ds_raw_cor, outname_tsraw)
+    utils.to_netcdf_esd(ds_sci_cor, outname_tssci)
+    _log.info("Done correction")
+
+    return outname_tsraw, outname_tssci

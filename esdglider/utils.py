@@ -310,6 +310,7 @@ def drop_bogus_times(
     This function is separate to allow users to drop only bogus times.
     See the function 'drop_bogus' for a description of arguments
     """
+    _log.info("Dropping bogus times")
 
     # For out of range or nan time/lat/lon, drop rows
     num_orig = len(ds.time)
@@ -362,19 +363,8 @@ def drop_bogus(
         Dataset with bogus rows rows dropped, and bogus values changed to nan
     """
 
-    # if not (ds_type in ['sci', 'eng']):
-    #     raise ValueError('ds_type must be either sci or eng')
-
-    # # For out of range or nan time/lat/lon, drop rows
-    # num_orig = len(ds.time)
-    # ds = ds.where(ds.time >= np.datetime64(min_dt), drop=True)
-    # if (num_orig - len(ds.time)) > 0:
-    #     _log.info(
-    #         f"Dropped {num_orig - len(ds.time)} times "
-    #         + f"that were either nan or before {min_dt}",
-    #     )
-
     # Drop bogus times, as specified
+    _log.info("Dropping bogus values")
     ds = drop_bogus_times(ds, min_dt, max_drop=max_drop)
 
     # Drop bogus lat/lons
@@ -1530,10 +1520,8 @@ def calc_flbbcd(
     All three values are calculated using the same formula:
     output value = sf * (signal value - cwo).
 
-    ds_raw: `xarray.Dataset`
-        raw glider timeseries
-    ds_sci: `xarray.Dataset`
-        science glider timeseries        
+    ds: `xarray.Dataset`
+        glider timeseries, likely raw timeseries. Must contain 
     {var}_calib: tuple: (cwo, sf)
         Tuple of variable calibration values: clean water offset, and scaling factor
         Same structure for each of chlorophyll, cdom, and backscatter.
@@ -1554,20 +1542,55 @@ def calc_flbbcd(
     if all(v in ds.data_vars for v in ["chlorophyll", "chlorophyll_signal"]):
         _log.debug("Recalculating chlorophyll")
         ds["chlorophyll"] = chlor_calib[1] * (ds["chlorophyll_signal"] - chlor_calib[0])
-        ds["chlorophyll"].attrs["comment"] += msg
+        ds["chlorophyll"].attrs["comment"] = append_string(
+            ds["chlorophyll"].attrs["comment"], msg)
+    else:
+        _log.warning(
+            "chlorophyll variables not present in dataset, and thus not recalculated"
+        )
 
     if all(v in ds.data_vars for v in ["cdom", "cdom_signal"]):
         _log.debug("Recalculating cdom")
         ds["cdom"] = cdom_calib[1] * (ds["cdom_signal"] - cdom_calib[0])
-        ds["cdom"].attrs["comment"] += msg
+        ds["cdom"].attrs["comment"] = append_string(
+            ds["cdom"].attrs["comment"], msg)
+    else:
+        _log.warning(
+            "cdom variables not present in dataset, and thus not recalculated"
+        )
 
     if all(v in ds.data_vars for v in ["backscatter_700", "backscatter_700_signal"]):
         _log.debug("Recalculating backscatter_700")
         ds["backscatter_700"] = bb_calib[1] * (ds["backscatter_700_signal"] - bb_calib[0])
-        ds["backscatter_700"].attrs["comment"] += msg
+        ds["backscatter_700"].attrs["comment"] = append_string(
+            ds["backscatter_700"].attrs["comment"], msg)
+    else:
+        _log.warning(
+            "backscatter_700 variables not present in dataset, and thus not recalculated"
+        )
 
     _log.info("Finished recalculating FLBBCD output values")
 
     return ds
 
 
+def append_string(text, msg):
+    """
+    Append a message to a string, with a space in between if the string is not empty
+    Parameters
+    ----------
+    text: str
+        Original string to which the message will be appended.
+    msg: str
+        Message to append to the original string.
+
+    Returns
+    -------
+    str
+        The original string with the message appended, 
+        separated by a space if the original string is not empty.
+    """
+    if not text.strip():
+        return msg
+    else:
+        return text + " " + msg
