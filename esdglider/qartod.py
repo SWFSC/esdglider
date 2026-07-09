@@ -116,16 +116,13 @@ relationships, and NetCDF encodings.
 """
 
 import logging
-
 import numpy as np
 import xarray as xr
 import yaml
 import ioos_qc
-
 from ioos_qc.config import Config
 from ioos_qc.streams import XarrayStream
 from ioos_qc.results import collect_results
-
 
 # =========================================================
 # LOGGER
@@ -133,10 +130,10 @@ from ioos_qc.results import collect_results
 
 _log = logging.getLogger(__name__)
 
-
 # =========================================================
 # QC STANDARD NAME
 # =========================================================
+
 
 def get_qc_standard_name(ds, var_name):
     """
@@ -175,27 +172,15 @@ def get_qc_standard_name(ds, var_name):
     """
 
     # GET PARENT VARIABLE STANDARD NAME
-    #
-    # Use the variable's standard_name attribute
-    # when available. If no standard_name exists,
-    # fall back to the variable name itself.
-
-    standard_name = ds[var_name].attrs.get(
-        "standard_name",
-        var_name
-    )
-
+    standard_name = ds[var_name].attrs.get("standard_name", var_name)
     # BUILD DAC-COMPLIANT QC STANDARD NAME
-    #
-    # IOOS DAC QC variables use the parent
-    # standard_name followed by "status_flag".
-
     return f"{standard_name} status_flag"
 
 
 # =========================================================
 # FIND VARIABLES WITH TIME DIMENSION
 # =========================================================
+
 
 def find_time_variables(ds):
     """
@@ -230,56 +215,32 @@ def find_time_variables(ds):
     """
 
     # INITIALIZE OUTPUT VARIABLE LIST
-
     time_variables = []
-
     # VARIABLES TO EXCLUDE FROM QARTOD PROCESSING
-    
     skip_variables = {
-
         "trajectory",
         "profile_id",
         "profile_index",
         "profile_direction",
-
         "profile_time",
         "time_uv",
-        
         "heading",
         "pitch",
-        "roll"
+        "roll",
     }
-
     # EVALUATE ALL DATA VARIABLES
-
     for var in ds.data_vars:
-
         # REQUIRE TIME DIMENSION
-        
         if "time" not in ds[var].dims:
             continue
 
-        # SKIP EXISTING QC VARIABLES
-        
-        if var.endswith("_qc"):
-            continue
-
-        # SKIP EXCLUDED VARIABLES
-        #
-        # Exclude metadata variables and redundant
-        # coordinate variables that should not
-        # receive QARTOD testing.
-
-        if var in skip_variables:
+        # SKIP EXISTING QC VARIABLES & EXCLUDED VARIABLES
+        if var.endswith("_qc") or var in skip_variables:
             continue
 
         time_variables.append(var)
 
-    # LOG SUMMARY
-    _log.info(
-        f"Found {len(time_variables)} "
-        f"time variables for QC"
-    )
+    _log.info("Found %d time variables for QC", len(time_variables))
 
     return time_variables
 
@@ -287,6 +248,7 @@ def find_time_variables(ds):
 # =========================================================
 # LOAD YAML CONFIG
 # =========================================================
+
 
 def load_qartod_config(config_file):
     """
@@ -321,30 +283,13 @@ def load_qartod_config(config_file):
     """
 
     # READ YAML CONFIGURATION FILE
-    #
-    # Read the complete contents of the QARTOD
-    # configuration file into memory.
-
     with open(config_file, "r") as f:
-
         qc_config = f.read()
 
     # PARSE YAML CONTENTS
-    #
-    # Convert the YAML text into a Python
-    # dictionary that can be used by the
-    # QARTOD processing workflow.
-
     config_dict = yaml.safe_load(qc_config)
 
-    # LOG CONFIGURATION FILE
-    #
-    # Record which configuration file was
-    # loaded for traceability and debugging.
-
-    _log.info(
-        f"Loaded QARTOD config: {config_file}"
-    )
+    _log.info("Loaded QARTOD config: %s", config_file)
 
     return config_dict
 
@@ -352,6 +297,7 @@ def load_qartod_config(config_file):
 # =========================================================
 # AUTO-ADD VARIABLES TO CONFIG
 # =========================================================
+
 
 def add_missing_variables_to_config(
     ds,
@@ -411,113 +357,75 @@ def add_missing_variables_to_config(
     """
 
     # ACCESS STREAM CONFIGURATION SECTION
-    #
-    # All variable-specific QARTOD settings are stored
-    # under the "streams" section of the configuration.
-    
     streams = config_dict["contexts"][0]["streams"]
 
     # PROCESS ALL TIME-DEPENDENT VARIABLES
-    #
-    # Only variables with a time dimension are eligible
-    # for QARTOD evaluation.
-
     for var in time_variables:
 
         # SKIP VARIABLES ALREADY DEFINED IN YAML
-        #
-        # Explicit user-defined configurations always take
-        # precedence over automatically generated defaults.
-
         if var in streams:
             continue
 
         # BUILD GROSS RANGE TEST FROM
         # VARIABLE METADATA
-
         valid_min = ds[var].attrs.get("valid_min")
         valid_max = ds[var].attrs.get("valid_max")
-
         if valid_min is not None and valid_max is not None:
 
             # CALCULATE DEFAULT FAIL RANGE
-            
             span = valid_max - valid_min
-
             fail_min = valid_min - span
             fail_max = valid_max + span
 
             _log.warning(
-                f"Variable '{var}' is not defined in the "
-                f"QARTOD configuration. Using valid_min/"
-                f"valid_max attributes to build default "
-                f"gross range thresholds."
+                "Variable '%s' is not defined in the QARTOD configuration. "
+                "Using valid_min/valid_max attributes to build default "
+                "gross range thresholds.",
+                var,
             )
 
             gross_range_config = {
-
                 "suspect_span": [
                     float(valid_min),
                     float(valid_max),
                 ],
-
                 "fail_span": [
                     float(fail_min),
                     float(fail_max),
                 ],
             }
-
         else:
 
             # FALL BACK TO PERMISSIVE THRESHOLDS
-            #
-            # If no valid_min/valid_max metadata are
-            # available, use placeholder ranges to
-            # avoid workflow failures while clearly
-            # notifying the user.
-            
             _log.warning(
-                f"Variable '{var}' is not defined in the "
-                f"QARTOD configuration and does not contain "
-                f"valid_min/valid_max attributes. Using "
-                f"placeholder thresholds."
+                "Variable '%s' is not defined in the QARTOD configuration "
+                "and does not contain valid_min/valid_max attributes. "
+                "Using placeholder thresholds.",
+                var,
             )
 
             gross_range_config = {
-
                 "suspect_span": [-9999, 9999],
-
                 "fail_span": [-1e10, 1e10],
             }
 
         # CREATE DEFAULT QARTOD CONFIGURATION
-        #
-        # Add a default gross range test and spike
-        # test for variables that do not have an
-        # explicit YAML configuration.
-
         streams[var] = {
-
             "qartod": {
-
-                "gross_range_test":
-                    gross_range_config,
-
+                "gross_range_test": gross_range_config,
                 "spike_test": {
-
                     "suspect_threshold": 5,
-
                     "fail_threshold": 10,
                 },
             }
         }
-
     return config_dict
 
 
 # =========================================================
 # BUILD IOOS_QC CONFIG
 # =========================================================
+
 
 def build_ioos_qc_config(config_dict):
     """
@@ -554,11 +462,7 @@ def build_ioos_qc_config(config_dict):
     instance rather than a raw Python dictionary.
     """
 
-    # BUILD IOOS QC CONFIGURATION OBJECT
-
     config = Config(config_dict)
-
-    # LOG SUCCESSFUL CONFIG CREATION
 
     _log.info("Built ioos_qc Config")
 
@@ -568,6 +472,7 @@ def build_ioos_qc_config(config_dict):
 # =========================================================
 # RUN QARTOD TESTS
 # =========================================================
+
 
 def run_qartod_tests(ds, config):
     """
@@ -607,13 +512,6 @@ def run_qartod_tests(ds, config):
     """
 
     # DETERMINE LATITUDE VARIABLE
-    #
-    # Support both CF-compliant coordinate names
-    # ("latitude"/"longitude") and shortened
-    # coordinate names ("lat"/"lon").
-    #
-    # If neither exists, pass None to ioos_qc.
-
     if "latitude" in ds:
         lat_var = "latitude"
     elif "lat" in ds:
@@ -622,7 +520,6 @@ def run_qartod_tests(ds, config):
         lat_var = None
 
     # DETERMINE LONGITUDE VARIABLE
-
     if "longitude" in ds:
         lon_var = "longitude"
     elif "lon" in ds:
@@ -631,11 +528,6 @@ def run_qartod_tests(ds, config):
         lon_var = None
 
     # CREATE IOOS QC STREAM
-    #
-    # Build an XarrayStream object that provides
-    # the coordinate information required by
-    # QARTOD tests.
-
     stream = XarrayStream(
         ds,
         time="time",
@@ -645,25 +537,12 @@ def run_qartod_tests(ds, config):
     )
 
     # RUN CONFIGURED QARTOD TESTS
-
     results = stream.run(config)
 
     # COLLECT RESULTS INTO A FLAT LIST
-    #
-    # The "list" format is easier to group and
-    # aggregate into final QC variables later.
-    
-    collected = collect_results(
-        results,
-        how="list"
-    )
+    collected = collect_results(results, how="list")
 
-    # LOG SUMMARY
-
-    _log.info(
-        f"Collected {len(collected)} "
-        f"QARTOD test results"
-    )
+    _log.info("Collected %d QARTOD test results", len(collected))
 
     return collected
 
@@ -671,6 +550,7 @@ def run_qartod_tests(ds, config):
 # =========================================================
 # GROUP RESULTS
 # =========================================================
+
 
 def group_qartod_results(ds, collected):
     """
@@ -742,49 +622,27 @@ def group_qartod_results(ds, collected):
     """
 
     # INITIALIZE OUTPUT DICTIONARY
-    
     grouped_results = {}
 
     # PROCESS COLLECTED QARTOD RESULTS
-    
     for result in collected:
 
         # EXTRACT VARIABLE NAME
-        
-        var_name = str(
-            result.stream_id
-        ).split(":")[0]
+        var_name = str(result.stream_id).split(":")[0]
 
         # VERIFY VARIABLE EXISTS IN DATASET
-
         if var_name not in ds.variables:
             continue
 
         # INITIALIZE VARIABLE ENTRY
-
         if var_name not in grouped_results:
-
             grouped_results[var_name] = []
 
         # CONVERT FLAGS TO INT8
-        #
-        # Replace masked values with the IOOS
-        # NOT_EVALUATED flag (2) and convert
-        # the resulting array to int8.
-
-        flags = result.results.filled(
-            2
-        ).astype("int8")
+        flags = result.results.filled(2).astype("int8")
 
         # STORE TEST FLAGS
-        #
-        # Append this QARTOD test result to the
-        # list of results associated with the
-        # current variable.
-
-        grouped_results[var_name].append(
-            flags
-        )
+        grouped_results[var_name].append(flags)
 
     return grouped_results
 
@@ -792,6 +650,7 @@ def group_qartod_results(ds, collected):
 # =========================================================
 # CREATE AGGREGATE QC VARIABLES
 # =========================================================
+
 
 def create_qc_variables(
     ds,
@@ -855,132 +714,68 @@ def create_qc_variables(
     """
 
     # CREATE WORKING COPY OF DATASET
-
     ds_qc = ds.copy()
 
     # PROCESS EACH VARIABLE WITH QARTOD RESULTS
-
     for var_name, test_results in grouped_results.items():
 
-        _log.info(
-            f"Creating QC for: {var_name}"
-        )
+        _log.info("Creating QC for %s", var_name)
 
         # AGGREGATE QARTOD FLAGS
-        #
-        # Combine all QARTOD test results into a
-        # single aggregate QC variable by selecting
-        # the most severe flag at each observation.
-
-        final_flags = np.maximum.reduce(
-
-            test_results
-
-        ).astype("int8")
+        final_flags = np.maximum.reduce(test_results).astype("int8")
 
         qc_var = f"{var_name}_qc"
 
         # HANDLE EXISTING QC VARIABLES
-        #
-        # Remove and replace existing QC variables
-        # when overwrite_qc=True. Otherwise skip
-        # processing and retain the original QC
-        # variable.
-
         if qc_var in ds_qc.variables:
 
             if overwrite_qc:
-
                 ds_qc = ds_qc.drop_vars(qc_var)
-
                 _log.info(
-                    f"Overwriting {qc_var}"
+                    "Overwriting %s",
+                    qc_var,
                 )
-
             else:
-
                 continue
 
         # CREATE AGGREGATE QC VARIABLE
-        #
-        # Create a DAC-compliant QC variable using
-        # the aggregated QARTOD flags and inherit
-        # dimensions and coordinates from the
-        # parent variable.
-
         ds_qc[qc_var] = xr.DataArray(
-
             final_flags,
-
             dims=ds[var_name].dims,
-
             coords=ds[var_name].coords,
-
             attrs={
-
-                "long_name":
-                    (
-                        f"QARTOD aggregate "
-                        f"quality flag for "
-                        f"{var_name}"
-                    ),
-
-                "standard_name":
-                    get_qc_standard_name(
-                        ds,
-                        var_name
-                    ),
-
-                "flag_values":
-                    np.array(
-                        [1,2,3,4,9],
-                        dtype="int8"
-                    ),
-
-                "flag_meanings":
-                    (
-                        "GOOD "
-                        "UNKNOWN "
-                        "SUSPECT "
-                        "FAIL "
-                        "MISSING"
-                    ),
-
+                "long_name": (
+                    "QARTOD aggregate quality flag for "
+                    f"{var_name}"
+                ),
+                "standard_name": get_qc_standard_name(ds, var_name),
+                "flag_values": np.array([1, 2, 3, 4, 9], dtype="int8"),
+                "flag_meanings": (
+                    "GOOD "
+                    "UNKNOWN "
+                    "SUSPECT "
+                    "FAIL "
+                    "MISSING"
+                ),
                 "valid_min": 1,
-
                 "valid_max": 9,
-
-                "comment":
-                    (
-                        "Aggregate QARTOD flag "
-                        "generated using "
-                        "ioos_qc package."
-                    ),
+                "comment": (
+                    "Aggregate QARTOD flag "
+                    "generated using "
+                    "ioos_qc package."
+                ),
             },
         )
 
         # UPDATE ANCILLARY VARIABLE LINKS
-        #
-        # Preserve any existing ancillary_variables
-        # references and append the newly created
-        # QC variable.
-
-        existing = ds_qc[var_name].attrs.get(
-            "ancillary_variables",
-            ""
-        )
+        existing = ds_qc[var_name].attrs.get("ancillary_variables", "")
 
         if existing:
-
             ds_qc[var_name].attrs[
                 "ancillary_variables"
             ] = f"{existing} {qc_var}"
-
         else:
-
-            ds_qc[var_name].attrs[
-                "ancillary_variables"
-            ] = qc_var
+            ds_qc[var_name].attrs["ancillary_variables"] = qc_var
 
     return ds_qc
 
@@ -988,6 +783,7 @@ def create_qc_variables(
 # =========================================================
 # CREATE PLACEHOLDER QC VARIABLES
 # =========================================================
+
 
 def create_placeholder_qc_variables(ds_qc):
     """
@@ -1042,94 +838,53 @@ def create_placeholder_qc_variables(ds_qc):
     """
 
     # VARIABLES REQUIRING PLACEHOLDER QC FLAGS
-    #
-    # These metadata time variables are required
-    # to have associated QC variables but are not
-    # evaluated using QARTOD tests.
-
-    placeholder_qc_vars = [
-
-        "time",
-        "profile_time",
-        "time_uv"
-    ]
+    placeholder_qc_vars = ["time", "profile_time", "time_uv"]
 
     # PROCESS EACH PLACEHOLDER VARIABLE
-    #
-    # Create a companion QC variable for each
-    # metadata variable present in the dataset.
-
     for var_name in placeholder_qc_vars:
 
         # VERIFY VARIABLE EXISTS
-
         if var_name not in ds_qc.variables:
             continue
 
         qc_var = f"{var_name}_qc"
 
-        _log.info(
-            f"Creating placeholder QC: {qc_var}"
-        )
+        _log.info("Creating placeholder QC %s", qc_var)
 
         # CREATE EMPTY QC FLAGS
-        #
-        # Populate the QC variable entirely with
-        # the DAC fill value (-127) to indicate
-        # that no QC evaluation has been performed.
-
-        flags = xr.full_like(
-            ds_qc[var_name],
-            fill_value=-127,
-            dtype="int8"
-        )
+        flags = xr.full_like(ds_qc[var_name], fill_value=-127, dtype="int8")
 
         # CREATE PLACEHOLDER QC VARIABLE
-
         ds_qc[qc_var] = xr.DataArray(
             flags,
             dims=ds_qc[var_name].dims,
             coords=ds_qc[var_name].coords,
             attrs={
-
-                "long_name":
-                    f"{var_name} Quality Flag",
-
-                "standard_name":
-                    get_qc_standard_name(
-                        ds_qc,
-                        var_name
-                    ),
-
-                "flag_values":
-                np.array([1, 2, 3, 4, 9], dtype="int8"),
-
-                "flag_meanings":
-                    (
-                        "GOOD "
-                        "UNKNOWN "
-                        "SUSPECT "
-                        "FAIL "
-                        "MISSING"
-                    ),
-
+                "long_name": f"{var_name} Quality Flag",
+                "standard_name": get_qc_standard_name(ds_qc, var_name),
+                "flag_values": np.array([1, 2, 3, 4, 9], dtype="int8"),
+                "flag_meanings": (
+                    "GOOD "
+                    "UNKNOWN "
+                    "SUSPECT "
+                    "FAIL "
+                    "MISSING"
+                ),
                 "valid_min": 1,
-
                 "valid_max": 9,
             },
         )
 
         # UPDATE ANCILLARY VARIABLE LINK
-
-        ds_qc[var_name].attrs[
-            "ancillary_variables"
-        ] = qc_var
+        ds_qc[var_name].attrs["ancillary_variables"] = qc_var
 
     return ds_qc
+
 
 # =========================================================
 # SAVE QC DATASET
 # =========================================================
+
 
 def save_qc_dataset(
     ds_qc,
@@ -1194,48 +949,40 @@ def save_qc_dataset(
     """
 
     # REMOVE INHERITED ENCODINGS
-
     for var in ds_qc.variables:
-
         ds_qc[var].encoding = {}
 
     # BUILD QC VARIABLE ENCODINGS
-
     encoding = {}
 
     for var in ds_qc.data_vars:
 
         # APPLY QC-SPECIFIC ENCODINGS
-
         if var.endswith("_qc"):
             encoding[var] = {
                 "dtype": "int8",
                 "_FillValue": np.int8(-127),
-                "zlib": True
+                "zlib": True,
             }
 
     # WRITE NETCDF FILE
-    #
-    # Save the QC-enhanced dataset using the
-    # NETCDF4 format and the netcdf4 backend.
-
     ds_qc.to_netcdf(
         output_file,
         engine="netcdf4",
         format="NETCDF4",
-        encoding=encoding
+        encoding=encoding,
     )
 
-    # LOG OUTPUT FILE
-
     _log.info(
-        f"Saved QC dataset: {output_file}"
+        "Saved QC dataset: %s",
+        output_file,
     )
 
 
 # =========================================================
 # MAIN DRIVER FUNCTION
 # =========================================================
+
 
 def run_qartod_qc(
     input_file,
@@ -1336,131 +1083,43 @@ def run_qartod_qc(
     control variables.
     """
 
-    # OPEN INPUT DATASET
-    #
-    # Load the science dataset into memory and
-    # immediately close the underlying file handle
-    # to prevent file-locking issues during
-    # subsequent processing and output writing.
-
-    ds = xr.open_dataset(input_file)
-
-    ds.load()
-
-    ds.close()
+    # LOAD INPUT DATASET
+    ds = xr.load_dataset(input_file)
 
     # IDENTIFY VARIABLES FOR QARTOD PROCESSING
-    #
-    # Determine which dataset variables contain
-    # a time dimension and should participate in
-    # QARTOD quality control testing.
-
     time_variables = find_time_variables(ds)
 
     # LOAD QARTOD CONFIGURATION
-    #
-    # Read the YAML configuration file and
-    # convert it into a Python dictionary.
-    config_dict = load_qartod_config(
-        config_file
-    )
+    config_dict = load_qartod_config(config_file)
 
     # AUTO-GENERATE MISSING CONFIGURATIONS
-    #
-    # Create default QARTOD configurations for
-    # variables that are present in the dataset
-    # but not explicitly defined in the YAML file.
-
     config_dict = add_missing_variables_to_config(
-        
         ds,
-
         config_dict,
-
-        time_variables
+        time_variables,
     )
 
     # BUILD IOOS QC CONFIGURATION OBJECT
-    #
-    # Convert the configuration dictionary into
-    # an ioos_qc Config object that can be used
-    # by the QARTOD processing framework.
-
-    config = build_ioos_qc_config(
-        config_dict
-    )
+    config = build_ioos_qc_config(config_dict)
 
     # EXECUTE QARTOD TESTS
-    #
-    # Run all configured QARTOD tests against
-    # the selected dataset variables.
-
-    collected = run_qartod_tests(
-        ds,
-        config
-    )
+    collected = run_qartod_tests(ds, config)
 
     # GROUP RESULTS BY VARIABLE
-    #
-    # Reorganize individual QARTOD test results
-    # into a variable-centric structure that can
-    # be used to generate aggregate QC variables.
-
-    grouped_results = group_qartod_results(
-        ds,
-        collected
-    )
+    grouped_results = group_qartod_results(ds, collected)
 
     # CREATE AGGREGATE QC VARIABLES
-    #
-    # Generate DAC-compliant aggregate QC
-    # variables by combining the individual
-    # QARTOD test results for each variable.
-
     print(list(grouped_results.keys()))
 
-    ds_qc = create_qc_variables(
-
-        ds,
-
-        grouped_results,
-
-        overwrite_qc=overwrite_qc
-    )
+    ds_qc = create_qc_variables(ds, grouped_results, overwrite_qc=overwrite_qc)
 
     # ADD QC PROVENANCE METADATA
-    #
-    # Record the installed ioos_qc package
-    # version to support reproducibility and
-    # future QC audits.
-
     ds_qc.attrs["ioos_qc_version"] = ioos_qc.__version__
 
     # CREATE PLACEHOLDER QC VARIABLES
-    #
-    # Generate DAC-required placeholder QC
-    # variables for metadata time fields that
-    # are not evaluated using QARTOD tests.
-    ds_qc = create_placeholder_qc_variables(
-        ds_qc
-    )
+    ds_qc = create_placeholder_qc_variables(ds_qc)
 
     # SAVE QC-ENHANCED DATASET
-    #
-    # Write the final dataset containing all
-    # science variables, aggregate QC variables,
-    # placeholder QC variables, and provenance
-    # metadata to NetCDF.
-    #
-    save_qc_dataset(
+    save_qc_dataset(ds_qc, output_file)
 
-        ds_qc,
-
-        output_file
-    )
-
-    # LOG WORKFLOW COMPLETION
-
-    _log.info(
-        "Completed QARTOD QC workflow"
-    )
+    _log.info("Completed QARTOD QC workflow")
