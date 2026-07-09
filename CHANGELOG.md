@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Added `utils.check_string_length`, for checking that all strings in a list (e.g., solocam image file names) are the same length, and returning useful warning logs if not
     - Changed `imagery.imagery_timeseries` to use `solocam_dt_from_meta` and `check_string_length`
 - Changed `gcp` mount and unmount functions to capture gcsfuse output and send to the logger
+- Split `slocum.pipline.binary_to_nc` into separate functions for generating timeseries (`genertate_timeseries`) and gridded (`generate_gridded`) netcdf files.
+- Added `slocum.pipeline.check_flbbcd_autoexec`, to check the flbbcd calibration values from the calibration sheets (transcribed into 'data/flbbcd-calibrations.yml') against the values from the binary files (i.e., from the autoexec). 
 
 ## [0.4.0] - 2026-04-17
 

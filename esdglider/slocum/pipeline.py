@@ -6,6 +6,7 @@ import logging
 import os
 from importlib import metadata
 import tempfile
+import math
 
 import numpy as np
 import pandas as pd
@@ -13,8 +14,11 @@ import pyglider.ncprocess as pgncprocess
 import pyglider.slocum as pgslocum
 import pyglider.utils as pgutils
 import xarray as xr
+import yaml
+import dbdreader
 
 import esdglider.plots as plots
+import esdglider.paths as paths
 import esdglider.utils as utils
 from esdglider.slocum import core
 
@@ -35,334 +39,6 @@ bin_size = [1, 5]
 depth_max = 1200.1
 
 
-# def binary_to_nc(
-#     # deployment_info: dict,
-#     deployment_name: str, 
-#     mode: str, 
-#     glider_paths: dict,
-#     *,
-#     write_raw: bool = True,
-#     write_timeseries: bool = True,
-#     sci_timeseries_pyglider: bool = True,
-#     write_gridded: bool = True,
-#     check_cdom: bool = False,
-#     # gridded_depth_measured: bool = False, 
-#     binary_search: str | None = None,
-#     file_info: str | None = None,
-#     **kwargs,
-# ):
-#     """
-#     Process binary ESD slocum glider data to netCDF file(s).
-#     For more info, see:
-#     https://swfsc.github.io/glider-lab-manual/content/glider-data.html
-
-#     The contents of this function used to just be in scripts/binary_to_nc.py.
-#     They were moved to this structure for easier development and debugging
-
-#     Parameters
-#     ----------
-#     deployment_info : dict
-#         A dictionary with the relevant deployment info. A dictionary is
-#         used to make it easier if arguments are added or removed.
-#         This dictionary must contain at least:
-#         deploymentyaml : str
-#             The filepath of the glider deployment yaml.
-#             This file will have relevant info,
-#             including deployment name (eg, amlr01-20210101) and project
-#     mode : str
-#         Mode of the glider data being processed.
-#         Must be either 'rt', for real-time, or 'delayed. 
-#         This is a separate argument, so that the yaml file can be used
-#         for processing both rt and delayed data from the same deployment
-#     glider_paths : dict
-#         A dictionary of file/directory paths for various processing steps.
-#         Intended to be the output of get_path_glider()
-#         See this function for the expected key/value pairs
-#     write_raw, write_timeseries, write_gridded : bool, default True
-#         Should the raw, timeseries, and gridded, respectively,
-#         xarray DataSets be created and written to files?
-#         Raw files are created by binary_to_raw, and include uninterpolated data
-#         Timeseries files are created by pyglider's binary_to_timeseries;
-#         both 'engineering' and 'science' timeseries files are created.
-#         Eng and sci files have m_depth and sci_water_temp as the time bases,
-#         respectively. Gridded files are created by pyglider's make_gridfiles,
-#         using the science timeseries as the input.
-#         Both 1m and 5m gridded datasets are created.
-#         Note: if True then any existing files will be clobbered
-#     sci_timeseries_pyglider : bool, default True
-#         Should the function use pyglider.slocum.binary_to_timeseries to create
-#         create the science timeseries (True),
-#         or glider.raw_to_sci_timeseries (False)
-#     check_cdom : bool, default False
-#         Should the function use check_cdom_esd 
-#     gridded_depth_measured : bool, default False
-#         Should the function pass the science timeseries directly to 
-#         pyglider.ncprocess.make_gridfiles (False), 
-#         or instead use glider.make_gridfiles_depth_measured (True)
-#     binary_search : str | None, default None
-#         A regex string of the binary file extensions for dbdreader to 
-#         search for when reading in data. Passed directly to the 
-#         'search' argument of pyglider.binary_to_timeseries. 
-#         If 'None', then uses "*.[DEde][BCbc][Dd]" for delayed-mode data,
-#         and "*.[STst][BCbc][Dd]" for real-time data
-#     file_path: str | None, default None
-#         The path of the parent processing script.
-#         If provided, will be included in the history attribute
-#     **kwargs
-#         Optional arguments passed to utils.findProfiles
-
-#     Returns
-#     -------
-#     A dictionary of the filenames of the various netCDF files, as strings.
-#     In order: the raw data, the engineering and science timeseries,
-#     and the 1m and 5m gridded files
-#     """
-
-#     # deploymentyaml = deployment_info["deploymentyaml"]
-#     # mode = deployment_info["mode"]
-
-#     # --------------------------------------------
-#     # Check files, and get vars + directory paths
-#     # if glider_paths["deploymentyaml"] != deploymentyaml:
-#     #     raise ValueError(
-#     #         "Provided yaml path (%s) is not the same as the paths yaml path (%s)",
-#     #         deploymentyaml,
-#     #         glider_paths["deploymentyaml"],
-#     #     )
-
-#     # deployment = utils.read_deploymentyaml(deploymentyaml)
-#     # deployment_name = deployment["metadata"]["deployment_name"]
-
-#     deploymentyaml = glider_paths["deploymentyaml"]
-#     rawdir = glider_paths["rawdir"]
-#     tsdir = glider_paths["tsdir"]
-#     # griddir = paths["griddir"]
-
-#     # Check mode, set binary_search regex
-#     if mode == "delayed":
-#         if binary_search is None:
-#             binary_search = "*.[DEde][BCbc][Dd]"
-#     elif mode == "rt":
-#         if binary_search is None:
-#             binary_search = "*.[STst][BCbc][Dd]"
-#     else:
-#         raise ValueError("mode must be either 'rt' or 'delayed'")
-
-#     # commonly used parameters in timeseries/gridded data
-#     maxgap_esd = 60
-
-#     # Dictionary with info needed by post-processing functions
-#     postproc_info = {
-#         "deploymentyaml": deploymentyaml, 
-#         "mode": mode, 
-#         "file_info": file_info,
-#         "metadata_dict": {"deployment_name": deployment_name},
-#         "device_dict": {},
-#         "profile_summary_path": glider_paths["profsummpath"],
-#         "maxgap": maxgap_esd,
-#     }
-
-#     # --------------------------------------------
-#     # Raw
-#     outname_tsraw = glider_paths["tsrawpath"]
-#     if write_raw:
-#         utils.remove_file(outname_tsraw)
-#         utils.makedirs_pass(rawdir)
-
-#         _log.info("Generating raw nc")
-#         outname_tsraw = core.binary_to_raw_timeseries(
-#             glider_paths["binarydir"],
-#             glider_paths["cacdir"],
-#             rawdir,
-#             [deploymentyaml, glider_paths["engyaml"], glider_paths["rawyaml"]],
-#             search=binary_search,
-#             include_source=True,
-#             fnamesuffix=f"-{mode}-raw",
-#             pp=postproc_info,
-#             **kwargs,
-#         )
-
-#         # Save profile summary
-#         tsraw = xr.load_dataset(outname_tsraw)
-#         prof_summ_path = postproc_info["profile_summary_path"]
-#         _log.info("Writing profile summary CSV to %s", prof_summ_path)
-#         prof_summ = utils.calc_profile_summary(tsraw, "depth_measured")
-#         prof_summ.to_csv(prof_summ_path, index=False)
-#         num_dives = np.count_nonzero(prof_summ.profile_direction.values == 1)
-#         _log.info("Deployment %s performed %s dives", deployment_name, num_dives)
-
-#         # Write deployment_start and deployment_end to postproc_info
-#         postproc_info["deployment_start"] = tsraw.attrs["deployment_start"]
-#         postproc_info["deployment_end"] = tsraw.attrs["deployment_end"]
-
-#         # Brief profile and depth sanity checks
-#         _log.info("raw timeseries checks")
-#         utils.check_profiles(prof_summ)
-#         utils.check_depth(tsraw["depth_measured"], tsraw["depth_ctd"])
-
-#         # CDOM check
-#         if check_cdom:
-#             utils.check_cdom(tsraw)
-#             utils.to_netcdf_esd(tsraw, outname_tsraw)
-
-
-#     else:
-#         _log.info("Not writing raw nc")
-#         try:
-#             with xr.open_dataset(outname_tsraw) as tsraw:
-#                 # tsraw = xr.load_dataset(outname_tsraw)
-#                 postproc_info["deployment_start"] = tsraw.attrs["deployment_start"]
-#                 postproc_info["deployment_end"] = tsraw.attrs["deployment_end"]
-#         except FileNotFoundError:
-#             _log.debug("Not writing raw nc file, and file could not be found")
-#             if write_timeseries:
-#                 _log.warning(
-#                     f"The raw nc file ({outname_tsraw}) does not exist, "
-#                     + "and thus postproc_info cannot be updated. "
-#                     + "The timeseries file may have incorrect metadata")
-
-#     # --------------------------------------------
-#     # Timeseries
-#     outname_tseng = glider_paths["tsengpath"]
-#     outname_tssci = glider_paths["tsscipath"]
-#     outname_gr1m = glider_paths["gr1path"]
-#     outname_gr5m = glider_paths["gr5path"]
-
-#     if write_timeseries:
-#         # Delete previous files before starting run. Can't delete whole directory
-#         # Since gridded depend on ts, also delete gridded
-#         utils.remove_file(outname_tseng)
-#         utils.remove_file(outname_tssci)
-#         utils.remove_file(outname_gr1m)
-#         utils.remove_file(outname_gr5m)
-#         utils.makedirs_pass(tsdir)
-
-#         # Engineering - uses m_depth as time base
-#         _log.info("Generating engineering timeseries")
-#         outname_tseng = pgslocum.binary_to_timeseries(
-#             glider_paths["binarydir"],
-#             glider_paths["cacdir"],
-#             tsdir,
-#             [deploymentyaml, glider_paths["engyaml"]],
-#             search=binary_search,
-#             fnamesuffix=f"-{mode}-eng",
-#             time_base="m_depth",
-#             profile_filt_time=None,  # type: ignore
-#             maxgap=maxgap_esd,
-#         )
-
-#         _log.info(f"Post-processing engineering timeseries: {outname_tseng}")
-#         tseng = xr.load_dataset(outname_tseng)
-#         tseng = postproc_eng_timeseries(tseng, postproc_info, **kwargs)
-#         utils.to_netcdf_esd(tseng, outname_tseng)
-
-#         if sci_timeseries_pyglider:
-#             # Science - uses sci_water_pressure as time_base sensor
-#             _log.info("Generating science timeseries")
-#             outname_tssci = pgslocum.binary_to_timeseries(
-#                 glider_paths["binarydir"],
-#                 glider_paths["cacdir"],
-#                 tsdir,
-#                 deploymentyaml,
-#                 search=binary_search,
-#                 fnamesuffix=f"-{mode}-sci",
-#                 time_base="sci_water_pressure",
-#                 profile_filt_time=None,  # type: ignore
-#                 maxgap=maxgap_esd,
-#             )
-#             postproc_info["drop_vars"] = ["pressure"]
-
-#         else:
-#             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
-#             outname_tssci = core.raw_to_sci_timeseries(
-#                 outname_tsraw,
-#                 tsdir,
-#                 deploymentyaml,
-#                 fnamesuffix=f"-{mode}-sci",
-#                 maxgap=maxgap_esd,
-#             )
-#             # raw_to_sci_timeseries calls postproc_sci_timeseries internally
-#             tssci = xr.load_dataset(outname_tssci)
-
-#         _log.info(f"Post-processing science timeseries: {outname_tssci}")
-#         tssci = xr.load_dataset(outname_tssci)
-#         tssci = postproc_sci_timeseries(tssci, postproc_info, **kwargs)
-#         utils.to_netcdf_esd(tssci, outname_tssci)   
-
-#         _log.info("final eng/sci timeseries checks")
-#         # Brief profile sanity check - check_profiles done in postproc-general
-#         prof_max_diff = abs(
-#             (tssci.profile_index.max() - tseng.profile_index.max()).values,
-#         )
-#         if prof_max_diff > 0.5:
-#             _log.warning(
-#                 "The max profile idx of eng and sci timeseries is different "
-#                 + "by more than 0.5. This means they may have "
-#                 + "a different number of functional profiles",
-#             )
-#             _log.warning(f"Min idx for eng: {tseng.profile_index.values.min()}")
-#             _log.warning(f"Min idx for sci: {tssci.profile_index.values.min()}")
-#             _log.warning(f"Max idx for eng: {tseng.profile_index.values.max()}")
-#             _log.warning(f"Max idx for sci: {tssci.profile_index.values.max()}")
-#         else:
-#             _log.info("The eng and sci timeseries have the same functional profiles")
-
-#         # Depth check, across the eng/sci datasets
-#         utils.check_depth(tseng["depth"], tssci["depth"])
-
-#     else:
-#         _log.info("Not writing timeseries nc")
-
-#     # --------------------------------------------
-#     # Gridded data, 1m and 5m
-#     if write_gridded:
-#         utils.remove_file(outname_gr1m)
-#         utils.remove_file(outname_gr5m)
-#         if not os.path.isfile(outname_tssci):
-#             raise FileNotFoundError(f"Could not find {outname_tssci}")
-        
-#         if sci_timeseries_pyglider:
-#             _log.info("Gridding science data using CTD-calculated depth")
-#             outnames = make_gridfiles_esd(outname_tssci, glider_paths=glider_paths)
-#         else:
-#             outnames = core.make_gridfiles_depth_measured(glider_paths)
-#         _log.debug("gridded outnames %s", "; ".join(outnames))
-
-#         # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
-
-#         # _log.info("Generating 1m gridded data")
-#         # outname_gr1m = pgncprocess.make_gridfiles(
-#         #     outname_tssci,
-#         #     griddir,
-#         #     deploymentyaml,
-#         #     depth_bins=np.arange(0, 1200.1, 1),
-#         #     fnamesuffix=f"-{mode}-1m",
-#         #     exclude_vars=gridded_exclude_vars,
-#         # )
-
-#         # _log.info("Generating 5m gridded data")
-#         # outname_gr5m = pgncprocess.make_gridfiles(
-#         #     outname_tssci,
-#         #     griddir,
-#         #     deploymentyaml,
-#         #     depth_bins=np.arange(0, 1200.1, 5),
-#         #     fnamesuffix=f"-{mode}-5m",
-#         #     exclude_vars=gridded_exclude_vars,
-#         # )
-
-#     else:
-#         _log.info("Not writing gridded nc")
-
-#     # --------------------------------------------
-#     return {
-#         "outname_tsraw": outname_tsraw,
-#         "outname_tseng": outname_tseng,
-#         "outname_tssci": outname_tssci,
-#         "outname_gr1m": outname_gr1m,
-#         "outname_gr5m": outname_gr5m,
-#     }
-
-
 def generate_timeseries(
     deployment_name: str, 
     mode: str, 
@@ -372,7 +48,6 @@ def generate_timeseries(
     write_eng: bool = True,
     write_sci: bool = True,
     sci_timeseries_pyglider: bool = True,
-    check_cdom: bool = False,
     binary_search: str | None = None,
     file_info: str | None = None,
     **kwargs,
@@ -382,13 +57,13 @@ def generate_timeseries(
     tsdir = glider_paths["tsdir"]
     # griddir = paths["griddir"]
 
-    # Check mode, set binary_search regex
+    # Check mode, set binary_search regex. Use uncompressed by default
     if mode == "delayed":
         if binary_search is None:
-            binary_search = "*.[DEde][BCbc][Dd]"
+            binary_search = "*.[DEde][Bb][Dd]"
     elif mode == "rt":
         if binary_search is None:
-            binary_search = "*.[STst][BCbc][Dd]"
+            binary_search = "*.[STst][Bb][Dd]"
     else:
         raise ValueError("mode must be either 'rt' or 'delayed'")
 
@@ -407,10 +82,28 @@ def generate_timeseries(
     }
 
     # --------------------------------------------
+    # Check flbbcd calibration values
+    check_flbbcd_autoexec(
+        glider_paths["binarydir"], 
+        glider_paths["cacdir"], 
+        deploymentyaml,
+        search=binary_search,
+    )
+
+    # --------------------------------------------
     # Raw
     outname_tsraw = glider_paths["tsrawpath"]
+    outname_tseng = glider_paths["tsengpath"]
+    outname_tssci = glider_paths["tsscipath"]
+    outname_gr1m = glider_paths["gr1path"]
+    outname_gr5m = glider_paths["gr5path"]
+
     if write_raw:
         utils.remove_file(outname_tsraw)
+        utils.remove_file(outname_tseng)
+        utils.remove_file(outname_tssci)
+        utils.remove_file(outname_gr1m)
+        utils.remove_file(outname_gr5m)
         utils.makedirs_pass(rawdir)
 
         _log.info("Generating raw nc")
@@ -422,26 +115,19 @@ def generate_timeseries(
             search=binary_search,
             include_source=True,
             fnamesuffix=f"-{mode}-raw",
-            # pp=postproc_info,
             **kwargs,
         )
 
         # Run postprocessing
+        _log.info(f"Post-processing raw timeseries: {outname_tsraw}")
         tsraw = xr.load_dataset(outname_tsraw)
         new_start = [
-            "latitude",
-            "longitude",
             "depth_measured",
             "depth_ctd",
             "profile_index",
             "profile_direction",
         ]
         tsraw = utils.data_var_reorder(tsraw, new_start)
-
-        # # Add metadata - using postproc_attrs for consistency
-        # pp["metadata_dict"] = deployment["metadata"]
-        # pp["device_dict"] = deployment["glider_devices"]
-        # postproc_attrs calls pgutils.fill_metadata
         tsraw = postproc_attrs(tsraw, postproc_info)
 
         # Save profile summary
@@ -461,11 +147,6 @@ def generate_timeseries(
         utils.check_profiles(prof_summ)
         utils.check_depth(tsraw["depth_measured"], tsraw["depth_ctd"])
 
-        # CDOM check
-        if check_cdom:
-            utils.check_cdom(tsraw)
-            utils.to_netcdf_esd(tsraw, outname_tsraw)
-
 
     else:
         _log.info("Not writing raw nc")
@@ -484,19 +165,11 @@ def generate_timeseries(
                 )
 
     # --------------------------------------------
-    # Timeseries
-    outname_tseng = glider_paths["tsengpath"]
-    outname_tssci = glider_paths["tsscipath"]
-    outname_gr1m = glider_paths["gr1path"]
-    outname_gr5m = glider_paths["gr5path"]
+    # Eng Timeseries
 
     if write_eng:
-        # Delete previous files before starting run. Can't delete whole directory
-        # Since gridded depend on ts, also delete gridded
+        # Delete previous files before starting run
         utils.remove_file(outname_tseng)
-        utils.remove_file(outname_tssci)
-        utils.remove_file(outname_gr1m)
-        utils.remove_file(outname_gr5m)
         utils.makedirs_pass(tsdir)
 
         # Engineering - uses m_depth as time base
@@ -519,7 +192,15 @@ def generate_timeseries(
         utils.to_netcdf_esd(tseng, outname_tseng)
         del tseng
 
+    # --------------------------------------------
+    # Sci Timeseries
     if write_sci:
+        # Since gridded depend on ts, also delete gridded
+        utils.remove_file(outname_tssci)
+        utils.remove_file(outname_gr1m)
+        utils.remove_file(outname_gr5m)
+        utils.makedirs_pass(tsdir)
+
         if sci_timeseries_pyglider:
             # Science - uses sci_water_pressure as time_base sensor
             _log.info("Generating science timeseries")
@@ -774,7 +455,8 @@ def postproc_eng_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
     ds = postproc_general(ds, pp, **kwargs)
 
     # Reorder data variables
-    new_start = ["latitude", "longitude", "depth", "profile_index"]
+    # new_start = ["latitude", "longitude", "depth", "profile_index"]
+    new_start = ["depth", "profile_index"]
     ds = utils.data_var_reorder(ds, new_start)
 
     # Update eng-specific attributes
@@ -835,8 +517,8 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
 
     # Reorder data variables
     new_start = [
-        "latitude",
-        "longitude",
+        # "latitude",
+        # "longitude",
         # "depth",
         "profile_index",
         "conductivity",
@@ -857,25 +539,33 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
 
 def generate_gridded(
     glider_paths: dict,
+    write_gridded: bool = True,
     sci_timeseries_pyglider: bool = True,
 ):
+    """
+    """
+    
     outname_tssci = glider_paths["tsscipath"]
     outname_gr1m  = glider_paths["gr1path"]
     outname_gr5m  = glider_paths["gr5path"]
 
-    if not os.path.isfile(outname_tssci):
-        raise FileNotFoundError(f"Could not find {outname_tssci}")
-    utils.remove_file(outname_gr1m)
-    utils.remove_file(outname_gr5m)
-    # TODO: change to delete all files in glider_paths["griddir"]
+    if write_gridded:
+        if not os.path.isfile(outname_tssci):
+            raise FileNotFoundError(f"Could not find {outname_tssci}")
+        utils.remove_file(outname_gr1m)
+        utils.remove_file(outname_gr5m)
+        # TODO: change to delete all files in glider_paths["griddir"]
 
-    if sci_timeseries_pyglider: #use_m_depth #use_depth="ctd" | "m"
-        # depth_touse = "vt" | "m"
-        _log.info("Gridding science data using CTD-calculated depth")
-        outnames = make_gridfiles_esd(outname_tssci, glider_paths=glider_paths)
+        if sci_timeseries_pyglider: #use_m_depth #use_depth="ctd" | "m"
+            # depth_touse = "vt" | "m"
+            _log.info("Gridding science data using CTD-calculated depth")
+            outnames = make_gridfiles_esd(outname_tssci, glider_paths=glider_paths)
+        else:
+            outnames = make_gridfiles_depth_measured(glider_paths)
+        _log.debug("gridded outnames %s", "; ".join(outnames))
+
     else:
-        outnames = make_gridfiles_depth_measured(glider_paths)
-    _log.debug("gridded outnames %s", "; ".join(outnames))
+        _log.info("Not writing gridded nc")
 
     # --------------------------------------------
     return {
@@ -1089,3 +779,99 @@ def drop_ts_ranges(
         utils.to_netcdf_esd(ds, outname)
 
     return ds
+
+
+
+def check_flbbcd_autoexec(
+        binarydir, 
+        cacdir, 
+        deploymentyaml,
+        search="*.[Dd|Ee][Bb][Dd]",
+):
+    """
+    Parameters
+    ----------
+    binarydir : str
+        Path to the binary directory
+    cacdir : str
+        Path to the cache file directory
+    search : str, optional
+        Search pattern for the binary files, by default "*.[Dd|Ee][Bb][Dd]"
+
+    Returns
+    -------
+    Nothing
+    
+    """
+
+    _log.info("Checking device FLBBCD calibration values")
+
+    with open(deploymentyaml) as fin:
+        deployment = yaml.safe_load(fin)
+
+    flbbcd_cal_names = [
+        "u_flbbcd_chlor_cwo", 
+        "u_flbbcd_chlor_sf", 
+        "u_flbbcd_bb_cwo", 
+        "u_flbbcd_bb_sf", 
+        "u_flbbcd_cdom_cwo", 
+        "u_flbbcd_cdom_sf", 
+    ]
+
+    device_data = deployment['glider_devices']
+    if "instrument_flbbcd" in device_data.keys():
+        flbbcd_sn = device_data["instrument_flbbcd"].get("serial_number", None)
+        flbbcd_cal_date = device_data["instrument_flbbcd"].get("calibration_date", None)
+
+        # Load in esdglider calibration values
+        with open(paths.get_path_flbbcd_calibrations(), "r") as fin:
+            flbbcd_cals = yaml.safe_load(fin)
+        
+            try:
+                flbbcd_cal_values = flbbcd_cals[flbbcd_sn][flbbcd_cal_date]
+            except KeyError:
+                _log.warning(
+                    "No calibration values found for FLBBCD with serial number %s and calibration date %s", 
+                    flbbcd_sn, flbbcd_cal_date
+                )
+                return 
+
+            # Extract values in binary, from the autoexec, and confirm one value per key
+            dbd = dbdreader.MultiDBD(pattern=f"{binarydir}/{search}", 
+                                     cacheDir=cacdir)            
+ 
+            sensor_data = dbd.get(*flbbcd_cal_names, return_nans=False)
+            cal_values = [np.unique(i[1]) for i in sensor_data]
+            if not all(len(item) == 1 for item in cal_values):
+                _log.warning("Inconsistent calibration values found in binary files. Ending check")
+                return 
+
+            cal_values = [i[0] for i in cal_values]
+            sensor_cals = dict(zip(flbbcd_cal_names, cal_values))
+            sensor_cals["u_flbbcd_bb_sf"] = sensor_cals["u_flbbcd_bb_sf"] * 1e-6
+
+            if not (flbbcd_cal_values.keys() == sensor_cals.keys()):
+                _log.warning("Mismatch between calibration keys in YAML and binary files. Ending check")
+                return 
+
+            for key in flbbcd_cal_names:
+                if key in sensor_cals:
+                    if not math.isclose(sensor_cals[key], flbbcd_cal_values[key], abs_tol=1e-6):
+                        _log.warning(
+                            "Calibration value for %s does not match the expected value. "
+                            + "Expected: %s, Found: %s", 
+                            key, flbbcd_cal_values[key], sensor_cals[key]
+                        )
+                    else:
+                        _log.debug(
+                            "Calibration value for %s matches the expected value: %s", 
+                            key, sensor_cals[key]
+                        )
+                else:
+                    _log.warning("Calibration value for %s not found in binary files", key)
+    
+            _log.info("Finished checking FLBBCD calibration values")
+    else:
+        _log.info("No FLBBCD instrument found in deployment yaml")
+
+    

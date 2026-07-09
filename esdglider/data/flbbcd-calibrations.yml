@@ -1,0 +1,169 @@
+# YAML file of FLBBCD calibration values
+
+"4651":
+  "2018-10-16":
+    u_flbbcd_chlor_cwo: 55
+    u_flbbcd_chlor_sf: 0.0071
+    u_flbbcd_cdom_cwo: 50
+    u_flbbcd_cdom_sf: 0.1017
+    u_flbbcd_bb_cwo: 39
+    u_flbbcd_bb_sf: 0.000001873
+  "2025-05-07":
+    u_flbbcd_chlor_cwo: 50
+    u_flbbcd_chlor_sf: 0.0073
+    u_flbbcd_cdom_cwo: 48
+    u_flbbcd_cdom_sf: 0.0907
+    u_flbbcd_bb_cwo: 48
+    u_flbbcd_bb_sf: 0.000001843
+"4830":
+  "2017-08-15":
+    u_flbbcd_chlor_cwo: 46
+    u_flbbcd_chlor_sf: 0.0073
+    u_flbbcd_cdom_cwo: 48
+    u_flbbcd_cdom_sf: 0.0907
+    u_flbbcd_bb_cwo: 46
+    u_flbbcd_bb_sf: 0.000001740
+  "2020-04-23":
+    u_flbbcd_chlor_cwo: 48
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 49
+    u_flbbcd_cdom_sf: 0.0945
+    u_flbbcd_bb_cwo: 48
+    u_flbbcd_bb_sf: 0.000001967
+  "2023-09-15":
+    u_flbbcd_chlor_cwo: 44
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 48
+    u_flbbcd_cdom_sf: 0.0907
+    u_flbbcd_bb_cwo: 42
+    u_flbbcd_bb_sf: 0.000001847
+"4844":
+  "2017-09-26":
+    u_flbbcd_chlor_cwo: 45
+    u_flbbcd_chlor_sf: 0.0073
+    u_flbbcd_cdom_cwo: 48
+    u_flbbcd_cdom_sf: 0.0907
+    u_flbbcd_bb_cwo: 45
+    u_flbbcd_bb_sf: 0.000001705
+  "2021-03-15":
+    u_flbbcd_chlor_cwo: 49
+    u_flbbcd_chlor_sf: 0.0069
+    u_flbbcd_cdom_cwo: 50
+    u_flbbcd_cdom_sf: 0.0800
+    u_flbbcd_bb_cwo: 42
+    u_flbbcd_bb_sf: 0.000001840
+  "2025-04-02":
+    u_flbbcd_chlor_cwo: 47
+    u_flbbcd_chlor_sf: 0.0073
+    u_flbbcd_cdom_cwo: 44
+    u_flbbcd_cdom_sf: 0.0905
+    u_flbbcd_bb_cwo: 47
+    u_flbbcd_bb_sf: 0.000001934
+"5583":
+  "2019-03-19":
+    u_flbbcd_chlor_cwo: 48
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 49
+    u_flbbcd_cdom_sf: 0.0910
+    u_flbbcd_bb_cwo: 49
+    u_flbbcd_bb_sf: 0.000001923
+  "2023-09-13":
+    u_flbbcd_chlor_cwo: 43
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 51
+    u_flbbcd_cdom_sf: 0.0908
+    u_flbbcd_bb_cwo: 44
+    u_flbbcd_bb_sf: 0.000001813
+"5701":
+  "2019-05-16":
+    u_flbbcd_chlor_cwo: 41
+    u_flbbcd_chlor_sf: 0.0073
+    u_flbbcd_cdom_cwo: 49
+    u_flbbcd_cdom_sf: 0.0907
+    u_flbbcd_bb_cwo: 53
+    u_flbbcd_bb_sf: 0.000001835
+  "2025-04-02":
+    u_flbbcd_chlor_cwo: 42
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 47
+    u_flbbcd_cdom_sf: 0.0907
+    u_flbbcd_bb_cwo: 48
+    u_flbbcd_bb_sf: 0.000001828
+"5704":
+  "2019-05-16":
+    u_flbbcd_chlor_cwo: 46
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 49
+    u_flbbcd_cdom_sf: 0.0908
+    u_flbbcd_bb_cwo: 44
+    u_flbbcd_bb_sf: 0.000001832
+"6866":
+  "2021-05-20":
+    u_flbbcd_chlor_cwo: 44
+    u_flbbcd_chlor_sf: 0.0073
+    u_flbbcd_cdom_cwo: 50
+    u_flbbcd_cdom_sf: 0.0906
+    u_flbbcd_bb_cwo: 45
+    u_flbbcd_bb_sf: 0.000001876
+"6982":
+  "2021-08-02":
+    u_flbbcd_chlor_cwo: 47
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 50
+    u_flbbcd_cdom_sf: 0.0906
+    u_flbbcd_bb_cwo: 46
+    u_flbbcd_bb_sf: 0.000001861
+  "2022-09-13":
+    u_flbbcd_chlor_cwo: 48
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 50
+    u_flbbcd_cdom_sf: 0.1104
+    u_flbbcd_bb_cwo: 49
+    u_flbbcd_bb_sf: 0.000001919
+  "2025-11-14":
+    u_flbbcd_chlor_cwo: 49
+    u_flbbcd_chlor_sf: 0.0073
+    u_flbbcd_cdom_cwo: 50
+    u_flbbcd_cdom_sf: 0.0907
+    u_flbbcd_bb_cwo: 49
+    u_flbbcd_bb_sf: 0.000001828
+"8411":
+  "2023-08-02":
+    u_flbbcd_chlor_cwo: 45
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 48
+    u_flbbcd_cdom_sf: 0.0909
+    u_flbbcd_bb_cwo: 48
+    u_flbbcd_bb_sf: 0.000001825
+"8413":
+  "2023-08-07":
+    u_flbbcd_chlor_cwo: 45
+    u_flbbcd_chlor_sf: 0.0073
+    u_flbbcd_cdom_cwo: 48
+    u_flbbcd_cdom_sf: 0.0884
+    u_flbbcd_bb_cwo: 40
+    u_flbbcd_bb_sf: 0.000001713
+"8429":
+  "2023-08-02":
+    u_flbbcd_chlor_cwo: 52
+    u_flbbcd_chlor_sf: 0.0073
+    u_flbbcd_cdom_cwo: 53
+    u_flbbcd_cdom_sf: 0.0909
+    u_flbbcd_bb_cwo: 48
+    u_flbbcd_bb_sf: 0.000001825
+"8430":
+  "2023-08-02":
+    u_flbbcd_chlor_cwo: 45
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 44
+    u_flbbcd_cdom_sf: 0.0905
+    u_flbbcd_bb_cwo: 43
+    u_flbbcd_bb_sf: 0.000001813
+"8869":
+  "2024-06-03":
+    u_flbbcd_chlor_cwo: 42
+    u_flbbcd_chlor_sf: 0.0072
+    u_flbbcd_cdom_cwo: 45
+    u_flbbcd_cdom_sf: 0.0907
+    u_flbbcd_bb_cwo: 43
+    u_flbbcd_bb_sf: 0.000001762

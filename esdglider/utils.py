@@ -1079,6 +1079,8 @@ def check_depth(x: xr.DataArray, y: xr.DataArray, depth_ok=5) -> xr.Dataset:
         d = depth_diff_abs.to_pandas()
         _log.warning(d[depth_diff_abs.values > depth_ok].describe())
 
+    x = x.drop_vars(["latitude", "longitude", "depth"], errors="ignore")
+    y = y.drop_vars(["latitude", "longitude", "depth"], errors="ignore")
     ds = xr.merge(
         [
             x.rename("depth_measured"),

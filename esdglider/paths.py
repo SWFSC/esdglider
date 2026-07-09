@@ -11,6 +11,24 @@ def _check_dir_exists(dir_path, description):
     if not os.path.isdir(dir_path):
         _log.warning(f"The {description} ('{dir_path}') does not exist")
 
+def get_path_flbbcd_calibrations() -> str:
+    """
+    Get the path to the flbbcd calibration yaml.
+    The yaml is included as part of the package data,
+    and contains the relevant calibration constants for the flbbcd sensors
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    str
+        the path of the yaml
+    """
+    ref = resources.files("esdglider.data") / "flbbcd-calibrations.yml"
+    with resources.as_file(ref) as path:
+        return str(path)
 
 def get_path_yaml(yaml_type: str) -> str:
     """
@@ -27,7 +45,7 @@ def get_path_yaml(yaml_type: str) -> str:
     Returns
     -------
     str
-        the path of the yaml
+        the path of the specified yaml
     """
     if yaml_type not in ["raw", "eng"]:
         _log.error("yaml_type %s", yaml_type)
