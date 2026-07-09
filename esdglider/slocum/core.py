@@ -23,7 +23,6 @@ except ImportError:
     have_dbdreader = False
 
 import esdglider.utils as utils
-from esdglider.slocum import pipeline #TODO:remove
 
 _log = logging.getLogger(__name__)
 

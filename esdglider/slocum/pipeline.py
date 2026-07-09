@@ -37,6 +37,7 @@ depth_max: float
 """
 bin_size = [1, 5]
 depth_max = 1200.1
+maxgap_esd = 60
 
 
 def generate_timeseries(
@@ -66,9 +67,6 @@ def generate_timeseries(
             binary_search = "*.[STst][Bb][Dd]"
     else:
         raise ValueError("mode must be either 'rt' or 'delayed'")
-
-    # commonly used parameters in timeseries/gridded data
-    maxgap_esd = 60
 
     # Dictionary with info needed by post-processing functions
     postproc_info = {
@@ -378,7 +376,7 @@ def postproc_general(
                 if (num_orig - len(ds.time)) > 0:
                     _log.info(f"Dropped {num_orig - len(ds.time)} nan {var} values")
 
-    # After dropping timestamps, recalculate distance over ground
+    # After dropping bogus timestamps, recalculate distance over ground
     ds = pgutils.get_distance_over_ground(ds)
 
     # Calculate profiles using measured depth
@@ -875,3 +873,92 @@ def check_flbbcd_autoexec(
         _log.info("No FLBBCD instrument found in deployment yaml")
 
     
+
+def calc_flbbcd_raw_sci(
+    ds_raw: xr.Dataset, 
+    ds_sci: xr.Dataset, 
+    chlor_cal: tuple | None = None,
+    cdom_cal: tuple | None = None,
+    bb_cal: tuple | None = None,
+) -> tuple:
+    """
+    ESD-specific wrapper around calc_flbbcd. 
+
+    Rather than calculating corrected FLBBCD output values 
+    for the science timeseries from interpolated signal values, 
+    calculate corrected FLBBCD output values using the raw dataset, 
+    and then interpolate these values to the science timeseries.
+
+    If the calibration ({var}_cal) inputs are None, 
+    then the function will attempt to read the calibration values 
+    esdglider's data/flbbcd_calibration.yml.
+
+    Parameters
+    ----------
+    ds_raw: `xarray.Dataset`
+        raw glider timeseries
+    ds_sci: `xarray.Dataset`
+        science glider timeseries        
+    {var}_cal: tuple: (cwo, sf)
+        See `calc_flbbcd`
+
+    Returns
+    -------
+    Tuple (ds_raw, ds_sci) with corrected FLBBCD output values 
+    """
+
+    # Get calibration values
+    if chlor_cal is None or cdom_cal is None or bb_cal is None:
+        with open(paths.get_path_flbbcd_calibrations(), "r") as fin:
+            flbbcd_cals = yaml.safe_load(fin)
+
+            sn, cdate = utils.get_instrument_sn_date(ds_raw, "instrument_flbbcd")
+            try:
+                flbbcd_cal_values = flbbcd_cals[sn][cdate]
+                if chlor_cal is None:
+                    chlor_cal = (flbbcd_cal_values["u_flbbcd_chlor_cwo"], 
+                                flbbcd_cal_values["u_flbbcd_chlor_sf"])
+                if cdom_cal is None:
+                    cdom_cal = (flbbcd_cal_values["u_flbbcd_cdom_cwo"], 
+                                flbbcd_cal_values["u_flbbcd_cdom_sf"])
+                if bb_cal is None:
+                    bb_cal = (flbbcd_cal_values["u_flbbcd_bb_cwo"], 
+                            flbbcd_cal_values["u_flbbcd_bb_sf"])
+            except KeyError:
+                _log.warning(
+                    "No calibration values found for FLBBCD with serial number %s and calibration date %s. Exiting", 
+                    sn, cdate
+                )
+                return ds_raw, ds_sci
+
+    # Calculate corrected raw values
+    ds_raw_cor = utils.calc_flbbcd(ds_raw, chlor_cal, cdom_cal, bb_cal)
+
+    # Interpolate raw values for science timeseries. Add comments
+    ds_sci_cor = ds_sci.copy(deep=True)
+    msg = "Interpolated from raw values, after correct calibration values applied."
+    t = ds_sci_cor.time.values.astype(np.int64) / 1e9
+
+    for var in ["chlorophyll", "cdom", "backscatter_700"]:
+        if var in ds_raw_cor.data_vars and var in ds_sci_cor.data_vars:
+            # Filter for non-nan raw values
+            val_raw_notna = ~np.isnan(ds_raw_cor[var].values)
+            _t = ds_raw_cor.time.values.astype(np.int64)[val_raw_notna] / 1e9
+            val = ds_raw_cor[var].values[val_raw_notna] 
+            
+            # Interpolate raw values to sci timestamps, and do screens
+            val_interp = np.interp(t, _t, val, left=np.nan, right=np.nan)
+            tg_ind = pgutils.find_gaps(_t, t, maxgap_esd)
+            val_interp[tg_ind] = np.nan
+            val_interp = pgutils._zero_screen(val_interp)
+
+            # Update ds object with values and attributes
+            ds_sci_cor[var].values = val_interp
+            if not ds_sci_cor[var].attrs["comment"].strip():
+                ds_sci_cor[var].attrs["comment"] = msg
+            else:
+                ds_sci_cor[var].attrs["comment"] += " " + msg
+
+    ds_sci_cor = utils.drop_bogus(ds_sci_cor)
+
+    return ds_raw_cor, ds_sci_cor

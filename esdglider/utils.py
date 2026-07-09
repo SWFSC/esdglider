@@ -353,6 +353,8 @@ def drop_bogus(
         String representing the minimum datetime to keep.
         Passed to np.datetime64 to be used to filter.
         For instance, '2017-01-01', or '2020-03-06 12:00:00'.
+    max_drop: bool; default=False
+        If True, drop times that are after the current UTC time.
 
     Returns
     -------
@@ -1421,27 +1423,39 @@ def check_cdom(ds: xr.Dataset) -> xr.Dataset:
     return ds
 
 
-def get_flbbcd_date(ds: xr.Dataset) -> datetime:    
+def get_instrument_sn_date(ds: xr.Dataset, instrument_str: str) -> tuple:
     """
-    Get the calibration date for the FLBBCD instrument, 
+    Get the sn and calibration date for the FLBBCD instrument, 
     if it exists in the dataset attributes
 
     Parameters
     ----------
     ds: `xarray.Dataset`
         processed glider data; expected to be science timeseries
+    instrument_str: str
+        The instrument string to look for in the dataset attributes (e.g., "instrument_flbbcd")
 
     Returns
     -------
-    datetime or None
-        The calibration date for the FLBBCD instrument, if it exists in the dataset attributes; otherwise, None
+    tuple
+        A tuple (sn, calibration date) for the FLBBCD instrument, if it exists in the dataset attributes; otherwise, (None, None)
     """
-    if "instrument_flbbcd" in ds.attrs:
-        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
-        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
-        return cdate
+    if instrument_str in ds.attrs:
+        instr_attrs = ast.literal_eval(ds.attrs[instrument_str])
+        try:
+            sn = instr_attrs["serial_number"]
+            # cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
+            cdate = instr_attrs["calibration_date"]
+            return sn, cdate
+        except (KeyError, ValueError, SyntaxError):
+            _log.warning(
+                "Could not parse instrument attributes for %s. "
+                + "Expected keys 'serial_number' and 'calibration_date'.",
+                instrument_str,
+            )
+            return None, None
     else:
-        return None
+        return None, None
 
 
 def check_cdom_date(ds: xr.Dataset) -> str:
@@ -1457,8 +1471,10 @@ def check_cdom_date(ds: xr.Dataset) -> str:
         # Check for out-of-tolerance         
         if datetime(2021, 1, 1) <= cdate <= datetime(2023, 7, 31):
             return "oot"
-        if cdate < datetime(2023, 1, 13):
+        elif cdate < datetime(2023, 1, 13):
             return "raf"
+        else:
+            return "ok"
 
     else:
         return "none"
@@ -1505,11 +1521,12 @@ def calc_flbbcd(
     """
     Calculate corrected FLBBCD output values 
 
-    In some ESD glider deployments, 
+    In some glider deployments, 
     the cwo (clean water offset) and sf (scaling factor) values
     for FLBBCD variables were not properly set in the slocum autoexec files. 
     Thus, the output values for 'chlorophyll', 'cdom', and 'backscatter_700'
     need to be recalculated using the raw signal and correct cwo/sf values. 
+
     All three values are calculated using the same formula:
     output value = sf * (signal value - cwo).
 
@@ -1529,58 +1546,28 @@ def calc_flbbcd(
     """
 
     _log.info("Recalculating FLBBCD output values")
-    msg = " Recalculated using signal values and esdglider.calc_flbbcd"
+    msg = (
+        " Recalculated using raw signal values, calibration values, "
+        + "and esdglider.utils.calc_flbbcd"
+    )
 
     if all(v in ds.data_vars for v in ["chlorophyll", "chlorophyll_signal"]):
         _log.debug("Recalculating chlorophyll")
-        ds["chlorophyll"] = chlor_calib[2] * (ds["chlorophyll_signal"] - chlor_calib[1])
+        ds["chlorophyll"] = chlor_calib[1] * (ds["chlorophyll_signal"] - chlor_calib[0])
         ds["chlorophyll"].attrs["comment"] += msg
 
     if all(v in ds.data_vars for v in ["cdom", "cdom_signal"]):
         _log.debug("Recalculating cdom")
-        ds["cdom"] = cdom_calib[2] * (ds["cdom_signal"] - cdom_calib[1])
+        ds["cdom"] = cdom_calib[1] * (ds["cdom_signal"] - cdom_calib[0])
         ds["cdom"].attrs["comment"] += msg
 
     if all(v in ds.data_vars for v in ["backscatter_700", "backscatter_700_signal"]):
         _log.debug("Recalculating backscatter_700")
-        ds["backscatter_700"] = bb_calib[2] * (ds["backscatter_700_signal"] - bb_calib[1])
+        ds["backscatter_700"] = bb_calib[1] * (ds["backscatter_700_signal"] - bb_calib[0])
         ds["backscatter_700"].attrs["comment"] += msg
+
+    _log.info("Finished recalculating FLBBCD output values")
 
     return ds
 
 
-def calc_flbbcd_esd(
-    ds_raw: xr.Dataset, 
-    ds_sci: xr.Dataset, 
-    chlor_calib: tuple,
-    cdom_calib: tuple,
-    bb_calib: tuple, 
-) -> tuple:
-    """
-    ESD-specific wrapper around calc_flbbcd. 
-
-    Rather than calculating corrected FLBBCD output values 
-    for the science timeseries from interpolated signal values, 
-    calculate corrected FLBBCD output values using the raw dataset, 
-    and then interpolate these values to the science timeseries.
-
-    Parameters
-    ----------
-    ds_raw: `xarray.Dataset`
-        raw glider timeseries
-    ds_sci: `xarray.Dataset`
-        science glider timeseries        
-    {var}_calib: tuple: (cwo, sf)
-        See `calc_flbbcd`
-
-    Returns
-    -------
-    Tuple (ds_raw, ds_sci) with corrected FLBBCD output values 
-    """
-
-    # Calculate corrected raw values
-    ds_raw = calc_flbbcd(ds_raw, chlor_calib, cdom_calib, bb_calib)
-
-    # Interpolate raw values for science timeseries. Add comments
-
-    return ds_raw, ds_sci
