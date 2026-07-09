@@ -47,7 +47,7 @@ _log = logging.getLogger(__name__)
 #     return solocam_dt64s
 
 
-def solocam_dt_from_meta(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
+def get_solocam_dt(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
     """
     Parse solocam (imagery) filename to return associated datetime
     Requires index of start of datetime part of string
@@ -71,9 +71,27 @@ def solocam_dt_from_meta(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
     _log.info("Reading image metadata file from %s", path)
     img_meta_df = pd.read_json(path, lines=True)
 
+    # Verbosely filter out rows with an error message
+    if "error" in img_meta_df.columns:
+        img_meta_df_e = img_meta_df[img_meta_df["error"].notna()]
+        _log.warning(
+            "Found %d rows with errors in the image metadata file",
+            img_meta_df_e.shape[0],
+        )
+        _log.warning(
+            "Image names with errors:\n%s", 
+            "\n    ".join(img_meta_df_e["n"].values)
+        )
+
+        img_meta_df = img_meta_df[~img_meta_df["error"].notna()]
+    else:
+        _log.debug("No error column found in image metadata file")
+
+    # Check that all image names have the same string length
     imagery_files = list(img_meta_df["n"].values)
     utils.check_string_length(imagery_files)
 
+    # Create output dataframe with image file name, directory, and datetime
     df_columns = {
         "n": "img_file", 
         "p": "img_dir", 
@@ -142,7 +160,7 @@ def imagery_timeseries(ds, img_paths):
     # --------------------------------------------
     # Extract info from imagery file names
     _log.debug("Processing imagery file names")
-    df = solocam_dt_from_meta(img_paths["imgmetapath"])
+    df = get_solocam_dt(img_paths["imgmetapath"])
 
 
     # # imagery_files = 
@@ -349,6 +367,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
                 global_metadata[str(tagname)] = value
 
     except Exception as e:
+        _log.error("Failed to extract global metadata from %s: %s", image_path, e )
         global_metadata = {"file": image_path, "error": str(e)}    
 
     return global_metadata
@@ -375,13 +394,14 @@ def extract_image_metadata(image_path):
     
     try:
         with Image.open(image_path) as img:
-            raw_exif = img.getexif()
+            exifdata = img.getexif()
             
             # Extract just the datetime
             # Tag 36867 is DateTimeOriginal
-            dt = raw_exif.get(36867) or raw_exif.get(306) # Fallback to DateTime
+            dt = exifdata.get(36867) or exifdata.get(306) # Fallback to DateTime
             
-            if hasattr(dt, 'decode'): dt = dt.decode() # type: ignore
+            if hasattr(dt, 'decode'): 
+                dt = dt.decode() # type: ignore
             dt_str = str(dt).strip('\x00') if dt else "UNKNOWN"
 
             return {

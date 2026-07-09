@@ -1092,7 +1092,7 @@ def check_string_length(x: list) -> list:
     """
     Check that all strings in the given list are the same length
 
-    Returns a list of the elements of 
+    Returns a list of the elements with different lengths than the mode.
     """
     diff_files = []
     x_nchar = [len(i) for i in x]
