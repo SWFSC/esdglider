@@ -23,21 +23,53 @@ Utilities, mostly specific to ESD needs and ways of processing
 
 # Logistical utilities ########################################################
 
-# For IOOS-compliant encoding when writing to NetCDF
-def to_netcdf_esd(ds: xr.Dataset, outname: str):
-    _log.info(f"Writing dataset with ESD encoding to: {outname}")
-    ds.to_netcdf(
-        outname,
-        "w",
-        encoding={
-            "time": {
-                "units": "seconds since 1970-01-01T00:00:00Z",
-                "_FillValue": np.nan,
-                "calendar": "gregorian",
-                "dtype": "float64",
-            },
-        },
-    )
+# # For IOOS-compliant encoding when writing to NetCDF
+# def to_netcdf_esd(ds: xr.Dataset, outname: str):
+#     _log.info(f"Writing dataset with ESD encoding to: {outname}")
+#     ds.to_netcdf(
+#         outname,
+#         "w",
+#         encoding={
+#             "time": {
+#                 "units": "seconds since 1970-01-01T00:00:00Z",
+#                 "_FillValue": np.nan,
+#                 "calendar": "gregorian",
+#                 "dtype": "float64",
+#             },
+#         },
+#     )
+
+
+def _get_deployment_netcdfvars(deploymentyaml):
+    """
+    Loop through deploymentyaml files, and concatenate all netcdf vars
+    from the various deployment YAML files.
+    Allows for yaml files with only netcdf variables, 
+    for raw and engineering datasets.
+
+    Parameters
+    ----------
+    deploymentyaml : str or list of str
+        Path(s) to the deployment YAML file(s).
+
+    Returns
+    -------
+    dict
+        A dictionary containing the concatenated NetCDF variables from the deployment YAML files.
+    """
+    ncvar = {}
+    if isinstance(deploymentyaml, str):
+        deploymentyaml = [deploymentyaml]
+    for nn, d in enumerate(deploymentyaml):
+        with open(d) as fin:
+            deployment_ = yaml.safe_load(fin)
+            if "netcdf_variables" in deployment_.keys():
+                for key, value in deployment_["netcdf_variables"].items():
+                    if key not in ncvar:
+                        ncvar[key] = value
+
+    return ncvar
+
 
 
 """

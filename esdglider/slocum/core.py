@@ -27,6 +27,21 @@ import esdglider.utils as utils
 _log = logging.getLogger(__name__)
 
 
+"""
+time_encoding for NetCDF time variables.
+
+This dictionary can be used as the `encoding` argument when writing
+time variables to NetCDF files using xarray or netCDF4, to be CF-compliant
+"""
+
+time_encoding = {
+    'units': 'seconds since 1970-01-01T00:00:00Z',
+    '_FillValue': np.nan,
+    'calendar': 'gregorian',
+    'dtype': 'float64',
+}
+
+
 
 def ngdac_profiles(inname, outdir, deploymentyaml, force=False):
     """
@@ -265,26 +280,12 @@ def binary_to_raw_timeseries(
     # Read and parse deployment yaml(s)
     deployment = pgutils._get_deployment(deploymentyaml)
 
-    # NetCDF vars:
-    # Loop through deploymentyaml files, and append all new netcdf vars.
-    # This chunk maintains the key from the first time it sees it.
-    # This distinction from pgutils._get_deployment
-    # allows us to 'concatenate' netcdf vars for this raw dataset
-    ncvar = {}
-    if isinstance(deploymentyaml, str):
-        deploymentyaml = [deploymentyaml]
-    for nn, d in enumerate(deploymentyaml):
-        with open(d) as fin:
-            deployment_ = yaml.safe_load(fin)
-            if "netcdf_variables" in deployment_.keys():
-                for key, value in deployment_["netcdf_variables"].items():
-                    if key not in ncvar:
-                        ncvar[key] = value
-
+    # Concatenate all netcdf variables from the deployment YAML files
+    ncvar = utils._get_deployment_netcdfvars(deploymentyaml)
     thenames = list(ncvar.keys())
     thenames.remove("time")
 
-    # build a new data set based on info in `deployment.`
+    # build a new data set based on info from deploymentyaml
     ds = xr.Dataset()
     attr = {}
     name = "time"
@@ -444,7 +445,13 @@ def binary_to_raw_timeseries(
 
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
     _log.info("writing %s", outname)
-    utils.to_netcdf_esd(ds, outname)
+    # utils.to_netcdf_esd(ds, outname)
+    pgutils._save_dataset(
+        ds,
+        outname,
+        deployment,
+        encoding={'time': time_encoding},
+    )
 
     return outname
 
@@ -543,7 +550,13 @@ def raw_to_sci_timeseries(
     # Write out to file
     outname = f"{outdir}/{ds.attrs['deployment_name'] + fnamesuffix}.nc"
     _log.info("writing %s", outname)
-    utils.to_netcdf_esd(ds, outname)
+    # utils.to_netcdf_esd(ds, outname)
+    pgutils._save_dataset(
+        ds,
+        outname,
+        deployment,
+        encoding={'time': time_encoding},
+    )
 
     return outname
 

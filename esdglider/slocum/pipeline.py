@@ -20,7 +20,7 @@ import dbdreader
 import esdglider.plots as plots
 import esdglider.paths as paths
 import esdglider.utils as utils
-from esdglider.slocum import core
+from esdglider.slocum.core import binary_to_raw_timeseries, raw_to_sci_timeseries, time_encoding
 
 _log = logging.getLogger(__name__)
 
@@ -34,6 +34,8 @@ bin_size: list
     a list of the gridded depth bin sizes
 depth_max: float
     The maximum value to use when making depth bins
+maxgap_esd : float
+    The maximum allowed gap (in seconds) for ESD processing.
 """
 bin_size = [1, 5]
 depth_max = 1200.1
@@ -48,15 +50,51 @@ def generate_timeseries(
     write_raw: bool = True,
     write_eng: bool = True,
     write_sci: bool = True,
-    sci_timeseries_pyglider: bool = True,
+    raw_to_sci: bool = False,
     binary_search: str | None = None,
     file_info: str | None = None,
     **kwargs,
 ):
+    """
+    Generate timeseries netCDF files for the slocum glider deployment.
+
+    Parameters
+    ----------
+    deployment_name : str
+        The name of the glider deployment.
+    mode : str
+        The mode of operation, either 'rt' (real-time) or 'delayed'.
+    glider_paths : dict
+        A dictionary containing paths relevant to the glider deployment.
+    write_raw : bool, optional
+        Whether to write raw timeseries files, by default True.
+    write_eng : bool, optional
+        Whether to write engineering timeseries files, by default True.
+    write_sci : bool, optional
+        Whether to write science timeseries files, by default True.
+    raw_to_sci : bool, optional
+        Whether to convert raw data to science data (False, default)
+        or to use pyglider's binary_to_timeseries to generate the 
+        science timeseries file (True).
+    binary_search : str | None, optional
+        The search pattern for binary files, by default None.
+        If None, will default to all uncompressed binary files 
+    file_info : str | None, optional
+        Additional file information, for postproc information.
+    **kwargs
+        Additional keyword arguments passed to the underlying functions.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the paths to the timeseries files.
+    """
+
     deploymentyaml = glider_paths["deploymentyaml"]
     rawdir = glider_paths["rawdir"]
     tsdir = glider_paths["tsdir"]
-    # griddir = paths["griddir"]
+
+    deployment = pgutils._get_deployment(deploymentyaml)
 
     # Check mode, set binary_search regex. Use uncompressed by default
     if mode == "delayed":
@@ -79,23 +117,14 @@ def generate_timeseries(
         "maxgap": maxgap_esd,
     }
 
-    # --------------------------------------------
-    # Check flbbcd calibration values, and cdom status
-    if write_raw or write_sci:
-        check_flbbcd_autoexec(
-            glider_paths["binarydir"], 
-            glider_paths["cacdir"], 
-            deploymentyaml,
-            search=binary_search,
-        )
 
     # --------------------------------------------
     # Raw
     outname_tsraw = glider_paths["tsrawpath"]
     outname_tseng = glider_paths["tsengpath"]
     outname_tssci = glider_paths["tsscipath"]
-    outname_gr1m = glider_paths["gr1path"]
-    outname_gr5m = glider_paths["gr5path"]
+    outname_gr1m  = glider_paths["gr1path"]
+    outname_gr5m  = glider_paths["gr5path"]
 
     if write_raw:
         utils.remove_file(outname_tsraw)
@@ -106,7 +135,7 @@ def generate_timeseries(
         utils.makedirs_pass(rawdir)
 
         _log.info("Generating raw nc")
-        outname_tsraw = core.binary_to_raw_timeseries(
+        outname_tsraw = binary_to_raw_timeseries(
             glider_paths["binarydir"],
             glider_paths["cacdir"],
             rawdir,
@@ -128,6 +157,13 @@ def generate_timeseries(
         ]
         tsraw = utils.data_var_reorder(tsraw, new_start)
         tsraw = postproc_attrs(tsraw, postproc_info)
+        pgutils._save_dataset(
+            tsraw,
+            outname_tsraw, 
+            deployment, 
+            mode='w',
+            encoding={'time': time_encoding},
+        )
 
         # Save profile summary
         prof_summ_path = postproc_info["profile_summary_path"]
@@ -157,11 +193,12 @@ def generate_timeseries(
         except FileNotFoundError:
             _log.debug("Not writing raw nc file, and file could not be found")
             if write_sci or write_eng:
-                _log.warning(
+                _log.error(
                     "The raw nc file (%s) does not exist, "
                     + "and thus sci and eng timeseries cannot be generated.", 
                     outname_tsraw
                 )
+                return {}
 
     # --------------------------------------------
     # Eng Timeseries
@@ -188,7 +225,13 @@ def generate_timeseries(
         _log.info(f"Post-processing engineering timeseries: {outname_tseng}")
         tseng = xr.load_dataset(outname_tseng)
         tseng = postproc_eng_timeseries(tseng, postproc_info, **kwargs)
-        utils.to_netcdf_esd(tseng, outname_tseng)
+        pgutils._save_dataset(
+            tseng,
+            outname_tseng, 
+            deployment, 
+            mode='w',
+            encoding={'time': time_encoding},
+        )
         del tseng
 
     # --------------------------------------------
@@ -200,9 +243,13 @@ def generate_timeseries(
         utils.remove_file(outname_gr5m)
         utils.makedirs_pass(tsdir)
 
-        if sci_timeseries_pyglider:
-            # Science - uses sci_water_pressure as time_base sensor
-            _log.info("Generating science timeseries")
+        if not raw_to_sci: 
+            time_base_var = "sci_water_pressure"
+            _log.info(
+                "Generating science timeseries, "
+                + "via pyglider with %s as time_base sensor", 
+                time_base_var
+            )
             outname_tssci = pgslocum.binary_to_timeseries(
                 glider_paths["binarydir"],
                 glider_paths["cacdir"],
@@ -210,7 +257,7 @@ def generate_timeseries(
                 deploymentyaml,
                 search=binary_search,
                 fnamesuffix=f"-{mode}-sci",
-                time_base="sci_water_pressure",
+                time_base=time_base_var,
                 profile_filt_time=None,  # type: ignore
                 maxgap=maxgap_esd,
             )
@@ -218,20 +265,24 @@ def generate_timeseries(
 
         else:
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
-            outname_tssci = core.raw_to_sci_timeseries(
+            outname_tssci = raw_to_sci_timeseries(
                 outname_tsraw,
                 tsdir,
                 deploymentyaml,
                 fnamesuffix=f"-{mode}-sci",
                 maxgap=maxgap_esd,
             )
-            # raw_to_sci_timeseries calls postproc_sci_timeseries internally
-            tssci = xr.load_dataset(outname_tssci)
 
         _log.info(f"Post-processing science timeseries: {outname_tssci}")
         tssci = xr.load_dataset(outname_tssci)
         tssci = postproc_sci_timeseries(tssci, postproc_info, **kwargs)
-        utils.to_netcdf_esd(tssci, outname_tssci)
+        pgutils._save_dataset(
+            tssci,
+            outname_tssci, 
+            deployment, 
+            mode='w',
+            encoding={'time': time_encoding},
+        )        
         del tssci
 
     if write_eng or write_sci:
@@ -249,10 +300,10 @@ def generate_timeseries(
                 + "by more than 0.5. This means they may have "
                 + "a different number of functional profiles",
             )
-            _log.warning(f"Min idx for eng: {tseng.profile_index.values.min()}")
-            _log.warning(f"Min idx for sci: {tssci.profile_index.values.min()}")
-            _log.warning(f"Max idx for eng: {tseng.profile_index.values.max()}")
-            _log.warning(f"Max idx for sci: {tssci.profile_index.values.max()}")
+            _log.warning("Min idx for eng: %d", tseng.profile_index.values.min())
+            _log.warning("Min idx for sci: %d", tssci.profile_index.values.min())
+            _log.warning("Max idx for eng: %d", tseng.profile_index.values.max())
+            _log.warning("Max idx for sci: %d", tssci.profile_index.values.max())
         else:
             _log.info("The eng and sci timeseries have the same functional profiles")
 
@@ -262,6 +313,26 @@ def generate_timeseries(
     else:
         _log.info("Not writing timeseries nc")
 
+    # --------------------------------------------
+    # Check flbbcd calibration values, and cdom status
+    if write_raw or write_sci:
+        check_flbbcd_autoexec(
+            glider_paths["binarydir"], 
+            glider_paths["cacdir"], 
+            deploymentyaml,
+            search=binary_search,
+        )
+
+        tssci = xr.load_dataset(outname_tssci)
+        cdom_status = utils.check_cdom_date(tssci)
+        if cdom_status in ["oot", "raf"]:
+            _log.warning(
+                "CDOM data are either out-of-tolerance or require a "
+                + "Reference Adjustment Factor (RAF). Status: %s", 
+                cdom_status
+            )
+
+    # --------------------------------------------
     return {
         "outname_tsraw": outname_tsraw,
         "outname_tseng": outname_tseng,
@@ -467,7 +538,6 @@ def postproc_eng_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
     ds.attrs["processing_level"] += " All values have been interpolated via linear fill"
 
     _log.debug(f"end eng postproc: ds has {len(ds.time)} values")
-    # utils.to_netcdf_esd(ds, ds_file)
 
     return ds
 
@@ -623,7 +693,8 @@ def make_gridfiles_depth_measured(glider_paths):
             ds_sci_tmp.attrs["comment"] = tmp_comment
         else:
             ds_sci_tmp.attrs["comment"] += ". " + tmp_comment
-        utils.to_netcdf_esd(ds_sci_tmp, temp_file)
+        # utils.to_netcdf_esd(ds_sci_tmp, temp_file)
+        ds_sci_tmp.to_netcdf(temp_file, encoding={'time': time_encoding})
 
         outnames = make_gridfiles_esd(temp_file, glider_paths=glider_paths)
     return outnames
@@ -715,7 +786,7 @@ def drop_ts_ranges(
         Path to profile summary CSV. Ignored if dstype is raw.
         If not None and dstype is eng or sci, will join profiles
     outname : str | None (default None)
-        If not None, then ds is written to this path using utils.to_netcdf_esd
+        If not None, then ds is written to this path
     kwargs
         Passed to profile functions
 
@@ -775,7 +846,12 @@ def drop_ts_ranges(
 
     # Write to netcdf
     if outname is not None:
-        utils.to_netcdf_esd(ds, outname)
+        _log.info(f"Writing dataset to {outname}")
+        ds.to_netcdf(
+            outname,
+            mode='w',
+            encoding={'time': time_encoding},
+        )
 
     return ds
 
@@ -981,10 +1057,12 @@ def correct_flbbcd_raw_sci(
     ds_sci_cor = utils.drop_bogus(ds_sci_cor)
 
     _log.info("Writing corrected raw and science timeseries to netcdf")
-    utils.to_netcdf_esd(ds_raw_cor, outname_tsraw)
-    utils.to_netcdf_esd(ds_sci_cor, outname_tssci)
-    _log.info("Done FLBBCD correction")
+    # utils.to_netcdf_esd(ds_raw_cor, outname_tsraw)
+    # utils.to_netcdf_esd(ds_sci_cor, outname_tssci)
+    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': time_encoding})
+    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': time_encoding})
 
+    _log.info("Done FLBBCD correction")
     return outname_tsraw, outname_tssci
 
 
@@ -1016,9 +1094,11 @@ def correct_cdom_raw_sci(glider_paths: dict):
     ds_sci_cor = utils.correct_cdom(ds_sci)
 
     _log.info("Writing corrected raw and science timeseries to netcdf")
-    utils.to_netcdf_esd(ds_raw_cor, outname_tsraw)
-    utils.to_netcdf_esd(ds_sci_cor, outname_tssci)
-    _log.info("Done CDOM correction")
+    # utils.to_netcdf_esd(ds_raw_cor, outname_tsraw)
+    # utils.to_netcdf_esd(ds_sci_cor, outname_tssci)
+    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': time_encoding})
+    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': time_encoding})
 
+    _log.info("Done CDOM correction")
     return outname_tsraw, outname_tssci
 
