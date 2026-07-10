@@ -1,225 +1,268 @@
 """
-Functions for interacting with GCP
+Functions for interacting with GCP (Fail-Fast Architecture)
 """
 
 import logging
 import os
 import subprocess
+import shutil
+from functools import wraps
 
 import google_crc32c
 from google.cloud import secretmanager
 
-# from google.cloud import storage
-
 _log = logging.getLogger(__name__)
 
 
-def access_secret_version(project_id, secret_id, version_id="latest"):
+def log_and_raise_shell_errors(command_name: str):
     """
-    Access the payload for the given secret version if one exists. The version
-    can be a version number as a string (e.g. "5") or an alias (e.g. "latest").
-    Originally from
-    https://github.com/googleapis/python-secret-manager/blob/main/samples/snippets/access_secret_version.py
+    Decorator to log stdout/stderr when a subprocess fails, then let
+    the exception bubble up to halt the orchestration script.
 
-    TODO: update this to follow current sample code from Google:
-    https://github.com/googleapis/google-cloud-python/blob/main/packages/google-cloud-secret-manager/samples/generated_samples/secretmanager_v1_generated_secret_manager_service_access_secret_version_sync.py
+    Parameters
+    ----------
+    command_name : str
+        The name of the CLI tool being executed (e.g., 'gcsfuse',
+        'fusermount'). Used to format clean and clear log statements.
 
+    Returns
+    -------
+    callable
+        The wrapped function capable of catching and logging subprocess
+        failures.
     """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except subprocess.CalledProcessError as e:
+                _log.critical(f"{command_name} failed with exit code {e.returncode}")
+                if e.stdout:
+                    _log.debug(f"{command_name} stdout:\n{e.stdout.strip()}")
+                if e.stderr:
+                    _log.error(f"{command_name} stderr:\n{e.stderr.strip()}")
+                raise
+            except Exception as e:
+                _log.exception(f"Unexpected system error during {command_name}: {e}")
+                raise
+        return wrapper
+    return decorator
 
-    # Create the Secret Manager client.
+
+def check_gcsfuse_installed() -> None:
+    """
+    Ensure gcsfuse is available in the system environment.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the gcsfuse binary dependency is missing from the system path.
+    """
+    if shutil.which("gcsfuse") is None:
+        msg = "gcsfuse dependency missing: Not found in system PATH."
+        _log.critical(msg)
+        raise FileNotFoundError(msg)
+
+
+def access_secret_version(project_id: str, secret_id: str, version_id: str = "latest") -> str:
+    """
+    Access the payload for the given secret version if one exists.
+    
+    Verifies payload data integrity via a CRC32c checksum verification
+    step before returning the decoded string.
+
+    Parameters
+    ----------
+    project_id : str
+        The GCP project ID or project number (e.g., 'amlr-gliders-dev').
+    secret_id : str
+        The name/ID of the secret to retrieve from Secret Manager.
+    version_id : str, optional
+        The specific version number as a string (e.g., "5") or an alias.
+        Defaults to "latest".
+
+    Returns
+    -------
+    str
+        The decrypted secret payload material decoded as a UTF-8 string.
+
+    Raises
+    ------
+    ValueError
+        If data corruption is detected via an invalid CRC32c checksum.
+    """
     client = secretmanager.SecretManagerServiceClient()
-
-    # Build the resource name of the secret version.
     name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
-
-    # Access the secret version.
     response = client.access_secret_version(request={"name": name})
 
-    # Verify payload checksum.
+    # Verify payload checksum
     crc32c = google_crc32c.Checksum()
     crc32c.update(response.payload.data)
     if response.payload.data_crc32c != int(crc32c.hexdigest(), 16):
-        _log.error("Data corruption detected.")
-        return response
-
-    # Print the secret payload.
-    #
-    # WARNING: Do not print the secret in a production environment - this
-    # snippet is showing how to access the secret material.
-    # payload = response.payload.data.decode("UTF-8")
-    # print("Plaintext: {}".format(payload))
+        msg = f"Data corruption detected while retrieving secret: {secret_id}"
+        _log.critical(msg)
+        raise ValueError(msg)
 
     return response.payload.data.decode("UTF-8")
 
 
 # ---------------------------------------
 # GCS bucket mount management
-# NOTE: these functions are from
-#  https://github.com/us-amlr/shaip/blob/main/shaip/utils.py
-def gcs_unmount_bucket(mountpoint: str):
-    """
-    Run the command to unmount a GCS bucket mounted
-    at path 'mountpoint' (a string) using gcsfuse
-    https://cloud.google.com/storage/docs/gcs-fuse
-    """
 
+@log_and_raise_shell_errors(command_name="fusermount")
+def gcs_unmount_bucket(mountpoint: str) -> None:
+    """
+    Unmount a GCS bucket mounted at a specific path using fusermount.
+
+    Parameters
+    ----------
+    mountpoint : str
+        The absolute or relative system path where the bucket is
+        currently mounted.
+        Example: '/home/user/data/amlr-gliders-imagery-proc-dev'
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    subprocess.CalledProcessError
+        If the underlying fusermount command returns a non-zero exit code.
+    """
     mountpoint = str(mountpoint)
-    # subprocess.run(["fusermount", "-u", mountpoint])
-    #
-    # return 0
     cmd = ["fusermount", "-u", mountpoint]
-    _log.info(f"Unmounting with: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-
-    # Log standard output if it exists
+    _log.info(f"Executing: {' '.join(cmd)}")
+    
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     if result.stdout:
         _log.debug(f"fusermount stdout:\n{result.stdout.strip()}")
+    _log.info(f"Successfully unmounted {mountpoint}")
 
-    # Log standard error if it exists
-    if result.stderr:
-        if result.returncode == 0:
-            _log.debug(f"fusermount stderr:\n{result.stderr.strip()}")
-        else:
-            _log.error(f"fusermount failed with code {result.returncode}:\n{result.stderr.strip()}")
-    return result.returncode
 
-def gcs_mount_bucket(bucket, mountpoint, ro=False):
+def gcs_mount_bucket(bucket: str, mountpoint: str, ro: bool = False) -> None:
     """
-    Run the command to mount a bucket 'bucket' at 'mountpoint' using gcsfuse
-    Command is run with '--implicit-dirs' argument.
-    https://cloud.google.com/storage/docs/gcs-fuse
+    Run the command to mount a bucket at a mountpoint using gcsfuse.
+    
+    Command is run with the '--implicit-dirs' argument. Automatically
+    handles pre-checks, directory validation, and dirty unmounting
+    efforts prior to execution.
 
     Parameters
     ----------
     bucket : str
-        Name of bucket ot mount. Eg, 'amlr-gliders-imagery-raw-dev'
+        Name of the Cloud Storage bucket to mount. 
+        Example: 'amlr-gliders-imagery-raw-dev'
     mountpoint : str
-        Path of where to mount 'bucket'. Eg, '.../amlr-gliders-imagery-proc-dev'
-    ro : boolean
-        Indicates if bucket should be mounted as read only
+        The local system directory path where the bucket should be attached.
+        Example: '/mnt/amlr-gliders-imagery-proc-dev'
+    ro : bool, optional
+        Indicates if the bucket should be mounted as read-only using the
+        '-o ro' argument flag. Defaults to False (read-write).
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    FileNotFoundError
+        If gcsfuse is missing from the environment, or if the target local
+        mountpoint directory does not exist.
+    RuntimeError
+        If the target mountpoint is not empty and cannot be successfully
+        unmounted or cleared.
+    subprocess.CalledProcessError
+        If the underlying gcsfuse command returns a non-zero exit code.
     """
+    check_gcsfuse_installed()
 
     bucket = str(bucket)
     mountpoint = str(mountpoint)
-    _log.info("Trying to mount bucket %s", bucket)
+    _log.info(f"Initiating mount sequence for bucket '{bucket}' -> '{mountpoint}'")
 
-    # Make mountpoint, if necessary
     if not os.path.exists(mountpoint):
-        os.makedirs(mountpoint)
-    elif os.listdir(mountpoint) != []:
-        _log.info("The mountpoint is not empty; trying to unmount")
-        gcs_unmount_bucket(mountpoint)
-        if os.listdir(mountpoint) != []:
-            _log.warning("The mountpoint is still not empty; not mounting")
-            return 0
+        msg = f"Mount abort: Mountpoint path does not exist: {mountpoint}"
+        _log.critical(msg)
+        raise FileNotFoundError(msg)
+        
+    if os.listdir(mountpoint):
+        _log.info(f"Mountpoint '{mountpoint}' is not empty; attempting pre-unmount clean")
+        try:
+            gcs_unmount_bucket(mountpoint)
+        except subprocess.CalledProcessError:
+            _log.warning("Initial unmount attempt reported an error, checking if directory cleared anyway...")
 
-    # # Unmount bucket, just in case
-    # gcs_unmount_bucket(mountpoint)
-    # retcode = gcs_unmount_bucket(mountpoint)
-    # if retcode != 0 and os.listdir(mountpoint) != []:
-    #     _log.error("The mountpoint isnot empty after trying to unmount, exiting")
-    #     return 1
+        if os.listdir(mountpoint):
+            msg = f"Mount abort: Mountpoint '{mountpoint}' is dirty and could not be cleared."
+            _log.critical(msg)
+            raise RuntimeError(msg)
 
-    # if os.listdir(mountpoint) != []:
-    #     _log.error("The mountpoint is not empty after unmounting, exiting")
-    #     return 1
+    @log_and_raise_shell_errors(command_name="gcsfuse")
+    def _run_mount_cmd():
+        cmd = ["gcsfuse", "--implicit-dirs", bucket, mountpoint]
+        if ro:
+            cmd[2:2] = ["-o", "ro"]
 
-    # Mount bucket using gcsfuse
-    cmd = ["gcsfuse", "--implicit-dirs", bucket, mountpoint]
-    if ro:
-        cmd[2:2] = ["-o", "ro"]
-    # subprocess.run(cmd)
-    #
-    # return 0
-    _log.info(f"Mounting with: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+        _log.info(f"Executing: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        
+        if result.stdout:
+            _log.debug(f"gcsfuse stdout:\n{result.stdout.strip()}")
+        if result.stderr:
+            _log.debug(f"gcsfuse operational logs (stderr):\n{result.stderr.strip()}")
 
-    # # Run command, capture output (stdout/stderr), and format as strings (text=True)
-    # result = subprocess.run(cmd, capture_output=True, text=True)
-    # print(result)
-    # Log standard output if it exists
-    if result.stdout:
-        _log.debug(f"gcsfuse stdout:\n{result.stdout.strip()}")
-
-    # Log standard error if it exists
-    if result.stderr:
-        # CLI tools like gcsfuse often write operational logs to stderr even on success
-        if result.returncode == 0:
-            _log.debug(f"gcsfuse stderr:\n{result.stderr.strip()}")
-        else:
-            _log.error(f"gcsfuse failed with code {result.returncode}:\n{result.stderr.strip()}")
-
-    return result.returncode
-    # # Log standard output if it exists
-    # if result.stdout:
-    #     _log.info(f"gcsfuse stdout:\n{result.stdout.strip()}")
-    #     _log.info(f"gcsfuse stderr:\n{result.stderr.strip()}")
-
-    # # Log standard error if it exists
-    # if result.stderr:
-    #     # CLI tools like gcsfuse often write operational logs to stderr even on success
-    #     if result.returncode == 0:
-    #         _log.info(f"gcsfuse stderr:\n{result.stderr.strip()}")
-    #     else:
-    #         _log.error(f"gcsfuse failed with code {result.returncode}:\n{result.stderr.strip()}")
-
-    # return result.returncode
+    _run_mount_cmd()
+    _log.info(f"Successfully mounted bucket '{bucket}'")
 
 
-def check_gcs_file_exists(bucket, file_path):
+def check_gcs_file_exists(bucket, file_path: str) -> bool:
     """
-    Checks if a file exists in GCS. Function adapted from Gemini
+    Checks if a file exists in a GCS bucket.
 
     Parameters
     ----------
-    bucket : Bucket
-        An object of class Bucket, created via eg storage_client.bucket(bucket_name)
+    bucket : google.cloud.storage.bucket.Bucket
+        An initialized Google Cloud Storage Bucket object instantiation.
     file_path : str
-        Path to the object/file in the bucket.
-        Path does not include the bucket name
+        The structural key path pointing to the object blob inside the
+        bucket. Does not include the bucket prefix string itself.
 
     Returns
     -------
     bool
-        True if object exists, and False otherwise
+        True if the exact object blob exists in the bucket, and False
+        otherwise.
     """
-    # # This can be initialized once outside the function in your actual script
-    # storage_client = storage.Client()
-    # bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(file_path)
     return blob.exists()
 
 
-def check_gcs_directory_exists(bucket, directory_path):
+def check_gcs_directory_exists(bucket, directory_path: str) -> bool:
     """
-    Checks if a 'directory' exists in a GCS bucket by checking for objects
-    with that prefix. Function adapted from Gemini
+    Checks if a pseudo-directory exists in a GCS bucket.
+    
+    Verifies existence by evaluating whether any objects exist matching
+    the requested path prefix filter.
 
     Parameters
     ----------
-    bucket : Bucket
-        An object of class Bucket, created via eg storage_client.bucket(bucket_name)
+    bucket : google.cloud.storage.bucket.Bucket
+        An initialized Google Cloud Storage Bucket object instantiation.
     directory_path : str
-        Path to the GCS 'directory' within the bucket.
-        Path does not include the bucket name.
-        This path must end with a forward slash
+        The pseudo-directory path within the target bucket. Does not
+        include the bucket name. If the string does not end with a
+        trailing forward slash ('/'), it will be automatically appended.
 
     Returns
     -------
     bool
-        True if the directory path contains at least object, and False otherwise
+        True if the prefix yields at least one matching object nested
+        within, and False otherwise.
     """
-
     if not directory_path.endswith("/"):
         directory_path += "/"
 
-    # storage_client = storage.Client()
-    # bucket = storage_client.bucket(bucket_name)
-
-    # list_blobs returns an iterator.
-    # We only need to see if it has at least one item.
     blobs = bucket.list_blobs(prefix=directory_path, max_results=1)
-
-    # next(iterator, default_value) is a memory-efficient way to check
-    # if the iterator has any items.
     return next(blobs, None) is not None
