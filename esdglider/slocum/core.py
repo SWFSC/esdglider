@@ -445,7 +445,6 @@ def binary_to_raw_timeseries(
 
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
     _log.info("writing %s", outname)
-    # utils.to_netcdf_esd(ds, outname)
     pgutils._save_dataset(
         ds,
         outname,
@@ -550,7 +549,6 @@ def raw_to_sci_timeseries(
     # Write out to file
     outname = f"{outdir}/{ds.attrs['deployment_name'] + fnamesuffix}.nc"
     _log.info("writing %s", outname)
-    # utils.to_netcdf_esd(ds, outname)
     pgutils._save_dataset(
         ds,
         outname,

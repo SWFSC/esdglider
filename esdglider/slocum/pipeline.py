@@ -37,6 +37,7 @@ depth_max: float
 maxgap_esd : float
     The maximum allowed gap (in seconds) for ESD processing.
 """
+
 bin_size = [1, 5]
 depth_max = 1200.1
 maxgap_esd = 60
@@ -526,7 +527,7 @@ def postproc_eng_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
 
     # Reorder data variables
     # new_start = ["latitude", "longitude", "depth", "profile_index"]
-    new_start = ["depth", "profile_index"]
+    new_start = ["depth", "profile_index", "profile_direction"]
     ds = utils.data_var_reorder(ds, new_start)
 
     # Update eng-specific attributes
@@ -590,6 +591,7 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
         # "longitude",
         # "depth",
         "profile_index",
+        "profile_direction",
         "conductivity",
         "temperature",
         "pressure",
@@ -693,7 +695,6 @@ def make_gridfiles_depth_measured(glider_paths):
             ds_sci_tmp.attrs["comment"] = tmp_comment
         else:
             ds_sci_tmp.attrs["comment"] += ". " + tmp_comment
-        # utils.to_netcdf_esd(ds_sci_tmp, temp_file)
         ds_sci_tmp.to_netcdf(temp_file, encoding={'time': time_encoding})
 
         outnames = make_gridfiles_esd(temp_file, glider_paths=glider_paths)
@@ -1057,8 +1058,6 @@ def correct_flbbcd_raw_sci(
     ds_sci_cor = utils.drop_bogus(ds_sci_cor)
 
     _log.info("Writing corrected raw and science timeseries to netcdf")
-    # utils.to_netcdf_esd(ds_raw_cor, outname_tsraw)
-    # utils.to_netcdf_esd(ds_sci_cor, outname_tssci)
     ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': time_encoding})
     ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': time_encoding})
 
@@ -1082,7 +1081,6 @@ def correct_cdom_raw_sci(glider_paths: dict):
     outnames of raw and science dataset as a tuple (outname_tsraw, outname_tssci)
     """
 
-    _log.info("Starting CDOM correction")
 
     # Read in datasets
     outname_tsraw = glider_paths["tsrawpath"]
@@ -1090,15 +1088,15 @@ def correct_cdom_raw_sci(glider_paths: dict):
     ds_raw = xr.load_dataset(outname_tsraw)
     ds_sci = xr.load_dataset(outname_tssci)
 
+    _log.info("Starting CDOM correction for raw dataset")
     ds_raw_cor = utils.correct_cdom(ds_raw)
-    ds_sci_cor = utils.correct_cdom(ds_sci)
-
-    _log.info("Writing corrected raw and science timeseries to netcdf")
-    # utils.to_netcdf_esd(ds_raw_cor, outname_tsraw)
-    # utils.to_netcdf_esd(ds_sci_cor, outname_tssci)
+    _log.info("Writing corrected raw timeseries to netcdf")
     ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': time_encoding})
+
+    _log.info("Starting CDOM correction for science dataset")
+    ds_sci_cor = utils.correct_cdom(ds_sci)
+    _log.info("Writing corrected science timeseries to netcdf")
     ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': time_encoding})
 
     _log.info("Done CDOM correction")
     return outname_tsraw, outname_tssci
-
