@@ -80,13 +80,14 @@ def generate_timeseries(
     }
 
     # --------------------------------------------
-    # Check flbbcd calibration values
-    check_flbbcd_autoexec(
-        glider_paths["binarydir"], 
-        glider_paths["cacdir"], 
-        deploymentyaml,
-        search=binary_search,
-    )
+    # Check flbbcd calibration values, and cdom status
+    if write_raw or write_sci:
+        check_flbbcd_autoexec(
+            glider_paths["binarydir"], 
+            glider_paths["cacdir"], 
+            deploymentyaml,
+            search=binary_search,
+        )
 
     # --------------------------------------------
     # Raw
@@ -881,30 +882,45 @@ def correct_flbbcd_raw_sci(
     bb_cal: tuple | None = None,
 ) -> tuple:
     """
-    ESD-specific wrapper around calc_flbbcd. 
+    Calculate and save corrected ecopuck (FLBBCD) output values
+    
+    For the raw dataset, use esdglider's calc_flbbcd function. 
 
-    Rather than calculating corrected FLBBCD output values 
-    for the science timeseries from interpolated signal values, 
-    calculate corrected FLBBCD output values using the raw dataset, 
-    and then interpolate these values to the science timeseries.
+    For the science timeseries, do not calculate the corrected output 
+    values from interpolated signal values. 
+    Rather, calculate corrected FLBBCD output values using the raw dataset, 
+    and then interpolate these values to the science timeseries. 
 
-    If the calibration ({var}_cal) inputs are None, 
+    Additionally, to mirror the behavior of esdglider/pyglider, 
+    the following functions are run on the interpolated science timeseries
+    values: pyglider's find_gaps and _zero_screen functions, and
+    esdglider's drop_bogus. 
+
+    If the calibration ({var}_cal) inputs are None 
+    (this will usually be the case), 
     then the function will attempt to read the calibration values 
     esdglider's data/flbbcd_calibration.yml.
 
+    See `esdglider.utils.calc_flbbcd` for more details. 
+
     Parameters
     ----------
-    ds_raw: `xarray.Dataset`
-        raw glider timeseries
-    ds_sci: `xarray.Dataset`
-        science glider timeseries        
-    {var}_cal: tuple: (cwo, sf)
-        See `calc_flbbcd`
+    glider_paths: dict
+        Dictionary containing glider-related paths. 
+        Expected keys are "tsrawpath" and "tsscipath".
+    chlor_cal: tuple | None
+        Calibration values for chlorophyll channel, as (cwo, sf). If None, read from YAML.
+    cdom_cal: tuple | None
+        Calibration values for CDOM channel, as (cwo, sf). If None, read from YAML.
+    bb_cal: tuple | None
+        Calibration values for backscatter channel, as (cwo, sf). If None, read from YAML.
 
     Returns
     -------
-    Tuple (ds_raw, ds_sci) with corrected FLBBCD output values 
+    outnames of raw and science dataset as a tuple (outname_tsraw, outname_tssci)
     """
+
+    _log.info("Starting FLBBCD corrections")
 
     # Read in datasets
     outname_tsraw = glider_paths["tsrawpath"]
@@ -967,6 +983,42 @@ def correct_flbbcd_raw_sci(
     _log.info("Writing corrected raw and science timeseries to netcdf")
     utils.to_netcdf_esd(ds_raw_cor, outname_tsraw)
     utils.to_netcdf_esd(ds_sci_cor, outname_tssci)
-    _log.info("Done correction")
+    _log.info("Done FLBBCD correction")
 
     return outname_tsraw, outname_tssci
+
+
+def correct_cdom_raw_sci(glider_paths: dict):
+    """
+    Correct or remove CDOM values in the raw and science timeseries datasets, 
+    via the check_cdom function.
+
+    Parameters
+    ----------
+    glider_paths: dict
+        Dictionary containing glider-related paths. 
+        Expected keys are "tsrawpath" and "tsscipath".
+
+    Returns
+    -------
+    outnames of raw and science dataset as a tuple (outname_tsraw, outname_tssci)
+    """
+
+    _log.info("Starting CDOM correction")
+
+    # Read in datasets
+    outname_tsraw = glider_paths["tsrawpath"]
+    outname_tssci = glider_paths["tsscipath"]
+    ds_raw = xr.load_dataset(outname_tsraw)
+    ds_sci = xr.load_dataset(outname_tssci)
+
+    ds_raw_cor = utils.correct_cdom(ds_raw)
+    ds_sci_cor = utils.correct_cdom(ds_sci)
+
+    _log.info("Writing corrected raw and science timeseries to netcdf")
+    utils.to_netcdf_esd(ds_raw_cor, outname_tsraw)
+    utils.to_netcdf_esd(ds_sci_cor, outname_tssci)
+    _log.info("Done CDOM correction")
+
+    return outname_tsraw, outname_tssci
+

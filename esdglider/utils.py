@@ -1336,83 +1336,6 @@ def get_sunrise_sunset(time, lat, lon):
     return sunrise_local, sunset_local, time_local
 
 
-def check_cdom(ds: xr.Dataset) -> xr.Dataset:
-    """
-    Check cdom values. Specifcally:
-        1) Remove values collected with instrument serviced between 
-            January 2021 and July 2023
-        2) Apply Reference Adjustment Factor (RAF) of 5.62 to the CDOM data, 
-            if instrument serviced before January 2023
-
-    If either case, update metadata: 
-        - comment within instrument_flbbcd attribute
-        - cdom comment attribute
-
-    Parameters
-    ----------
-    ds: `xarray.Dataset`
-        processed glider data; expected to be science timeseries
-
-    Returns
-    -------
-        dataset, corrected as necessary
-    """
-
-    _log.info("Starting CDOM correction check")
-    if "instrument_flbbcd" in ds.attrs:
-        # Get calibration date
-        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
-        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
-        _log.debug("instrument_flbbcd calibration date %s", 
-                   cdate.strftime("%Y-%m-%d"))
-
-        # Check for out-of-tolerance         
-        if datetime(2021, 1, 1) <= cdate <= datetime(2023, 7, 31):
-            cdom_oot_message = (
-                " Per Sea-Bird Scientific notice 'Out-of-tolerance UV LED', " 
-                + "these CDOM data were irretrievable, and have been removed"
-            )
-            _log.info(
-                "Based on instrument_flbbcd calibration date, "
-                + "CDOM data is irretrievable. Removing"
-            )
-
-            ds['cdom'].values[:] = np.nan
-            ds["cdom"].attrs["comment"] += cdom_oot_message
-            instr_attrs["comment"] += cdom_oot_message
-            ds.attrs["instrument_flbbcd"] = str(instr_attrs)
-
-        else:
-            # If not oot, then check if Reference Adjustment Factor (RAF) needed
-            if cdate < datetime(2023, 1, 13):                
-                cdom_raf_message = (
-                    " Per Sea-Bird Scientific notice 'Incorrect CDOM values', " 
-                    + "applied Reference Adjustment Factor (RAF) of 5.62. " 
-                    + "to the data: CDOM adjusted = 5.62 * CDOM"
-                )            
-                _log.info(
-                    "Based on instrument_flbbcd calibration date, "
-                    + "need to apply RAF to CDOM data. Applying"
-                )
-                
-                ds['cdom'] = ds['cdom'] * 5.62
-                ds["cdom"].attrs["comment"] += cdom_raf_message
-                instr_attrs["comment"] += cdom_raf_message
-                ds.attrs["instrument_flbbcd"] = str(instr_attrs)
-
-            else:
-                _log.info(
-                    "instrument_flbbcd calibration date is outside of "
-                    + "the Sea-Bird correction windows, "
-                    + "and thus no values need correction"
-                )
-
-    else:
-        _log.info("No instrument_flbbcd, and thus no CDOM correction needed")
-
-    return ds
-
-
 def get_instrument_sn_date(ds: xr.Dataset, instrument_str: str) -> tuple:
     """
     Get the sn and calibration date for the FLBBCD instrument, 
@@ -1450,56 +1373,197 @@ def get_instrument_sn_date(ds: xr.Dataset, instrument_str: str) -> tuple:
 
 def check_cdom_date(ds: xr.Dataset) -> str:
     """
-    """
-    if "instrument_flbbcd" in ds.attrs:
-        # Get calibration date
-        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
-        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
-        _log.debug("instrument_flbbcd calibration date %s", 
-                   cdate.strftime("%Y-%m-%d"))
+    Check the calibration date of the instrument_flbbcd and return a 
+    CDOM status string (described in returns). 
+    Status date ranges defined by Sea-Bird Scientific notices 
+    'Out-of-tolerance UV LED' and 'Incorrect CDOM values'. 
 
-        # Check for out-of-tolerance         
-        if datetime(2021, 1, 1) <= cdate <= datetime(2023, 7, 31):
+    Parameters
+    ----------
+    ds: `xarray.Dataset`
+        processed glider data; expected to have an 'instrument_flbbcd' attribute
+
+    Returns
+    -------
+    str
+        One of the following status strings:
+        - "oot": out-of-tolerance (January 2021 to July 2023)
+        - "raf": requires Reference Adjustment Factor (before January 2023)
+        - "ok": calibration date is within acceptable range
+        - "none": no instrument_flbbcd attribute found
+    """
+
+    _log.info("Checking for flbbcd calibration date")
+    sn, cdate = get_instrument_sn_date(ds, "instrument_flbbcd")
+
+    if cdate is None:
+        return "none"
+
+    else:
+        _log.info("Determining CDOM status")
+        cdate_dt = datetime.fromisoformat(cdate)
+        _log.debug("instrument_flbbcd calibration date %s", 
+                   cdate_dt.strftime("%Y-%m-%d"))
+
+        if datetime(2021, 1, 1) <= cdate_dt <= datetime(2023, 7, 31):
             return "oot"
-        elif cdate < datetime(2023, 1, 13):
+        elif cdate_dt < datetime(2023, 1, 13):
             return "raf"
         else:
             return "ok"
 
-    else:
-        return "none"
 
-
-def check_cdom_esd(ds_paths: dict) -> tuple:
+def correct_cdom(ds: xr.Dataset) -> xr.Dataset:
     """
-    ESD-specific wrapper around check_cdom
+    Correct cdom values, depending on status calculated by check_cdom_date. 
 
-    Run both the raw and science timeseries through check_cdom, 
-    and write to original provided path using to_netcdf_esd
+    Specifcally:
+        1) Remove values collected with instrument serviced between 
+            January 2021 and July 2023 (change to np.nan)
+        2) Apply Reference Adjustment Factor (RAF) of 5.62 to the CDOM data, 
+            if instrument serviced before January 2023
+
+    If either case, update metadata: 
+        - comment within instrument_flbbcd attribute
+        - cdom comment attribute
 
     Parameters
     ----------
-    ds_paths : dict
-        A dictionary with at least the nc file paths:
-        - 'outname_tssci': path to the science timeseries dataset
-        - 'outname_tsraw': path to the raw timeseries dataset
+    ds: `xarray.Dataset`
+        processed glider data; expected to be raw or science timeseries
 
     Returns
     -------
-    Tuple (ds_raw, ds_sci) with CDOM-checked datasets 
+        input dataset ds, corrected as necessary
     """
 
-    _log.info("Doing CDOM correction check for raw dataset")
-    ds_raw = xr.load_dataset(ds_paths["outname_tsraw"])
-    ds_raw = check_cdom(ds_raw)
-    to_netcdf_esd(ds_raw, ds_paths["outname_tsraw"])
+    _log.info("Starting CDOM correction check")
+    if "instrument_flbbcd" in ds.attrs:
+        # Check status of CDOM data, based on flbbcd calibration date
+        cdom_status = check_cdom_date(ds)
+        _log.debug("CDOM status: %s", cdom_status)
 
-    _log.info("Doing CDOM correction check for science dataset")
-    ds_sci = xr.load_dataset(ds_paths["outname_tssci"])
-    ds_sci = check_cdom(ds_sci)
-    to_netcdf_esd(ds_sci, ds_paths["outname_tssci"])
+        # Get instrument attributes
+        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
 
-    return ds_raw, ds_sci
+        # Depending on CDOM status, remove or correct CDOM values as necessary
+        if cdom_status == "oot":
+            _log.info(
+                "Based on instrument_flbbcd calibration date, "
+                + "CDOM data is out-of-tolerance and irretrievable. Removing"
+            )
+            cdom_oot_message = (
+                "Per Sea-Bird Scientific notice 'Out-of-tolerance UV LED', " 
+                + "these CDOM data were irretrievable, and have been removed"
+            )
+
+            ds['cdom'].values[:] = np.nan
+            ds["cdom"].attrs["comment"] = append_string(
+                ds["cdom"].attrs["comment"], cdom_oot_message)
+            instr_attrs["comment"] = append_string(
+                instr_attrs["comment"], cdom_oot_message)
+            ds.attrs["instrument_flbbcd"] = str(instr_attrs)
+
+        elif cdom_status == "raf":
+                _log.info(
+                    "Based on instrument_flbbcd calibration date, "
+                    + "need to apply RAF to CDOM data. Applying"
+                )          
+                cdom_raf_message = (
+                    "Per Sea-Bird Scientific notice 'Incorrect CDOM values', " 
+                    + "applied Reference Adjustment Factor (RAF) of 5.62. " 
+                    + "to the data: CDOM adjusted = 5.62 * CDOM"
+                )
+                
+                ds['cdom'] = ds['cdom'] * 5.62
+                ds["cdom"].attrs["comment"] = append_string(
+                    ds["cdom"].attrs["comment"], cdom_raf_message)
+                instr_attrs["comment"] = append_string(
+                    instr_attrs["comment"], cdom_raf_message)
+                ds.attrs["instrument_flbbcd"] = str(instr_attrs)        
+        
+        elif cdom_status == "ok":
+            _log.info(
+                "instrument_flbbcd calibration date is outside of "
+                + "the Sea-Bird correction windows, "
+                + "and thus no values need correction"
+            )
+        
+        else:
+            _log.warning(
+                "CDOM status returned an unexpected value: %s", cdom_status
+            )
+
+        return ds
+    
+    else:
+        _log.info("No instrument_flbbcd, and thus no CDOM correction needed")
+        return ds
+
+
+
+
+    # if "instrument_flbbcd" in ds.attrs:
+    #     # Get instrument attributes, and calibration date
+    #     instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
+    #     cdate_dt = datetime.fromisoformat(instr_attrs["calibration_date"])
+    #     _log.debug("instrument_flbbcd calibration date %s", 
+    #                cdate_dt.strftime("%Y-%m-%d"))
+    #     # sn, cdate = get_instrument_sn_date(ds, "instrument_flbbcd")
+
+    #     # Check for out-of-tolerance         
+    #     if datetime(2021, 1, 1) <= cdate_dt <= datetime(2023, 7, 31):
+    #         _log.info(
+    #             "Based on instrument_flbbcd calibration date, "
+    #             + "CDOM data is irretrievable. Removing"
+    #         )
+    #         cdom_oot_message = (
+    #             " Per Sea-Bird Scientific notice 'Out-of-tolerance UV LED', " 
+    #             + "these CDOM data were irretrievable, and have been removed"
+    #         )
+
+    #         ds['cdom'].values[:] = np.nan
+    #         # ds["cdom"].attrs["comment"] += cdom_oot_message
+    #         # instr_attrs["comment"] += cdom_oot_message
+    #         ds["cdom"].attrs["comment"] = append_string(
+    #             ds["cdom"].attrs["comment"], cdom_oot_message)
+    #         instr_attrs["comment"] = append_string(
+    #             instr_attrs["comment"], cdom_oot_message)
+    #         ds.attrs["instrument_flbbcd"] = str(instr_attrs)
+
+    #     else:
+    #         # If not oot, then check if Reference Adjustment Factor (RAF) needed
+    #         if cdate_dt < datetime(2023, 1, 13):
+    #             _log.info(
+    #                 "Based on instrument_flbbcd calibration date, "
+    #                 + "need to apply RAF to CDOM data. Applying"
+    #             )          
+    #             cdom_raf_message = (
+    #                 " Per Sea-Bird Scientific notice 'Incorrect CDOM values', " 
+    #                 + "applied Reference Adjustment Factor (RAF) of 5.62. " 
+    #                 + "to the data: CDOM adjusted = 5.62 * CDOM"
+    #             )
+                
+    #             ds['cdom'] = ds['cdom'] * 5.62
+    #             # ds["cdom"].attrs["comment"] += cdom_raf_message
+    #             # instr_attrs["comment"] += cdom_raf_message
+    #             ds["cdom"].attrs["comment"] = append_string(
+    #                 ds["cdom"].attrs["comment"], cdom_raf_message)
+    #             instr_attrs["comment"] = append_string(
+    #                 instr_attrs["comment"], cdom_raf_message)
+    #             ds.attrs["instrument_flbbcd"] = str(instr_attrs)
+
+    #         else:
+    #             _log.info(
+    #                 "instrument_flbbcd calibration date is outside of "
+    #                 + "the Sea-Bird correction windows, "
+    #                 + "and thus no values need correction"
+    #             )
+
+    # else:
+    #     _log.info("No instrument_flbbcd, and thus no CDOM correction needed")
+
+    # return ds
 
 
 def calc_flbbcd(
@@ -1577,6 +1641,7 @@ def calc_flbbcd(
 def append_string(text, msg):
     """
     Append a message to a string, with a space in between if the string is not empty
+
     Parameters
     ----------
     text: str
