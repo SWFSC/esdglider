@@ -118,6 +118,9 @@ def generate_timeseries(
         "maxgap": maxgap_esd,
     }
 
+    # Check which dbdreader backend is being used
+    if write_raw or write_eng or write_sci:
+        utils.check_dbdreader_c_extension()
 
     # --------------------------------------------
     # Raw
@@ -315,8 +318,8 @@ def generate_timeseries(
         _log.info("Not writing timeseries nc")
 
     # --------------------------------------------
-    # Check flbbcd calibration values, and cdom status
     if write_raw or write_sci:
+        _log.info("Checking flbbcd autoexec values, and cdom status")
         check_flbbcd_autoexec(
             glider_paths["binarydir"], 
             glider_paths["cacdir"], 
@@ -325,13 +328,9 @@ def generate_timeseries(
         )
 
         tssci = xr.load_dataset(outname_tssci)
-        cdom_status = utils.check_cdom_date(tssci)
-        if cdom_status in ["oot", "raf"]:
-            _log.warning(
-                "CDOM data are either out-of-tolerance or require a "
-                + "Reference Adjustment Factor (RAF). Status: %s", 
-                cdom_status
-            )
+        utils.check_cdom_date(tssci) #cdom_status = 
+            
+        _log.info("Done checks for flbbcd autoexec values and cdom status")
 
     # --------------------------------------------
     return {
@@ -392,6 +391,7 @@ def postproc_attrs(ds: xr.Dataset, pp: dict):
         [
             f"deployment_name={ds.deployment_name}",
             f"mode={pp['mode']}",
+            f"dbdreader v{metadata.version('dbdreader')}",
             f"pyglider v{metadata.version('pyglider')}",
             f"esdglider v{metadata.version('esdglider')}",
         ],
@@ -939,10 +939,9 @@ def check_flbbcd_autoexec(
                             key, flbbcd_cal_values[key], sensor_cals[key]
                         )
                     else:
-                        _log.debug(
-                            "Calibration value for %s matches the expected value: %s", 
-                            key, sensor_cals[key]
-                        )
+                        _log.info("Calibration value for %s matches the expected value", key)                        
+                        _log.debug("cal values, from binary files: %s", sensor_cals[key])
+                        _log.debug("cal values, from cal document: %s", flbbcd_cal_values[key])
                 else:
                     _log.warning("Calibration value for %s not found in binary files", key)
     

@@ -1385,6 +1385,8 @@ def get_instrument_sn_date(ds: xr.Dataset, instrument_str: str) -> tuple:
     tuple
         A tuple (sn, calibration date) for the FLBBCD instrument, if it exists in the dataset attributes; otherwise, (None, None)
     """
+    
+    _log.debug("Checking instrument sn and calibration date")
     if instrument_str in ds.attrs:
         instr_attrs = ast.literal_eval(ds.attrs[instrument_str])
         try:
@@ -1424,24 +1426,27 @@ def check_cdom_date(ds: xr.Dataset) -> str:
         - "ok": calibration date is within acceptable range
         - "none": no instrument_flbbcd attribute found
     """
-
-    _log.info("Checking for flbbcd calibration date")
+    
+    _log.info("Determining CDOM status")
     sn, cdate = get_instrument_sn_date(ds, "instrument_flbbcd")
 
     if cdate is None:
+        _log.info("No instrument_flbbcd attribute found")
         return "none"
 
     else:
-        _log.info("Determining CDOM status")
         cdate_dt = datetime.fromisoformat(cdate)
         _log.debug("instrument_flbbcd calibration date %s", 
                    cdate_dt.strftime("%Y-%m-%d"))
 
         if datetime(2021, 1, 1) <= cdate_dt <= datetime(2023, 7, 31):
+            _log.warning("CDOM data are out-of-tolerance, and thus irretrievable")
             return "oot"
         elif cdate_dt < datetime(2023, 1, 13):
+            _log.warning("CDOM data require a Reference Adjustment Factor (RAF)")
             return "raf"
         else:
+            _log.info("CDOM data are ok")
             return "ok"
 
 
@@ -1626,3 +1631,24 @@ def append_string(text, msg):
         return msg
     else:
         return text + " " + msg
+
+
+def check_dbdreader_c_extension():
+    """
+    Check the status of the DBDREADER_C_EXTENSION environment variable and print a log message.
+
+    This function prints a message indicating whether dbdreader is using the Pure Python backend,
+    the C-extension backend, or the package defaults based on the value of the DBDREADER_C_EXTENSION
+    environment variable.
+    """
+    _log.debug("Getting the status of DBDREADER_C_EXTENSION environment variable")
+    c_ext_status = os.environ.get("DBDREADER_C_EXTENSION")
+
+    if c_ext_status == "0":
+        _log.info("DBDREADER_C_EXTENSION=0, and thus, dbdreader using Python backend")
+    elif c_ext_status == "1":
+        _log.info("DBDREADER_C_EXTENSION=1, and thus, dbdreader using C-extension backend")
+    elif c_ext_status is None:
+        _log.info("DBDREADER_C_EXTENSION is not set. Using package defaults")
+    else:
+        _log.warning("DBDREADER_C_EXTENSION is set to an unexpected value: %s", c_ext_status)
