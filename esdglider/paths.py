@@ -30,7 +30,7 @@ def get_path_flbbcd_calibrations() -> str:
     with resources.as_file(ref) as path:
         return str(path)
 
-def get_path_yaml(yaml_type: str) -> str:
+def get_path_yaml_deployment_vars(yaml_type: str) -> str:
     """
     Get the path to the specified yaml (raw or eng).
     The yamls are included as part of the package data,
@@ -101,6 +101,7 @@ def get_path_glider_data_out(
     path_prof_summ = os.path.join(rawdir, f"{deployment_name}-{mode}-profiles.csv")
     path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
     path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
+    path_sci_qc = os.path.join(tsdir, f"{deployment_name}-{mode}-sci-qc.nc")
 
     # These must follow pyglider convention with the "_grid"
     path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
@@ -119,6 +120,7 @@ def get_path_glider_data_out(
         "tsrawpath": path_raw,
         "tsscipath": path_sci,
         "tsengpath": path_eng,
+        "tssciqcpath": path_sci_qc,
         "gr1path": path_gr1,
         "gr5path": path_gr5,
         "profsummpath": path_prof_summ,

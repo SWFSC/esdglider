@@ -17,9 +17,9 @@ import xarray as xr
 import yaml
 import dbdreader
 
-import esdglider.plots as plots
-import esdglider.paths as paths
 import esdglider.utils as utils
+from esdglider.plots import scatter_drop_plot
+from esdglider.paths import get_path_yaml_deployment_vars, get_path_flbbcd_calibrations
 from esdglider.slocum.core import binary_to_raw_timeseries, raw_to_sci_timeseries, time_encoding
 
 _log = logging.getLogger(__name__)
@@ -141,12 +141,12 @@ def generate_timeseries(
         _log.info("Generating raw nc")
         raw_yaml_list = [
             deploymentyaml, 
-            paths.get_path_yaml("eng"), 
-            paths.get_path_yaml("raw")
+            get_path_yaml_deployment_vars("eng"), 
+            get_path_yaml_deployment_vars("raw")
         ]
         i_solocam = ["instrument_shadowgraph", "instrument_glidercam"]
         if any([i in deployment["glider_devices"].keys() for i in i_solocam]):
-            raw_yaml_list.append(paths.get_path_yaml("raw-solocam"))
+            raw_yaml_list.append(get_path_yaml_deployment_vars("raw-solocam"))
         _log.debug("Raw YAML list: %s", raw_yaml_list)
 
         outname_tsraw = binary_to_raw_timeseries(
@@ -228,7 +228,7 @@ def generate_timeseries(
             glider_paths["binarydir"],
             glider_paths["cacdir"],
             tsdir,
-            [deploymentyaml, paths.get_path_yaml("eng")],
+            [deploymentyaml, get_path_yaml_deployment_vars("eng")],
             search=binary_search,
             fnamesuffix=f"-{mode}-eng",
             time_base="m_depth",
@@ -827,7 +827,7 @@ def drop_ts_ranges(
 
     # Make plot
     if plotdir is not None:
-        plots.scatter_drop_plot(ds, todrop, dstype, plotdir)
+        scatter_drop_plot(ds, todrop, dstype, plotdir)
 
     # Drop time(s)
     todrop_mask = xr.DataArray(todrop, dims="time", coords={"time": ds.time})
@@ -910,7 +910,7 @@ def check_flbbcd_autoexec(
         flbbcd_cal_date = device_data["instrument_flbbcd"].get("calibration_date", None)
 
         # Load in esdglider calibration values
-        with open(paths.get_path_flbbcd_calibrations(), "r") as fin:
+        with open(get_path_flbbcd_calibrations(), "r") as fin:
             flbbcd_cals = yaml.safe_load(fin)
         
             try:
@@ -1016,7 +1016,7 @@ def correct_flbbcd_raw_sci(
 
     # Get calibration values
     if chlor_cal is None or cdom_cal is None or bb_cal is None:
-        with open(paths.get_path_flbbcd_calibrations(), "r") as fin:
+        with open(get_path_flbbcd_calibrations(), "r") as fin:
             flbbcd_cals = yaml.safe_load(fin)
 
             sn, cdate = utils.get_instrument_sn_date(ds_raw, "instrument_flbbcd")
