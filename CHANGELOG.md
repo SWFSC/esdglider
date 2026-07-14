@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Module and function restructuring
-- Changed the name of the module `glider` to `slocum`, to refect that this module is specific to slocum data. Also, split the slocum module into submodules: `core`, `pipeline`, and `rt`. `core` contains functions that may be generally applicable to others processing slocum data, `pipeline` contains functions that are specific to ESD pipelines, and `rt` contains functions specific to slocum rt data efforts.
+- Changed the name of the module `glider` to `slocum`, to refect that this module is specific to slocum data (#39). Also, split the slocum module into submodules: `core`, `pipeline`, and `rt`. `core` contains functions that may be generally applicable to others processing slocum data, `pipeline` contains functions that are specific to ESD pipelines, and `rt` contains functions specific to slocum rt data efforts (#46)
 - Changed `slocum.pipline.binary_to_nc` to be split into separate functions for generating timeseries (`genertate_timeseries`) and gridded (`generate_gridded`) netcdf files. This allows for timeseries corrections to more easily be performed before gridding.
 - Changed the name of the module `acoustics` to `aa`, to refect that this module is specific to active acoustic data
 - Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD prod directory structure. 
@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed `binary_to_raw_timeseries` so that the ESD-specific post-processing happens outside of this function
 - Changed assorted functions to take in the deployment name and mode directly, rather than a `deployment_info` dictionary
 - Added `get_instrument_sn_date` to `utils`, for extracting the serial number and calibration date for the given instrument
+- Added data file `deployment-raw-solocam-vars.yml`, to add 'sci_solocam_free_disk_space' and 'sci_solocam_image_files' to the raw netCDF file. (#45) 
+- Changed so paths to package yaml files are not included in glider path output. 
 
 ## [0.4.0] - 2026-04-17
 

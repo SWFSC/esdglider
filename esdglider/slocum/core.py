@@ -239,7 +239,6 @@ def binary_to_raw_timeseries(
     search="*.[D|E]BD",
     include_source=False,
     fnamesuffix="",
-    # pp={},
     **kwargs,
 ):
     """
@@ -312,6 +311,14 @@ def binary_to_raw_timeseries(
     first_eng = np.where([i in eng_params for i in sensors])[0][0]
     first_sci = np.where([i in sci_params for i in sensors])[0][0]
 
+    # Check that all sensor names are in sci_params or eng_params
+    sensor_in_dbd = [i in (eng_params+sci_params) for i in sensors]
+    if not all(sensor_in_dbd):
+        _log.error("Not all sensors are recognized by dbdreader as sci or eng")
+        sensors_not_in_dbd = [i for i, k in zip(sensors, sensor_in_dbd) if not k]
+        _log.error("offending sensors: %s", "; ".join(sensors_not_in_dbd))
+        raise ValueError("Not all sensors are recognized by dbdreader as sci or eng")
+
     # get the data, across all eng/sci timestamps
     # return_nans=True so data arrays are of exactly two lengths (eng/sci)
     source_data = dbd.get(
@@ -337,7 +344,7 @@ def binary_to_raw_timeseries(
     _log.debug(f"data array lengths: {[len(i) for i in data]}")
     if len(set(data_time_len)) > 2:
         _log.error(f"data time lengths: {data_time_len}")
-        raise ValueError("There are more than 2 time bases, which will break this")
+        raise ValueError("There are more than 2 time bases")
     # if not all([i in (eng_params+sci_params) for i in sensors]):
     #     _log.error(f'sensors: {sensors}')
     #     raise ValueError("Not all sensors are recognized by dbdreader as sci or eng")

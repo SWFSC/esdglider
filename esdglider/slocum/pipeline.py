@@ -139,11 +139,21 @@ def generate_timeseries(
         utils.makedirs_pass(rawdir)
 
         _log.info("Generating raw nc")
+        raw_yaml_list = [
+            deploymentyaml, 
+            paths.get_path_yaml("eng"), 
+            paths.get_path_yaml("raw")
+        ]
+        i_solocam = ["instrument_shadowgraph", "instrument_glidercam"]
+        if any([i in deployment["glider_devices"].keys() for i in i_solocam]):
+            raw_yaml_list.append(paths.get_path_yaml("raw-solocam"))
+        _log.debug("Raw YAML list: %s", raw_yaml_list)
+
         outname_tsraw = binary_to_raw_timeseries(
             glider_paths["binarydir"],
             glider_paths["cacdir"],
             rawdir,
-            [deploymentyaml, glider_paths["engyaml"], glider_paths["rawyaml"]],
+            raw_yaml_list,
             search=binary_search,
             include_source=True,
             fnamesuffix=f"-{mode}-raw",
@@ -218,7 +228,7 @@ def generate_timeseries(
             glider_paths["binarydir"],
             glider_paths["cacdir"],
             tsdir,
-            [deploymentyaml, glider_paths["engyaml"]],
+            [deploymentyaml, paths.get_path_yaml("eng")],
             search=binary_search,
             fnamesuffix=f"-{mode}-eng",
             time_base="m_depth",
