@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed the name of the module `acoustics` to `aa`, to refect that this module is specific to active acoustic data
 - Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD prod directory structure. 
 - Changed `gcp` module, using Gemini to follow a "Fail-Fast" module design. 
+- Added a qartod module, for generating qartod flags using the `ioos_qc` package for the science dataset.
 
 ### Imagery
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
