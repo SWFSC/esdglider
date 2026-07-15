@@ -55,6 +55,22 @@ def get_path_yaml_deployment_vars(yaml_type: str) -> str:
     with resources.as_file(ref) as path:
         return str(path)
 
+def get_path_qartod_config() -> str:
+    """
+    Get the path to the packaged QARTOD configuration file.
+    The configuration file is distributed with the package and
+    contains the default IOOS QARTOD test configuration used when
+    generating quality-control flags.
+
+    Returns
+    -------
+    str
+        Path to the packaged ``qartod-config.yml`` file.
+    """
+    ref = resources.files("esdglider.data") / "qartod-config.yml"
+
+    with resources.as_file(ref) as path:
+        return str(path)
 
 def get_path_glider_data_out(
     deployment_name: str,
