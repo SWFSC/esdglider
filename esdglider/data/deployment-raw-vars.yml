@@ -154,6 +154,9 @@ netcdf_variables:
     source: sci_flbbcd_bb_sig
     units:  nodim
 
+    # NOTE: solocam vars are in data/deployment-raw-solocam-vars.yml, 
+    # so they can be included only for deployments with solocam
+
 # # Potentially useful parameters in the future
 # c_alt_time
 # c_climb_target_depth

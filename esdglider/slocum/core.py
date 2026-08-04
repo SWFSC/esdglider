@@ -23,9 +23,23 @@ except ImportError:
     have_dbdreader = False
 
 import esdglider.utils as utils
-from esdglider.slocum import pipeline #TODO:remove
 
 _log = logging.getLogger(__name__)
+
+
+"""
+time_encoding for NetCDF time variables.
+
+This dictionary can be used as the `encoding` argument when writing
+time variables to NetCDF files using xarray or netCDF4, to be CF-compliant
+"""
+
+time_encoding = {
+    'units': 'seconds since 1970-01-01T00:00:00Z',
+    '_FillValue': np.nan,
+    'calendar': 'gregorian',
+    'dtype': 'float64',
+}
 
 
 
@@ -225,7 +239,6 @@ def binary_to_raw_timeseries(
     search="*.[D|E]BD",
     include_source=False,
     fnamesuffix="",
-    # pp={},
     **kwargs,
 ):
     """
@@ -266,26 +279,12 @@ def binary_to_raw_timeseries(
     # Read and parse deployment yaml(s)
     deployment = pgutils._get_deployment(deploymentyaml)
 
-    # NetCDF vars:
-    # Loop through deploymentyaml files, and append all new netcdf vars.
-    # This chunk maintains the key from the first time it sees it.
-    # This distinction from pgutils._get_deployment
-    # allows us to 'concatenate' netcdf vars for this raw dataset
-    ncvar = {}
-    if isinstance(deploymentyaml, str):
-        deploymentyaml = [deploymentyaml]
-    for nn, d in enumerate(deploymentyaml):
-        with open(d) as fin:
-            deployment_ = yaml.safe_load(fin)
-            if "netcdf_variables" in deployment_.keys():
-                for key, value in deployment_["netcdf_variables"].items():
-                    if key not in ncvar:
-                        ncvar[key] = value
-
+    # Concatenate all netcdf variables from the deployment YAML files
+    ncvar = utils._get_deployment_netcdfvars(deploymentyaml)
     thenames = list(ncvar.keys())
     thenames.remove("time")
 
-    # build a new data set based on info in `deployment.`
+    # build a new data set based on info from deploymentyaml
     ds = xr.Dataset()
     attr = {}
     name = "time"
@@ -312,6 +311,14 @@ def binary_to_raw_timeseries(
     first_eng = np.where([i in eng_params for i in sensors])[0][0]
     first_sci = np.where([i in sci_params for i in sensors])[0][0]
 
+    # Check that all sensor names are in sci_params or eng_params
+    sensor_in_dbd = [i in (eng_params+sci_params) for i in sensors]
+    if not all(sensor_in_dbd):
+        _log.error("Not all sensors are recognized by dbdreader as sci or eng")
+        sensors_not_in_dbd = [i for i, k in zip(sensors, sensor_in_dbd) if not k]
+        _log.error("offending sensors: %s", "; ".join(sensors_not_in_dbd))
+        raise ValueError("Not all sensors are recognized by dbdreader as sci or eng")
+
     # get the data, across all eng/sci timestamps
     # return_nans=True so data arrays are of exactly two lengths (eng/sci)
     source_data = dbd.get(
@@ -337,7 +344,7 @@ def binary_to_raw_timeseries(
     _log.debug(f"data array lengths: {[len(i) for i in data]}")
     if len(set(data_time_len)) > 2:
         _log.error(f"data time lengths: {data_time_len}")
-        raise ValueError("There are more than 2 time bases, which will break this")
+        raise ValueError("There are more than 2 time bases")
     # if not all([i in (eng_params+sci_params) for i in sensors]):
     #     _log.error(f'sensors: {sensors}')
     #     raise ValueError("Not all sensors are recognized by dbdreader as sci or eng")
@@ -445,7 +452,12 @@ def binary_to_raw_timeseries(
 
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
     _log.info("writing %s", outname)
-    utils.to_netcdf_esd(ds, outname)
+    pgutils._save_dataset(
+        ds,
+        outname,
+        deployment,
+        encoding={'time': time_encoding},
+    )
 
     return outname
 
@@ -544,7 +556,12 @@ def raw_to_sci_timeseries(
     # Write out to file
     outname = f"{outdir}/{ds.attrs['deployment_name'] + fnamesuffix}.nc"
     _log.info("writing %s", outname)
-    utils.to_netcdf_esd(ds, outname)
+    pgutils._save_dataset(
+        ds,
+        outname,
+        deployment,
+        encoding={'time': time_encoding},
+    )
 
     return outname
 

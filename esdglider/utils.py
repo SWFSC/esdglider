@@ -23,21 +23,53 @@ Utilities, mostly specific to ESD needs and ways of processing
 
 # Logistical utilities ########################################################
 
-# For IOOS-compliant encoding when writing to NetCDF
-def to_netcdf_esd(ds: xr.Dataset, outname: str):
-    _log.info(f"Writing dataset with ESD encoding to: {outname}")
-    ds.to_netcdf(
-        outname,
-        "w",
-        encoding={
-            "time": {
-                "units": "seconds since 1970-01-01T00:00:00Z",
-                "_FillValue": np.nan,
-                "calendar": "gregorian",
-                "dtype": "float64",
-            },
-        },
-    )
+# # For IOOS-compliant encoding when writing to NetCDF
+# def to_netcdf_esd(ds: xr.Dataset, outname: str):
+#     _log.info(f"Writing dataset with ESD encoding to: {outname}")
+#     ds.to_netcdf(
+#         outname,
+#         "w",
+#         encoding={
+#             "time": {
+#                 "units": "seconds since 1970-01-01T00:00:00Z",
+#                 "_FillValue": np.nan,
+#                 "calendar": "gregorian",
+#                 "dtype": "float64",
+#             },
+#         },
+#     )
+
+
+def _get_deployment_netcdfvars(deploymentyaml):
+    """
+    Loop through deploymentyaml files, and concatenate all netcdf vars
+    from the various deployment YAML files.
+    Allows for yaml files with only netcdf variables, 
+    for raw and engineering datasets.
+
+    Parameters
+    ----------
+    deploymentyaml : str or list of str
+        Path(s) to the deployment YAML file(s).
+
+    Returns
+    -------
+    dict
+        A dictionary containing the concatenated NetCDF variables from the deployment YAML files.
+    """
+    ncvar = {}
+    if isinstance(deploymentyaml, str):
+        deploymentyaml = [deploymentyaml]
+    for nn, d in enumerate(deploymentyaml):
+        with open(d) as fin:
+            deployment_ = yaml.safe_load(fin)
+            if "netcdf_variables" in deployment_.keys():
+                for key, value in deployment_["netcdf_variables"].items():
+                    if key not in ncvar:
+                        ncvar[key] = value
+
+    return ncvar
+
 
 
 """
@@ -310,6 +342,7 @@ def drop_bogus_times(
     This function is separate to allow users to drop only bogus times.
     See the function 'drop_bogus' for a description of arguments
     """
+    _log.info("Dropping bogus times")
 
     # For out of range or nan time/lat/lon, drop rows
     num_orig = len(ds.time)
@@ -353,6 +386,8 @@ def drop_bogus(
         String representing the minimum datetime to keep.
         Passed to np.datetime64 to be used to filter.
         For instance, '2017-01-01', or '2020-03-06 12:00:00'.
+    max_drop: bool; default=False
+        If True, drop times that are after the current UTC time.
 
     Returns
     -------
@@ -360,19 +395,8 @@ def drop_bogus(
         Dataset with bogus rows rows dropped, and bogus values changed to nan
     """
 
-    # if not (ds_type in ['sci', 'eng']):
-    #     raise ValueError('ds_type must be either sci or eng')
-
-    # # For out of range or nan time/lat/lon, drop rows
-    # num_orig = len(ds.time)
-    # ds = ds.where(ds.time >= np.datetime64(min_dt), drop=True)
-    # if (num_orig - len(ds.time)) > 0:
-    #     _log.info(
-    #         f"Dropped {num_orig - len(ds.time)} times "
-    #         + f"that were either nan or before {min_dt}",
-    #     )
-
     # Drop bogus times, as specified
+    _log.info("Dropping bogus values")
     ds = drop_bogus_times(ds, min_dt, max_drop=max_drop)
 
     # Drop bogus lat/lons
@@ -1079,6 +1103,8 @@ def check_depth(x: xr.DataArray, y: xr.DataArray, depth_ok=5) -> xr.Dataset:
         d = depth_diff_abs.to_pandas()
         _log.warning(d[depth_diff_abs.values > depth_ok].describe())
 
+    x = x.drop_vars(["latitude", "longitude", "depth"], errors="ignore")
+    y = y.drop_vars(["latitude", "longitude", "depth"], errors="ignore")
     ds = xr.merge(
         [
             x.rename("depth_measured"),
@@ -1098,7 +1124,7 @@ def check_string_length(x: list) -> list:
     """
     Check that all strings in the given list are the same length
 
-    Returns a list of the elements of 
+    Returns a list of the elements with different lengths than the mode.
     """
     diff_files = []
     x_nchar = [len(i) for i in x]
@@ -1342,11 +1368,95 @@ def get_sunrise_sunset(time, lat, lon):
     return sunrise_local, sunset_local, time_local
 
 
-def check_cdom(ds: xr.Dataset) -> xr.Dataset:
+def get_instrument_sn_date(ds: xr.Dataset, instrument_str: str) -> tuple:
     """
-    Check cdom values. Specifcally:
+    Get the sn and calibration date for the given instrument, 
+    if it exists in the dataset attributes
+
+    Parameters
+    ----------
+    ds: `xarray.Dataset`
+        processed glider data; expected to be science timeseries
+    instrument_str: str
+        The instrument string to look for in the dataset attributes (e.g., "instrument_flbbcd")
+
+    Returns
+    -------
+    tuple
+        A tuple (sn, calibration date) for the FLBBCD instrument, if it exists in the dataset attributes; otherwise, (None, None)
+    """
+    
+    _log.debug("Checking instrument sn and calibration date")
+    if instrument_str in ds.attrs:
+        instr_attrs = ast.literal_eval(ds.attrs[instrument_str])
+        try:
+            sn = instr_attrs["serial_number"]
+            # cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
+            cdate = instr_attrs["calibration_date"]
+            return sn, cdate
+        except (KeyError, ValueError, SyntaxError):
+            _log.warning(
+                "Could not parse instrument attributes for %s. "
+                + "Expected keys 'serial_number' and 'calibration_date'.",
+                instrument_str,
+            )
+            return None, None
+    else:
+        return None, None
+
+
+def check_cdom_date(ds: xr.Dataset) -> str:
+    """
+    Check the calibration date of the instrument_flbbcd and return a 
+    CDOM status string (described in returns). 
+    Status date ranges defined by Sea-Bird Scientific notices 
+    'Out-of-tolerance UV LED' and 'Incorrect CDOM values'. 
+
+    Parameters
+    ----------
+    ds: `xarray.Dataset`
+        processed glider data; expected to have an 'instrument_flbbcd' attribute
+
+    Returns
+    -------
+    str
+        One of the following status strings:
+        - "oot": out-of-tolerance (January 2021 to July 2023)
+        - "raf": requires Reference Adjustment Factor (before January 2023)
+        - "ok": calibration date is within acceptable range
+        - "none": no instrument_flbbcd attribute found
+    """
+    
+    _log.info("Determining CDOM status")
+    sn, cdate = get_instrument_sn_date(ds, "instrument_flbbcd")
+
+    if cdate is None:
+        _log.info("No instrument_flbbcd attribute found")
+        return "none"
+
+    else:
+        cdate_dt = datetime.fromisoformat(cdate)
+        _log.debug("instrument_flbbcd calibration date %s", 
+                   cdate_dt.strftime("%Y-%m-%d"))
+
+        if datetime(2021, 1, 1) <= cdate_dt <= datetime(2023, 7, 31):
+            _log.warning("CDOM data are out-of-tolerance, and thus irretrievable")
+            return "oot"
+        elif cdate_dt < datetime(2023, 1, 13):
+            _log.warning("CDOM data require a Reference Adjustment Factor (RAF)")
+            return "raf"
+        else:
+            _log.info("CDOM data are ok")
+            return "ok"
+
+
+def correct_cdom(ds: xr.Dataset) -> xr.Dataset:
+    """
+    Correct cdom values, depending on status calculated by check_cdom_date. 
+
+    Specifcally:
         1) Remove values collected with instrument serviced between 
-            January 2021 and July 2023
+            January 2021 and July 2023 (change to np.nan)
         2) Apply Reference Adjustment Factor (RAF) of 5.62 to the CDOM data, 
             if instrument serviced before January 2023
 
@@ -1357,141 +1467,75 @@ def check_cdom(ds: xr.Dataset) -> xr.Dataset:
     Parameters
     ----------
     ds: `xarray.Dataset`
-        processed glider data; expected to be science timeseries
+        processed glider data; expected to be raw or science timeseries
 
     Returns
     -------
-        dataset, corrected as necessary
+        input dataset ds, corrected as necessary
     """
 
     _log.info("Starting CDOM correction check")
     if "instrument_flbbcd" in ds.attrs:
-        # Get calibration date
-        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
-        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
-        _log.debug("instrument_flbbcd calibration date %s", 
-                   cdate.strftime("%Y-%m-%d"))
+        # Check status of CDOM data, based on flbbcd calibration date
+        cdom_status = check_cdom_date(ds)
+        _log.debug("CDOM status: %s", cdom_status)
 
-        # Check for out-of-tolerance         
-        if datetime(2021, 1, 1) <= cdate <= datetime(2023, 7, 31):
-            cdom_oot_message = (
-                " Per Sea-Bird Scientific notice 'Out-of-tolerance UV LED', " 
-                + "these CDOM data were irretrievable, and have been removed"
-            )
+        # Get instrument attributes
+        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
+
+        # Depending on CDOM status, remove or correct CDOM values as necessary
+        if cdom_status == "oot":
             _log.info(
                 "Based on instrument_flbbcd calibration date, "
-                + "CDOM data is irretrievable. Removing"
+                + "CDOM data is out-of-tolerance and irretrievable. Removing"
+            )
+            cdom_oot_message = (
+                "Per Sea-Bird Scientific notice 'Out-of-tolerance UV LED', " 
+                + "these CDOM data were irretrievable, and have been removed"
             )
 
             ds['cdom'].values[:] = np.nan
-            ds["cdom"].attrs["comment"] += cdom_oot_message
-            instr_attrs["comment"] += cdom_oot_message
+            ds["cdom"].attrs["comment"] = append_string(
+                ds["cdom"].attrs["comment"], cdom_oot_message)
+            instr_attrs["comment"] = append_string(
+                instr_attrs["comment"], cdom_oot_message)
             ds.attrs["instrument_flbbcd"] = str(instr_attrs)
 
-        else:
-            # If not oot, then check if Reference Adjustment Factor (RAF) needed
-            if cdate < datetime(2023, 1, 13):                
-                cdom_raf_message = (
-                    " Per Sea-Bird Scientific notice 'Incorrect CDOM values', " 
-                    + "applied Reference Adjustment Factor (RAF) of 5.62. " 
-                    + "to the data: CDOM adjusted = 5.62 * CDOM"
-                )            
+        elif cdom_status == "raf":
                 _log.info(
                     "Based on instrument_flbbcd calibration date, "
                     + "need to apply RAF to CDOM data. Applying"
+                )          
+                cdom_raf_message = (
+                    "Per Sea-Bird Scientific notice 'Incorrect CDOM values', " 
+                    + "applied Reference Adjustment Factor (RAF) of 5.62. " 
+                    + "to the data: CDOM adjusted = 5.62 * CDOM"
                 )
                 
                 ds['cdom'] = ds['cdom'] * 5.62
-                ds["cdom"].attrs["comment"] += cdom_raf_message
-                instr_attrs["comment"] += cdom_raf_message
-                ds.attrs["instrument_flbbcd"] = str(instr_attrs)
+                ds["cdom"].attrs["comment"] = append_string(
+                    ds["cdom"].attrs["comment"], cdom_raf_message)
+                instr_attrs["comment"] = append_string(
+                    instr_attrs["comment"], cdom_raf_message)
+                ds.attrs["instrument_flbbcd"] = str(instr_attrs)        
+        
+        elif cdom_status == "ok":
+            _log.info(
+                "instrument_flbbcd calibration date is outside of "
+                + "the Sea-Bird correction windows, "
+                + "and thus no values need correction"
+            )
+        
+        else:
+            _log.warning(
+                "CDOM status returned an unexpected value: %s", cdom_status
+            )
 
-            else:
-                _log.info(
-                    "instrument_flbbcd calibration date is outside of "
-                    + "the Sea-Bird correction windows, "
-                    + "and thus no values need correction"
-                )
-
+        return ds
+    
     else:
         _log.info("No instrument_flbbcd, and thus no CDOM correction needed")
-
-    return ds
-
-
-def get_flbbcd_date(ds: xr.Dataset) -> datetime:    
-    """
-    Get the calibration date for the FLBBCD instrument, 
-    if it exists in the dataset attributes
-
-    Parameters
-    ----------
-    ds: `xarray.Dataset`
-        processed glider data; expected to be science timeseries
-
-    Returns
-    -------
-    datetime or None
-        The calibration date for the FLBBCD instrument, if it exists in the dataset attributes; otherwise, None
-    """
-    if "instrument_flbbcd" in ds.attrs:
-        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
-        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
-        return cdate
-    else:
-        return None
-
-
-def check_cdom_date(ds: xr.Dataset) -> str:
-    """
-    """
-    if "instrument_flbbcd" in ds.attrs:
-        # Get calibration date
-        instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
-        cdate = datetime.fromisoformat(instr_attrs["calibration_date"])
-        _log.debug("instrument_flbbcd calibration date %s", 
-                   cdate.strftime("%Y-%m-%d"))
-
-        # Check for out-of-tolerance         
-        if datetime(2021, 1, 1) <= cdate <= datetime(2023, 7, 31):
-            return "oot"
-        if cdate < datetime(2023, 1, 13):
-            return "raf"
-
-    else:
-        return "none"
-
-
-def check_cdom_esd(ds_paths: dict) -> tuple:
-    """
-    ESD-specific wrapper around check_cdom
-
-    Run both the raw and science timeseries through check_cdom, 
-    and write to original provided path using to_netcdf_esd
-
-    Parameters
-    ----------
-    ds_paths : dict
-        A dictionary with at least the nc file paths:
-        - 'outname_tssci': path to the science timeseries dataset
-        - 'outname_tsraw': path to the raw timeseries dataset
-
-    Returns
-    -------
-    Tuple (ds_raw, ds_sci) with CDOM-checked datasets 
-    """
-
-    _log.info("Doing CDOM correction check for raw dataset")
-    ds_raw = xr.load_dataset(ds_paths["outname_tsraw"])
-    ds_raw = check_cdom(ds_raw)
-    to_netcdf_esd(ds_raw, ds_paths["outname_tsraw"])
-
-    _log.info("Doing CDOM correction check for science dataset")
-    ds_sci = xr.load_dataset(ds_paths["outname_tssci"])
-    ds_sci = check_cdom(ds_sci)
-    to_netcdf_esd(ds_sci, ds_paths["outname_tssci"])
-
-    return ds_raw, ds_sci
+        return ds
 
 
 def calc_flbbcd(
@@ -1503,18 +1547,17 @@ def calc_flbbcd(
     """
     Calculate corrected FLBBCD output values 
 
-    In some ESD glider deployments, 
+    In some glider deployments, 
     the cwo (clean water offset) and sf (scaling factor) values
     for FLBBCD variables were not properly set in the slocum autoexec files. 
     Thus, the output values for 'chlorophyll', 'cdom', and 'backscatter_700'
     need to be recalculated using the raw signal and correct cwo/sf values. 
+
     All three values are calculated using the same formula:
     output value = sf * (signal value - cwo).
 
-    ds_raw: `xarray.Dataset`
-        raw glider timeseries
-    ds_sci: `xarray.Dataset`
-        science glider timeseries        
+    ds: `xarray.Dataset`
+        glider timeseries, likely raw timeseries. Must contain 
     {var}_calib: tuple: (cwo, sf)
         Tuple of variable calibration values: clean water offset, and scaling factor
         Same structure for each of chlorophyll, cdom, and backscatter.
@@ -1527,58 +1570,85 @@ def calc_flbbcd(
     """
 
     _log.info("Recalculating FLBBCD output values")
-    msg = " Recalculated using signal values and esdglider.calc_flbbcd"
+    msg = (
+        " Recalculated using raw signal values, calibration values, "
+        + "and esdglider.utils.calc_flbbcd"
+    )
 
     if all(v in ds.data_vars for v in ["chlorophyll", "chlorophyll_signal"]):
         _log.debug("Recalculating chlorophyll")
-        ds["chlorophyll"] = chlor_calib[2] * (ds["chlorophyll_signal"] - chlor_calib[1])
-        ds["chlorophyll"].attrs["comment"] += msg
+        ds["chlorophyll"] = chlor_calib[1] * (ds["chlorophyll_signal"] - chlor_calib[0])
+        ds["chlorophyll"].attrs["comment"] = append_string(
+            ds["chlorophyll"].attrs["comment"], msg)
+    else:
+        _log.warning(
+            "chlorophyll variables not present in dataset, and thus not recalculated"
+        )
 
     if all(v in ds.data_vars for v in ["cdom", "cdom_signal"]):
         _log.debug("Recalculating cdom")
-        ds["cdom"] = cdom_calib[2] * (ds["cdom_signal"] - cdom_calib[1])
-        ds["cdom"].attrs["comment"] += msg
+        ds["cdom"] = cdom_calib[1] * (ds["cdom_signal"] - cdom_calib[0])
+        ds["cdom"].attrs["comment"] = append_string(
+            ds["cdom"].attrs["comment"], msg)
+    else:
+        _log.warning(
+            "cdom variables not present in dataset, and thus not recalculated"
+        )
 
     if all(v in ds.data_vars for v in ["backscatter_700", "backscatter_700_signal"]):
         _log.debug("Recalculating backscatter_700")
-        ds["backscatter_700"] = bb_calib[2] * (ds["backscatter_700_signal"] - bb_calib[1])
-        ds["backscatter_700"].attrs["comment"] += msg
+        ds["backscatter_700"] = bb_calib[1] * (ds["backscatter_700_signal"] - bb_calib[0])
+        ds["backscatter_700"].attrs["comment"] = append_string(
+            ds["backscatter_700"].attrs["comment"], msg)
+    else:
+        _log.warning(
+            "backscatter_700 variables not present in dataset, and thus not recalculated"
+        )
+
+    _log.info("Finished recalculating FLBBCD output values")
 
     return ds
 
 
-def calc_flbbcd_esd(
-    ds_raw: xr.Dataset, 
-    ds_sci: xr.Dataset, 
-    chlor_calib: tuple,
-    cdom_calib: tuple,
-    bb_calib: tuple, 
-) -> tuple:
+def append_string(text, msg):
     """
-    ESD-specific wrapper around calc_flbbcd. 
-
-    Rather than calculating corrected FLBBCD output values 
-    for the science timeseries from interpolated signal values, 
-    calculate corrected FLBBCD output values using the raw dataset, 
-    and then interpolate these values to the science timeseries.
+    Append a message to a string, with a space in between if the string is not empty
 
     Parameters
     ----------
-    ds_raw: `xarray.Dataset`
-        raw glider timeseries
-    ds_sci: `xarray.Dataset`
-        science glider timeseries        
-    {var}_calib: tuple: (cwo, sf)
-        See `calc_flbbcd`
+    text: str
+        Original string to which the message will be appended.
+    msg: str
+        Message to append to the original string.
 
     Returns
     -------
-    Tuple (ds_raw, ds_sci) with corrected FLBBCD output values 
+    str
+        The original string with the message appended, 
+        separated by a space if the original string is not empty.
     """
+    if not text.strip():
+        return msg
+    else:
+        return text + " " + msg
 
-    # Calculate corrected raw values
-    ds_raw = calc_flbbcd(ds_raw, chlor_calib, cdom_calib, bb_calib)
 
-    # Interpolate raw values for science timeseries. Add comments
+def check_dbdreader_c_extension():
+    """
+    Check the status of the DBDREADER_C_EXTENSION environment variable and print a log message.
 
-    return ds_raw, ds_sci
+    This function prints a message indicating whether dbdreader is using the Pure Python backend,
+    the C-extension backend, or the package defaults based on the value of the DBDREADER_C_EXTENSION
+    environment variable.
+    """
+    _log.debug("Getting the status of DBDREADER_C_EXTENSION environment variable")
+    c_ext_status = os.environ.get("DBDREADER_C_EXTENSION")
+
+    if c_ext_status == "0":
+        _log.info("DBDREADER_C_EXTENSION=0, and thus, dbdreader using Python backend")
+    elif c_ext_status == "1":
+        _log.info("DBDREADER_C_EXTENSION=1, and thus, dbdreader using C-extension backend")
+    elif c_ext_status is None:
+        _log.info("DBDREADER_C_EXTENSION is not set. Using package defaults")
+    else:
+        _log.warning("DBDREADER_C_EXTENSION is set to an unexpected value: %s", c_ext_status)

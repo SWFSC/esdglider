@@ -7,16 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Changed the name of the module `glider` to `slocum`, to refect that this module is specific to slocum data. Also, split the slocum module into submodules: `core`, `pipeline`, and `rt`. `core` contains functions that may be generally applicable to others processing slocum data, `pipeline` contains functions that are specific to ESD pipelines, and `rt` contains functions specific to slocum rt data efforts.
+### Module and function restructuring
+- Changed the name of the module `glider` to `slocum`, to refect that this module is specific to slocum data (#39). Also, split the slocum module into submodules: `core`, `pipeline`, and `rt`. `core` contains functions that may be generally applicable to others processing slocum data, `pipeline` contains functions that are specific to ESD pipelines, and `rt` contains functions specific to slocum rt data efforts (#46)
+- Changed `slocum.pipline.binary_to_nc` to be split into separate functions for generating timeseries (`genertate_timeseries`) and gridded (`generate_gridded`) netcdf files. This allows for timeseries corrections to more easily be performed before gridding.
 - Changed the name of the module `acoustics` to `aa`, to refect that this module is specific to active acoustic data
 - Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD prod directory structure. 
-- Changed assorted functions to take in the deployment name and mode directly, rather than a `deployment_info` dictionary
+- Changed `gcp` module, using Gemini to follow a "Fail-Fast" module design. 
+- Added a qartod module, for generating qartod flags using the `ioos_qc` package for the science dataset.
+
+### Imagery
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
     - Added functions to the `imagery` module and a script (`extract-image-metadata.py`) for extracting EXIF metadata from the imagery files, and writing these to the metadata bucket
-    - Removed `solocam_img_meta`, and added `solocam_dt_from_meta` to the `imagery` module for formatting the image datatimes
+    - Removed `solocam_img_meta`, and added `get_solocam_dt` to the `imagery` module for formatting the image datatimes
     - Added `utils.check_string_length`, for checking that all strings in a list (e.g., solocam image file names) are the same length, and returning useful warning logs if not
     - Changed `imagery.imagery_timeseries` to use `solocam_dt_from_meta` and `check_string_length`
-- Changed `gcp` mount and unmount functions to capture gcsfuse output and send to the logger
+
+### Data corrections
+- Added several functions and a data file for checking and correcting ecopuck data:
+    - 'data/flbbcd-calibrations.yml' contains flbbcd calibration values, transcribed from calbration sheets
+    - `check_flbbcd_autoexec` checks the flbbcd calibration values from the calibration yml against the values from the binary files (i.e., from the autoexec). 
+    - `calc_flbbcd` calculates correct output values the signal and calibration values, for chlorophyll, cdom, and backscatter_700
+    - `correct_flbbcd_raw_sci` recalculates the flbbcd output values, and updates the raw and science timeseries
+- Added several functions for checking and correcting CDOM values, based on data notices from Seabird Scientific:
+    - `check_cdom_date` determines the status of the CDOM data (e.g., is it out-of-tolerance)
+    - `correct_cdom` depending on status of the CDOM data, removes CDOM data, or applies correction factor
+    - `correct_cdom_raw_sci` removes or corrects CDOM data, for the raw and science timeseries
+
+### Misc
+- Removed `utils.to_netcdf_esd`, and switched to using either pyglider's `utils._save_dataset` (for timeseries) or `ds.to_netcdf`. 
+- Added a `time_encoding` variable to `slcoum.core`, for consistent and CF-compliant time encoding when saving NetCDFs. 
+- Changed `binary_to_raw_timeseries` so that the ESD-specific post-processing happens outside of this function
+- Changed assorted functions to take in the deployment name and mode directly, rather than a `deployment_info` dictionary
+- Added `get_instrument_sn_date` to `utils`, for extracting the serial number and calibration date for the given instrument
+- Added data file `deployment-raw-solocam-vars.yml`, to add 'sci_solocam_free_disk_space' and 'sci_solocam_image_files' to the raw netCDF file. (#45) 
+- Changed so paths to package yaml files are not included in glider path output. 
 
 ## [0.4.0] - 2026-04-17
 

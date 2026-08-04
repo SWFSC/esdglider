@@ -27,6 +27,7 @@ dependencies:
   - folium
   - skyfield
   - timezonefinder
+  - ioos_qc
 
   - pip:
     - dbdreader

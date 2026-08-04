@@ -11,8 +11,26 @@ def _check_dir_exists(dir_path, description):
     if not os.path.isdir(dir_path):
         _log.warning(f"The {description} ('{dir_path}') does not exist")
 
+def get_path_flbbcd_calibrations() -> str:
+    """
+    Get the path to the flbbcd calibration yaml.
+    The yaml is included as part of the package data,
+    and contains the relevant calibration constants for the flbbcd sensors
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    str
+        the path of the yaml
+    """
+    ref = resources.files("esdglider.data") / "flbbcd-calibrations.yml"
+    with resources.as_file(ref) as path:
+        return str(path)
 
-def get_path_yaml(yaml_type: str) -> str:
+def get_path_yaml_deployment_vars(yaml_type: str) -> str:
     """
     Get the path to the specified yaml (raw or eng).
     The yamls are included as part of the package data,
@@ -27,16 +45,32 @@ def get_path_yaml(yaml_type: str) -> str:
     Returns
     -------
     str
-        the path of the yaml
+        the path of the specified yaml
     """
-    if yaml_type not in ["raw", "eng"]:
+    if yaml_type not in ["raw", "eng", "raw-solocam"]:
         _log.error("yaml_type %s", yaml_type)
-        raise ValueError("yaml_type must be either 'raw' or 'eng'")
+        raise ValueError("yaml_type must be either 'raw', 'eng', or 'raw-solocam'")
 
     ref = resources.files("esdglider.data") / f"deployment-{yaml_type}-vars.yml"
     with resources.as_file(ref) as path:
         return str(path)
 
+def get_path_qartod_config() -> str:
+    """
+    Get the path to the packaged QARTOD configuration file.
+    The configuration file is distributed with the package and
+    contains the default IOOS QARTOD test configuration used when
+    generating quality-control flags.
+
+    Returns
+    -------
+    str
+        Path to the packaged ``qartod-config.yml`` file.
+    """
+    ref = resources.files("esdglider.data") / "qartod-config.yml"
+
+    with resources.as_file(ref) as path:
+        return str(path)
 
 def get_path_glider_data_out(
     deployment_name: str,
@@ -83,6 +117,7 @@ def get_path_glider_data_out(
     path_prof_summ = os.path.join(rawdir, f"{deployment_name}-{mode}-profiles.csv")
     path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
     path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
+    path_sci_qc = os.path.join(tsdir, f"{deployment_name}-{mode}-sci-qc.nc")
 
     # These must follow pyglider convention with the "_grid"
     path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
@@ -101,6 +136,7 @@ def get_path_glider_data_out(
         "tsrawpath": path_raw,
         "tsscipath": path_sci,
         "tsengpath": path_eng,
+        "tssciqcpath": path_sci_qc,
         "gr1path": path_gr1,
         "gr5path": path_gr5,
         "profsummpath": path_prof_summ,
@@ -182,8 +218,8 @@ def get_path_glider(
         "deploymentyaml": deploymentyaml,
         "mode": mode,
         "cacdir": cac_path,
-        "rawyaml": get_path_yaml("raw"),
-        "engyaml": get_path_yaml("eng"),
+        # "rawyaml": get_path_yaml("raw"),
+        # "engyaml": get_path_yaml("eng"),
         "binarydir": os.path.join(glider_data_in_path, "binary", mode), 
         "outdir": glider_data_out_path, 
     } 
