@@ -314,10 +314,14 @@ def generate_timeseries(
                 + "by more than 0.5. This means they may have "
                 + "a different number of functional profiles",
             )
-            _log.warning("Min idx for eng: %d", tseng.profile_index.values.min())
-            _log.warning("Min idx for sci: %d", tssci.profile_index.values.min())
-            _log.warning("Max idx for eng: %d", tseng.profile_index.values.max())
-            _log.warning("Max idx for sci: %d", tssci.profile_index.values.max())
+            _log.warning(
+                "Min idx for eng / sci: %d / %d", 
+                tseng.profile_index.values.min(), tssci.profile_index.values.min()
+            )
+            _log.warning(
+                "Max idx for eng / sci: %d / %d", 
+                tseng.profile_index.values.max(), tssci.profile_index.values.max()
+            )
         else:
             _log.info("The eng and sci timeseries have the same functional profiles")
 

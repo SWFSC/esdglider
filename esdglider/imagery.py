@@ -245,7 +245,7 @@ def imagery_timeseries(ds, img_paths):
             continue
         df[var] = ds_interp[var].values
 
-    _log.info("Determining mask for invlaid values")
+    _log.info("Determining mask for invalid values")
     time_mask = (
         ~np.isnan(ds_interp["time"])
         & ~np.isnan(ds_interp["latitude"])
