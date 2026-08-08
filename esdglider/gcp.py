@@ -4,6 +4,7 @@ Functions for interacting with GCP (Fail-Fast Architecture)
 
 import logging
 import os
+from pathlib import Path
 import subprocess
 import shutil
 from functools import wraps
@@ -141,7 +142,7 @@ def gcs_unmount_bucket(mountpoint: str) -> None:
     _log.info(f"Successfully unmounted {mountpoint}")
 
 
-def gcs_mount_bucket(bucket: str, mountpoint: str, ro: bool = False) -> None:
+def gcs_mount_bucket(bucket: str, mountpoint: str | Path, ro: bool = False) -> None:
     """
     Run the command to mount a bucket at a mountpoint using gcsfuse.
     

@@ -1,12 +1,11 @@
 import datetime
 import logging
 import math
-import os
 
 import pandas as pd
 import xarray as xr
 
-import esdglider.utils as utils
+from esdglider import utils
 
 _log = logging.getLogger(__name__)
 

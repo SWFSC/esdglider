@@ -102,7 +102,7 @@ def get_solocam_dt(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
         .rename(columns=df_columns)
         .sort_values(by="img_file", ignore_index=True)
     )
-    df["time_dt"] = df['time_str'].apply(lambda x: datetime.strptime(x, format))
+    df["time_dt"] = df['time_str'].apply(lambda x: datetime.strptime(x, format))  # noqa: DTZ007
     df["time"] = df["time_dt"].astype("datetime64[s]")
 
     return df[["img_file", "img_dir", "time"]]
@@ -245,7 +245,7 @@ def imagery_timeseries(ds, img_paths):
             continue
         df[var] = ds_interp[var].values
 
-    _log.info("Determining mask for time things")
+    _log.info("Determining mask for invlaid values")
     time_mask = (
         ~np.isnan(ds_interp["time"])
         & ~np.isnan(ds_interp["latitude"])
@@ -340,7 +340,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
         - image format (e.g., JPEG, PNG)
         - image mode (e.g., RGB, or L (grayscale))
     """
-    logging.info("Extracting deployment-level metadata from %s", image_path)
+    _log.info("Extracting deployment-level metadata from %s", image_path)
     try:
         with Image.open(image_path) as img:            
             global_metadata = {
@@ -358,7 +358,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
 
                 # Get the value, and format it
                 value = exifdata.get(tagid)
-                logging.debug(f"{tagname}: {value}")
+                _log.debug(f"{tagname}: {value}")
                 if isinstance(value, bytes):
                     value = value.decode(errors='ignore').strip('\x00')
                 elif hasattr(value, 'numerator'):
@@ -366,7 +366,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
 
                 global_metadata[str(tagname)] = value
 
-    except Exception as e:
+    except Exception as e: # noqa: BLE001
         _log.error("Failed to extract global metadata from %s: %s", image_path, e )
         global_metadata = {"file": image_path, "error": str(e)}    
 
@@ -410,5 +410,5 @@ def extract_image_metadata(image_path):
                 "dt": dt_str                     # DateTime
             }
         
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"n": image_path.name, "error": "failed"}

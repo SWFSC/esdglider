@@ -558,7 +558,7 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
     # represented as keys in `toget`
     y = Deployment_Device[["Glider_Deployment_ID", "Component", "Serial_Num"]]
     toget = {"ctd": "CTD", "flbbcd": "Ecopuck", "oxygen": "Optode", "par": "PAR"}
-    comp_toget = [v for k, v in db_components.items() if k in toget.keys()]
+    comp_toget = [v for k, v in db_components.items() if k in toget]
     y = y[y["Component"].isin(comp_toget)]
     db_components_inv = {v: k for k, v in db_components.items()}
     y["Component_Lbl"] = y["Component"].map(db_components_inv)

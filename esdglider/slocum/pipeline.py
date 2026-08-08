@@ -145,7 +145,7 @@ def generate_timeseries(
             get_path_yaml_deployment_vars("raw")
         ]
         i_solocam = ["instrument_shadowgraph", "instrument_glidercam"]
-        if any([i in deployment["glider_devices"].keys() for i in i_solocam]):
+        if any(i in deployment["glider_devices"] for i in i_solocam):
             raw_yaml_list.append(get_path_yaml_deployment_vars("raw-solocam"))
         _log.debug("Raw YAML list: %s", raw_yaml_list)
 
@@ -363,7 +363,7 @@ def postproc_attrs(ds: xr.Dataset, pp: dict):
 
     # When used within binary_to_nc, this code makes sure the values
     # are only calculated from the raw dataset
-    if "deployment_start" in pp.keys():
+    if "deployment_start" in pp:
         ds.attrs["deployment_start"] = pp["deployment_start"]
         ds.attrs["deployment_end"] = pp["deployment_end"]
     else:
@@ -442,7 +442,7 @@ def postproc_general(
 
     # Drop nan values for any other specified parameters
     # if drop_vars is not None:
-    if "drop_vars" in pp.keys():
+    if "drop_vars" in pp:
         # This functionality is here so it is run after drop_bogus
         for var in pp["drop_vars"]:
             if var in list(ds.keys()):
@@ -467,7 +467,7 @@ def postproc_general(
     ds = utils.get_fill_profiles(ds, "time", "depth", **kwargs)
 
     # If provided, then update the profile indices by joining raw profiles
-    if "profile_summary_path" in pp.keys():
+    if "profile_summary_path" in pp:
         # Join profiles generated using raw timeseries
         prof_summ = pd.read_csv(
             pp["profile_summary_path"],
@@ -610,7 +610,7 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
         "potential_temperature",
         "potential_density",
     ]
-    new_start[2:2] = sorted([i for i in ds.keys() if "depth" in i])  # type: ignore
+    new_start[2:2] = sorted([i for i in ds if "depth" in i])  # type: ignore
     ds = utils.data_var_reorder(ds, new_start)
 
     _log.debug("end sci postproc: ds has %s values", len(ds.time))
@@ -624,6 +624,8 @@ def generate_gridded(
     sci_timeseries_pyglider: bool = True,
 ):
     """
+    Generate gridded netCDF files for the slocum glider deployment.
+    ...
     """
     
     outname_tssci = glider_paths["tsscipath"]
@@ -835,7 +837,7 @@ def drop_ts_ranges(
     _log.info(f"There are now {len(ds.time)} points in the dataset")
 
     # Distance over ground, if relevant
-    if "distance_over_ground" in ds.keys():
+    if "distance_over_ground" in ds:
         _log.info("Calculating new distance over ground")
         ds = pgutils.get_distance_over_ground(ds)
 
@@ -905,7 +907,7 @@ def check_flbbcd_autoexec(
     ]
 
     device_data = deployment['glider_devices']
-    if "instrument_flbbcd" in device_data.keys():
+    if "instrument_flbbcd" in device_data:
         flbbcd_sn = device_data["instrument_flbbcd"].get("serial_number", None)
         flbbcd_cal_date = device_data["instrument_flbbcd"].get("calibration_date", None)
 
@@ -936,7 +938,7 @@ def check_flbbcd_autoexec(
             sensor_cals = dict(zip(flbbcd_cal_names, cal_values))
             sensor_cals["u_flbbcd_bb_sf"] = sensor_cals["u_flbbcd_bb_sf"] * 1e-6
 
-            if not (flbbcd_cal_values.keys() == sensor_cals.keys()):
+            if flbbcd_cal_values.keys() != sensor_cals.keys():
                 _log.warning("Mismatch between calibration keys in YAML and binary files. Ending check")
                 return 
 

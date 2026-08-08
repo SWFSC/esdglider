@@ -3,7 +3,7 @@ import os
 from importlib import resources
 from pathlib import Path
 
-import esdglider.utils as utils
+from esdglider import utils
 
 _log = logging.getLogger(__name__)
 

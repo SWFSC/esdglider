@@ -2,7 +2,7 @@ import collections
 import logging
 import os
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from pathlib import Path
 
 import ast
@@ -1214,8 +1214,8 @@ def get_sunrise_sunset(time, lat, lon):
     glider location using the Skyfield package.
     However, it does not account for the local time, and thus the
     joined sunrise/sunset times are often not right for the given local day.
-    Would like to submit this as a PR to GLiderTools, but have
-    not hasd the bandwidth.
+    Would like to submit this as a PR to GliderTools, but have
+    not had the bandwidth.
 
     Currently, this function groups the timestamps by local day,
     and calculates the mean lat/lon. These are passed to the skyfield package
@@ -1428,21 +1428,21 @@ def check_cdom_date(ds: xr.Dataset) -> str:
     """
     
     _log.info("Determining CDOM status")
-    sn, cdate = get_instrument_sn_date(ds, "instrument_flbbcd")
+    _sn, cdate = get_instrument_sn_date(ds, "instrument_flbbcd")
 
     if cdate is None:
         _log.info("No instrument_flbbcd attribute found")
         return "none"
 
     else:
-        cdate_dt = datetime.fromisoformat(cdate)
+        cdate_dt = date.fromisoformat(cdate)
         _log.debug("instrument_flbbcd calibration date %s", 
                    cdate_dt.strftime("%Y-%m-%d"))
 
-        if datetime(2021, 1, 1) <= cdate_dt <= datetime(2023, 7, 31):
+        if date(2021, 1, 1) <= cdate_dt <= date(2023, 7, 31):
             _log.warning("CDOM data are out-of-tolerance, and thus irretrievable")
             return "oot"
-        elif cdate_dt < datetime(2023, 1, 13):
+        elif cdate_dt < date(2023, 1, 13):
             _log.warning("CDOM data require a Reference Adjustment Factor (RAF)")
             return "raf"
         else:
@@ -1487,16 +1487,18 @@ def correct_cdom(ds: xr.Dataset) -> xr.Dataset:
         if cdom_status == "oot":
             _log.info(
                 "Based on instrument_flbbcd calibration date, "
-                + "CDOM data is out-of-tolerance and irretrievable. Removing"
+                + "CDOM data is out-of-tolerance and irretrievable. Dropping"
             )
             cdom_oot_message = (
                 "Per Sea-Bird Scientific notice 'Out-of-tolerance UV LED', " 
-                + "these CDOM data were irretrievable, and have been removed"
+                + "these CDOM data were irretrievable, "
+                + "and have been removed from the dataset"
             )
 
-            ds['cdom'].values[:] = np.nan
-            ds["cdom"].attrs["comment"] = append_string(
-                ds["cdom"].attrs["comment"], cdom_oot_message)
+            # ds['cdom'].values[:] = np.nan
+            # ds["cdom"].attrs["comment"] = append_string(
+            #     ds["cdom"].attrs["comment"], cdom_oot_message)
+            ds = ds.drop_vars("cdom")
             instr_attrs["comment"] = append_string(
                 instr_attrs["comment"], cdom_oot_message)
             ds.attrs["instrument_flbbcd"] = str(instr_attrs)
