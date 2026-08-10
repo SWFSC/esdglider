@@ -22,9 +22,11 @@ The resulting QC flags are aggregated into DAC-compliant
 *_qc variables, linked to their parent variables through
 the ancillary_variables attribute, and written to a QC-enhanced
 NetCDF file suitable for GliderDAC submission and downstream
-scientific analysis. Visualization and reporting utilities
-are implemented separately in the plots.py module and are
-not part of the core QARTOD processing workflow.
+scientific analysis. In addition to QC generation, this
+module provides utilities for creating deployment-level QC
+summary tables from combined QARTOD datasets. Visualization
+of QC results is implemented separately in the companion
+plots.py module.
 
 Workflow
 --------
@@ -69,9 +71,9 @@ Key Features
     * int8 QC variables
     * _FillValue = -127
     * zlib compression
-- Focused on QC generation only; plotting and QC summary
-  reporting are implemented in the companion ``plots.py``
-  module.
+- Deployment-level QC summary table generation
+- Plotting utilities implemented separately in the
+  companion ``plots.py`` module
 
 Generated QC Variables
 ----------------------
@@ -125,6 +127,7 @@ relationships, and NetCDF encodings.
 import logging
 import numpy as np
 import xarray as xr
+import pandas as pd
 import yaml
 import ioos_qc
 import json
@@ -1361,6 +1364,99 @@ def save_qc_dataset(
         "Saved QC dataset: %s",
         output_file,
     )
+
+
+# =========================================================
+# CREATE QC SUMMARY TABLE
+# =========================================================
+
+
+def create_qc_summary_table(ds_qc):
+    """
+    Create a profile-level summary table of QARTOD
+    quality-control flags.
+
+    Parameters
+    ----------
+    ds_qc : xarray.Dataset
+        Combined deployment dataset containing
+        QARTOD QC variables.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per profile containing the profile
+        filename, profile index, and the total number
+        of GOOD, UNKNOWN, SUSPECT, FAIL, and MISSING
+        flags.
+    """
+
+    # VARIABLES THAT ARE EXCLUDED
+    skip = {
+        "time_qc",
+        "profile_time_qc",
+        "time_uv_qc",
+    }
+
+    # IDENTIFY QC VARIABLES
+    qc_variables = [
+        var
+        for var in ds_qc.data_vars
+        if (
+            var.endswith("_qc")
+            and ds_qc[var].ndim > 0
+            and var not in skip
+        )
+    ]
+
+    profile_summary = []
+
+    # PROCESS EACH UNIQUE PROFILE IN THE DEPLOYMENT
+    for profile_name in np.unique(
+        ds_qc["profile"].values
+    ):
+
+        # SELECT ONLY OBS FROM THE CURRENT PROFILE
+        profile_ds = ds_qc.where(
+            ds_qc["profile"] == profile_name,
+            drop=True,
+        )
+        # GET THE PROFILE INDEX
+        profile_index = int(
+            np.ravel(
+                profile_ds["profile_index"].values
+            )[0]
+        )
+
+        # INITIALIZE QC FLAG COUNTS FOR THIS PROFILE
+        good = unknown = suspect = fail = missing = 0
+
+        # COUNT QC FLAGS ACROSS ALL VARIABLES IN THIS PROFILE
+        for var in qc_variables:
+            flags = profile_ds[var].values.ravel()
+            flags = flags[flags != -127]
+
+            # ACCUMULATE FLAG COUNTS
+            good += np.sum(flags == 1)
+            unknown += np.sum(flags == 2)
+            suspect += np.sum(flags == 3)
+            fail += np.sum(flags == 4)
+            missing += np.sum(flags == 9)
+
+        # SAVE THE PROFILE SUMMARY
+        profile_summary.append(
+            {
+                "profile": profile_name,
+                "profile_index": profile_index,
+                "GOOD": good,
+                "UNKNOWN": unknown,
+                "SUSPECT": suspect,
+                "FAIL": fail,
+                "MISSING": missing,
+            }
+        )
+
+    return pd.DataFrame(profile_summary)
 
 
 # =========================================================

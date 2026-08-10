@@ -1652,3 +1652,57 @@ def check_dbdreader_c_extension():
         _log.info("DBDREADER_C_EXTENSION is not set. Using package defaults")
     else:
         _log.warning("DBDREADER_C_EXTENSION is set to an unexpected value: %s", c_ext_status)
+        
+        
+def combine_datasets(nc_dir):
+    """
+    Combine profile NetCDF files into a single xarray
+    Dataset.
+
+    Parameters
+    ----------
+    nc_dir : str or pathlib.Path
+        Directory containing NetCDF files.
+
+    Returns
+    -------
+    xarray.Dataset
+        Dataset containing all profiles concatenated
+        along the ``time`` dimension.
+    """
+
+    # CONVERT INPUT TO A PATH OBJECT
+    nc_dir = Path(nc_dir)
+
+    # FIND ALL NETCDF FILES
+    nc_files = sorted(nc_dir.glob("*.nc"))
+
+    if not nc_files:
+        raise FileNotFoundError(
+            f"No NetCDF files found in {nc_dir}"
+        )
+
+    deployment_datasets = []
+
+    # PROCESS EACH PROFILE FILE
+    for nc_file in nc_files:
+        ds = xr.open_dataset(nc_file)
+
+        # STORE THE PROFILE FILENAME FOR EACH OBSERVATION
+        profile_name = nc_file.stem.replace("_qc", "")
+        ds = ds.assign(
+            profile=xr.DataArray(
+                np.full(ds.sizes["time"], profile_name),
+                dims=("time",),
+            )
+        )
+        deployment_datasets.append(ds)
+
+    # COMBINE ALL PROFILES
+    deployment_ds = xr.concat(
+        deployment_datasets,
+        dim="time",
+        combine_attrs="override",
+    )
+
+    return deployment_ds

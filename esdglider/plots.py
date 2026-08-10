@@ -197,6 +197,30 @@ eng_vars = [
     "profile_direction",
 ]
 
+"""
+Dictionaries used for QARTOD qc flags
+"""
+QC_COLORS = {
+    1: "#2ca02c",   # GOOD
+    2: "#7f7f7f",   # UNKNOWN
+    3: "#ffbf00",   # SUSPECT
+    4: "#d62728",   # FAIL
+    9: "#000000",   # MISSING
+}
+
+QC_LABELS = {
+    1: "GOOD",
+    2: "UNKNOWN",
+    3: "SUSPECT",
+    4: "FAIL",
+    9: "MISSING",
+}
+
+QC_FLAG_NAMES = {
+    name: QC_COLORS[flag]
+    for flag, name in QC_LABELS.items()
+}
+
 
 def esd_all_plots(
     ds_paths: dict,
@@ -1942,13 +1966,6 @@ def plot_qc_summary(
 
     # CREATE FIGURE
     fig, ax = plt.subplots(figsize=(max(12, 1.1 * len(summary_df)), 10))
-    colors = {
-        "GOOD": "#2ca02c",
-        "UNKNOWN": "#7f7f7f",
-        "SUSPECT": "#ffbf00",
-        "FAIL": "#d62728",
-        "MISSING": "#000000",
-    }
     totals = (
         summary_df["GOOD"]
         + summary_df["UNKNOWN"]
@@ -1960,13 +1977,13 @@ def plot_qc_summary(
     bottom = np.zeros(len(summary_df))
 
     # PLOT STACKED BAR SEGMENTS
-    for flag in colors:
+    for flag in QC_FLAG_NAMES:
         heights = summary_df[flag]
         ax.bar(
             summary_df["variable"],
             heights,
             bottom=bottom,
-            color=colors[flag],
+            color=QC_FLAG_NAMES[flag],
             width=0.7,
             label=flag,
         )
@@ -2062,121 +2079,13 @@ def plot_qc_summary(
         fontsize=11,
     )
     plt.tight_layout()
-    plt.savefig(
+    save_plot(
+        fig,
         plot_file,
-        dpi=300,
     )
     plt.close(fig)
 
     return summary_df
-
-
-def combine_qc_datasets(qc_dir):
-    """
-    Combine QARTOD QC NetCDF files from a deployment into a
-    single xarray Dataset and generate a profile-level QC
-    summary table.
-
-    Parameters
-    ----------
-    qc_dir : str or pathlib.Path
-        Directory containing QC NetCDF files.
-
-    Returns
-    -------
-    tuple
-        deployment_ds : xarray.Dataset
-            Dataset containing all profiles concatenated
-            along the ``time`` dimension.
-
-        profile_summary_df : pandas.DataFrame
-            One row per profile containing the profile
-            filename, profile index, and the total number
-            of GOOD, UNKNOWN, SUSPECT, FAIL, and MISSING
-            flags.
-    """
-
-    # CONVERT INPUT TO A PATH OBJECT
-    qc_dir = Path(qc_dir)
-
-    # FIND ALL QARTOD QC NETCDF FILES
-    qc_files = sorted(qc_dir.glob("*_qc.nc"))
-
-    if not qc_files:
-        raise FileNotFoundError(f"No QC NetCDF files found in {qc_dir}")
-
-    # STORE DATASETS & PROFILE LEVEL QC FLAG COUNTS
-    deployment_datasets = []
-    profile_summary = []
-
-    # VARIABLES THAT ARE EXCLUDED
-    skip = {
-        "time_qc",
-        "profile_time_qc",
-        "time_uv_qc",
-    }
-
-    # PROCESS EACH PROFILE NETCDF FILE
-    for qc_file in qc_files:
-        ds = xr.open_dataset(qc_file)
-        # KEEP THE PROFILE NAME FOR EVERY OBSERVATION
-        profile_name = qc_file.stem.replace("_qc", "")
-        # GET THE PROFILE INDEX
-        profile_index = int(np.ravel(ds["profile_index"].values)[0])
-        # ADD THE PROFILE NAME AS A VARIABLE
-        ds = ds.assign(
-            profile=xr.DataArray(
-                np.full(ds.sizes["time"], profile_name),
-                dims=("time",),
-            )
-        )
-        # SAVE THE DATASET FOR LATER CONCATENATION
-        deployment_datasets.append(ds)
-        # INITIALIZE QC FLAG COUNTS FOR THIS PROFILE
-        good = unknown = suspect = fail = missing = 0
-        # IDENTIFY ALL TIME-VARYING QC VARIABLES
-        qc_variables = [
-            var
-            for var in ds.data_vars
-            if (var.endswith("_qc") and ds[var].ndim > 0 and var not in skip)
-        ]
-
-        # COUNT QC FLAGS ACROSS ALL VARIABLES IN THIS PROFILE
-        for var in qc_variables:
-            flags = ds[var].values.ravel()
-            flags = flags[flags != -127]
-            # ACCUMULATE FLAG COUNTS
-            good += np.sum(flags == 1)
-            unknown += np.sum(flags == 2)
-            suspect += np.sum(flags == 3)
-            fail += np.sum(flags == 4)
-            missing += np.sum(flags == 9)
-
-        # SAVE THE PROFILE SUMMARY
-        profile_summary.append(
-            {
-                "profile": profile_name,
-                "profile_index": profile_index,
-                "GOOD": good,
-                "UNKNOWN": unknown,
-                "SUSPECT": suspect,
-                "FAIL": fail,
-                "MISSING": missing,
-            }
-        )
-
-    # COMBINE ALL PROFILE DATASETS INTO A SINGLE
-    # DEPLOYMENT DATASET ALONG THE TIME DIMENSION
-    deployment_ds = xr.concat(
-        deployment_datasets,
-        dim="time",
-        combine_attrs="override",
-    )
-
-    # CONVERT THE PROFILE SUMMARY INTO A DATAFRAME
-    profile_summary_df = pd.DataFrame(profile_summary)
-
-    return deployment_ds, profile_summary_df
 
 
 def plot_qc_timeseries(
@@ -2235,22 +2144,6 @@ def plot_qc_timeseries(
             continue
         qc_variables.append(var)
 
-    colors = {
-        1: "#2ca02c",  # GOOD
-        2: "#7f7f7f",  # UNKNOWN
-        3: "#ffbf00",  # SUSPECT
-        4: "#d62728",  # FAIL
-        9: "#000000",  # MISSING
-    }
-
-    labels = {
-        1: "GOOD",
-        2: "UNKNOWN",
-        3: "SUSPECT",
-        4: "FAIL",
-        9: "MISSING",
-    }
-
     # CREATE ONE FIGURE FOR EACH QC VARIABLE
     for qc_var in qc_variables:
         data_var = qc_var.replace("_qc", "")
@@ -2284,7 +2177,7 @@ def plot_qc_timeseries(
                     time[mask],
                     depth[mask],
                     s=18,
-                    color=colors[flag],
+                    color=QC_COLORS[flag],
                     edgecolors="none",
                 )
 
@@ -2310,13 +2203,13 @@ def plot_qc_timeseries(
             mlines.Line2D(
                 [],
                 [],
-                color=colors[f],
+                color=QC_COLORS[f],
                 marker="o",
                 linestyle="None",
                 markersize=6,
-                label=labels[f],
+                label=QC_LABELS[f],
             )
-            for f in [1, 2, 3, 4, 9]
+            for f in QC_LABELS
         ]
         ax.legend(
             handles=legend_handles,
@@ -2327,8 +2220,8 @@ def plot_qc_timeseries(
         )
 
         plt.tight_layout()
-        plt.savefig(
+        save_plot(
+            fig,
             output_dir / f"{data_var}_qc_timeseries.png",
-            dpi=300,
         )
         plt.close(fig)
