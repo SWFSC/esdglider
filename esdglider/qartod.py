@@ -19,10 +19,12 @@ configuration file and applied to all eligible variables
 containing a time dimension.
 
 The resulting QC flags are aggregated into DAC-compliant
-``*_qc`` variables, linked to their parent variables
-through the ``ancillary_variables`` attribute, and written
-to a new NetCDF file suitable for GliderDAC submission and
-downstream scientific analysis.
+*_qc variables, linked to their parent variables through
+the ancillary_variables attribute, and written to a QC-enhanced
+NetCDF file suitable for GliderDAC submission and downstream
+scientific analysis. Visualization and reporting utilities
+are implemented separately in the plots.py module and are
+not part of the core QARTOD processing workflow.
 
 Workflow
 --------
@@ -31,12 +33,11 @@ steps:
 
 1. Open the input science NetCDF dataset.
 2. Identify variables eligible for QARTOD testing.
-3. Load the YAML QARTOD configuration file.
-4. Automatically generate default QC configurations for
-   variables not explicitly defined in the YAML file.
-5. Construct an ``ioos_qc.config.Config`` object.
-6. Execute configured QARTOD tests using ``ioos_qc``.
-7. Collect and group test results by variable.
+3. Load the YAML QARTOD configuration.
+4. Automatically generate default QC configurations.
+5. Compute deployment-specific thresholds.
+6. Construct the ioos_qc.config.Config object.
+7. Execute configured QARTOD tests.
 8. Generate aggregate DAC-compliant ``*_qc`` variables.
 9. Create placeholder QC variables for metadata time
    variables that are not evaluated by QARTOD.
@@ -68,6 +69,9 @@ Key Features
     * int8 QC variables
     * _FillValue = -127
     * zlib compression
+- Focused on QC generation only; plotting and QC summary
+  reporting are implemented in the companion ``plots.py``
+  module.
 
 Generated QC Variables
 ----------------------
@@ -108,7 +112,10 @@ Notes
 -----
 This module is intended for operational processing within
 the ESD Glider workflow and should be executed after
-science variables and metadata have been finalized.
+science variables and metadata have been finalized. The
+companion plots.py module may be used after QARTOD processing
+to generate deployment-level QC summary figures, profile
+summary tables, and QC flag time-series visualizations.
 
 The generated QC variables follow IOOS DAC conventions
 for flag values, standard names, ancillary variable
@@ -120,6 +127,7 @@ import numpy as np
 import xarray as xr
 import yaml
 import ioos_qc
+import json
 from ioos_qc.config import Config
 from ioos_qc.streams import XarrayStream
 from ioos_qc.results import collect_results
@@ -295,6 +303,225 @@ def load_qartod_config(config_file):
 
 
 # =========================================================
+# DYNAMIC THRESHOLD CALCULATIONS
+# =========================================================
+
+
+def get_spike_thresholds(values):
+    """
+    Calculate deployment-specific spike test thresholds from the
+    observations being quality controlled.
+
+    This function computes the standard deviation of the valid
+    observations for a variable and derives the QARTOD spike test
+    thresholds from that statistic. The suspect threshold is defined
+    as one standard deviation of the deployment, while the fail
+    threshold is defined as two standard deviations.
+
+    The resulting thresholds are intended to be inserted into the
+    in-memory QARTOD configuration prior to constructing the
+    ``ioos_qc.config.Config`` object. This allows spike thresholds
+    to be computed dynamically for each deployment while leaving the
+    YAML configuration file unchanged.
+
+    Parameters
+    ----------
+    values : numpy.ndarray
+        One-dimensional array of observations for the variable being
+        evaluated. Missing values (NaNs) are ignored when calculating
+        the standard deviation.
+
+    Returns
+    -------
+    tuple
+        Tuple containing:
+
+        - suspect_threshold (numpy.float64)
+        - fail_threshold (numpy.float64)
+        - report string describing any issues encountered during
+        threshold calculation
+
+        If fewer than two valid observations are available, the
+        threshold values are returned as ``None``.
+
+    Notes
+    -----
+    - Thresholds are computed from the deployment currently being
+    quality controlled rather than from a historical reference
+    dataset.
+    - NaN values are excluded from the standard deviation
+    calculation.
+    - The threshold definitions follow the methodology used by the
+    IOOS Glider DAC threshold generation utilities:
+
+        suspect_threshold = 1 × std
+        fail_threshold = 2 × std
+
+    References
+    ----------
+    This function is based on the spike threshold calculation
+    implemented by the IOOS Glider DAC:
+
+    https://github.com/ioos/glider-dac/blob/main/glider_qc/glider_qc.py#L289-L318
+
+    IOOS Glider DAC:
+    https://ioos.noaa.gov/project/underwater-gliders/
+
+    IOOS QARTOD:
+    https://ioos.github.io/ioos_qc/api/ioos_qc.html
+    """
+    report_list = []
+    # IF VALUES IS NOT A NUMPY ARRAY, CONVERT IT TO ONE
+    if not isinstance(values, np.ndarray):
+        values = np.asarray(values)
+
+    # CHECK IF THERE ARE AT LEAST 2 VALID VALUES
+    # REMOVE NaN
+    valid_values = [x for x in values if not np.isnan(x)]
+
+    if len(valid_values) < 2:
+        _log.info("Not enough valid data for variance calculation.")
+        report_list.append("Not enough valid data for std calculation.")
+        return None, None, " ".join(report_list)
+    else:
+        std = np.nanstd(valid_values)
+
+    # DEFINE THE SUSPECT AND FAIL THRESHOLDS
+    suspect_threshold = np.float64(1.0 * std)
+    fail_threshold = np.float64(2.0 * std)
+
+    return suspect_threshold, fail_threshold, " ".join(report_list)
+
+
+def get_rate_of_change_threshold(values, times):
+    """
+    Calculate a deployment-specific rate-of-change threshold from the
+    observations being quality controlled.
+
+    This function computes the maximum rate of change between
+    consecutive observations after excluding values that lie outside
+    one standard deviation of the deployment mean. Restricting the
+    calculation to observations within one standard deviation reduces
+    the influence of anomalous values when estimating the threshold.
+
+    The resulting threshold is intended to be inserted into the
+    in-memory QARTOD configuration prior to constructing the
+    ``ioos_qc.config.Config`` object. This allows rate-of-change
+    thresholds to be computed dynamically for each deployment while
+    leaving the YAML configuration file unchanged.
+
+    To ensure consistency with the IOOS QARTOD
+    ``rate_of_change_test()``, rates of change are calculated in
+    observation units per second by converting timestamp differences
+    to elapsed seconds before computing the rate.
+
+    Parameters
+    ----------
+    values : numpy.ndarray
+        One-dimensional array of observations for the variable being
+        evaluated.
+
+    times : numpy.ndarray
+        One-dimensional array of timestamps corresponding to
+        ``values``. The time array is used to calculate the rate of
+        change between consecutive observations.
+
+    Returns
+    -------
+    tuple
+        Tuple containing:
+
+        - threshold (numpy.float64)
+        - report string describing any issues encountered during
+        threshold calculation
+
+        If insufficient valid observations are available, the
+        threshold value is returned as ``None``.
+
+    Notes
+    -----
+    - Thresholds are computed from the deployment currently being
+    quality controlled rather than from a historical reference
+    dataset.
+    - Observations outside one standard deviation of the deployment
+    mean are excluded prior to calculating the rate of change.
+    - The returned threshold is the maximum absolute rate of change
+    observed between consecutive filtered observations.
+    - Time differences are converted to elapsed seconds before
+    calculating rates of change so that the computed thresholds are
+    expressed in observation units per second, matching the
+    implementation used by ``ioos_qc.qartod.rate_of_change_test()``.
+    - This implementation differs slightly from the original IOOS
+    Glider DAC helper function to ensure the dynamically computed
+    thresholds are directly compatible with the IOOS QC test used by
+    this workflow.
+
+    References
+    ----------
+    This function is adapted from the rate-of-change threshold
+    calculation implemented by the IOOS Glider DAC:
+
+    https://github.com/ioos/glider-dac/blob/main/glider_qc/glider_qc.py#L233C5-L287C48
+
+    The rate-of-change calculation has been modified to express rates
+    in observation units per second, matching the implementation used
+    by ``ioos_qc.qartod.rate_of_change_test()``.
+
+    IOOS Glider DAC:
+    https://ioos.noaa.gov/project/underwater-gliders/
+
+    IOOS QARTOD:
+    https://ioos.github.io/ioos_qc/api/ioos_qc.html
+    """
+    report_list = []
+    message = (
+        "Insufficient data: both 'values' and 'times' "
+        "must have at least two elements."
+    )
+
+    if len(values) < 2 or len(times) < 2:
+        _log.info(message)
+        report_list.append(message)
+        return None, " ".join(report_list)
+
+    if (
+        np.sum(~np.isnan(values)) > 1
+    ):  # CHECK IF THERE ARE AT LEAST 2 VALID VALUES
+        std = np.nanstd(values)
+        mean = np.nanmean(values)
+    else:
+        report_list.append(
+            "Not enough valid data points for std and mean calculations."
+        )
+        return None, " ".join(report_list)
+
+    list_values = []
+    list_times = []
+    for nn, xx in enumerate(values):
+        if (xx > (mean - std)) and (xx < (mean + std)):
+            list_values.append(values[nn])
+            list_times.append(times[nn])
+
+    # ENSURE THERE ARE ENOUGH DATA POINTS TO COMPUTE THE RATE OF CHANGE
+    if len(list_values) < 2:
+        _log.info(message)
+        report_list.append(message)
+        return None, " ".join(report_list)
+
+    # CALCULATE RATE OF CHANGE IN OBSERVATION UNITS PER SECOND,
+    # MATCHING THE IMPLEMENATION USED BY ioos_qc.qartod.rate_of_change_test()
+    roc = np.abs(
+        np.diff(list_values)
+        / np.diff(list_times).astype("timedelta64[s]").astype(float)
+    )
+
+    # RETURN MAX RATE OF CHANGE
+    threshold = np.max(roc)
+
+    return threshold, " ".join(report_list)
+
+
+# =========================================================
 # AUTO-ADD VARIABLES TO CONFIG
 # =========================================================
 
@@ -414,11 +641,124 @@ def add_missing_variables_to_config(
             "qartod": {
                 "gross_range_test": gross_range_config,
                 "spike_test": {
-                    "suspect_threshold": 5,
-                    "fail_threshold": 10,
+                    "suspect_threshold": -9999,
+                    "fail_threshold": -9999,
+                },
+                "rate_of_change_test": {
+                    "threshold": -9999,
                 },
             }
         }
+    return config_dict
+
+
+# =========================================================
+# UPDATE DYNAMIC THRESHOLDS
+# =========================================================
+
+
+def update_dynamic_thresholds(
+    ds,
+    config_dict,
+):
+    """
+    Compute deployment-specific QARTOD thresholds and update the
+    in-memory configuration dictionary.
+
+    This function calculates deployment-specific thresholds for
+    supported QARTOD tests using the observations contained in the
+    current dataset. The computed thresholds replace the placeholder
+    values stored in the configuration dictionary prior to
+    constructing the ``ioos_qc.config.Config`` object.
+
+    The QARTOD YAML configuration file is treated as a template and
+    is never modified. Instead, the calculated thresholds are applied
+    only to the in-memory configuration dictionary used during the
+    current QC workflow.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Input glider dataset containing the observations used to
+        calculate deployment-specific thresholds.
+
+    config_dict : dict
+        Parsed QARTOD configuration dictionary.
+
+    Returns
+    -------
+    dict
+        Updated configuration dictionary containing the
+        deployment-specific threshold values used during QARTOD
+        processing.
+
+    Notes
+    -----
+    Currently supported dynamic threshold calculations:
+
+    - spike_test
+    - rate_of_change_test
+    """
+
+    # ACCESS STREAM CONFIGURATION
+    streams = config_dict["contexts"][0]["streams"]
+
+    # PROCESS EACH CONFIGURED VARIABLE
+    for var_name, stream in streams.items():
+
+        # SKIP VARIABLES NOT PRESENT IN DATASET
+        if var_name not in ds:
+            continue
+
+        # SKIP SCALAR VARIABLES
+        if ds[var_name].ndim == 0:
+            _log.info(
+                "Skipping dynamic threshold calculation for "
+                "%s because it is scalar.",
+                var_name,
+            )
+            continue
+
+        # SKIP VARIABLES WITHOUT QARTOD CONFIGURATION
+        if "qartod" not in stream:
+            continue
+
+        qartod = stream["qartod"]
+
+        # SPIKE TEST
+        if "spike_test" in qartod:
+            suspect, fail, report = get_spike_thresholds(
+                ds[var_name].values,
+            )
+
+            if suspect is not None and fail is not None:
+                qartod["spike_test"]["suspect_threshold"] = float(suspect)
+                qartod["spike_test"]["fail_threshold"] = float(fail)
+                _log.info(
+                    "Updated spike thresholds for %s",
+                    var_name,
+                )
+
+            if report:
+                _log.info("%s: %s", var_name, report)
+
+        # RATE OF CHANGE TEST
+        if "rate_of_change_test" in qartod:
+            threshold, report = get_rate_of_change_threshold(
+                ds[var_name].values,
+                ds["time"].values,
+            )
+
+            if threshold is not None:
+                qartod["rate_of_change_test"]["threshold"] = float(threshold)
+                _log.info(
+                    "Updated rate_of_change threshold for %s",
+                    var_name,
+                )
+
+            if report:
+                _log.info("%s: %s", var_name, report)
+
     return config_dict
 
 
@@ -648,6 +988,47 @@ def group_qartod_results(ds, collected):
 
 
 # =========================================================
+# BUILD FLAG CONFIGURATION
+# =========================================================
+
+
+def build_flag_configuration(config_dict, var_name):
+    """
+    Build the QARTOD configuration provenance stored in the
+    ``flag_configuration`` attribute.
+
+    Parameters
+    ----------
+    config_dict : dict
+        Parsed QARTOD configuration dictionary containing the
+        deployment-specific thresholds used during the current
+        QC workflow.
+
+    var_name : str
+        Variable name.
+
+    Returns
+    -------
+    str
+        JSON-formatted string containing the QARTOD configuration
+        used to generate the aggregate QC variable.
+    """
+
+    streams = config_dict["contexts"][0]["streams"]
+
+    flag_configuration = {
+        "configuration_source": "template_modified_in_memory",
+        "configuration_template": "qartod-config.yml",
+        "threshold_source": ("computed_from_current_deployment_statistics"),
+    }
+
+    if var_name in streams and "qartod" in streams[var_name]:
+        flag_configuration.update(streams[var_name]["qartod"])
+
+    return json.dumps(flag_configuration, separators=(",", ":"))
+
+
+# =========================================================
 # CREATE AGGREGATE QC VARIABLES
 # =========================================================
 
@@ -655,6 +1036,7 @@ def group_qartod_results(ds, collected):
 def create_qc_variables(
     ds,
     grouped_results,
+    config_dict,
     overwrite_qc=True,
 ):
     """
@@ -667,9 +1049,11 @@ def create_qc_variables(
     For each variable, the most severe flag value from all
     configured QARTOD tests is retained at each observation
     using a maximum-value aggregation approach. The resulting
-    aggregate flags are written to a new ``*_qc`` variable and
-    linked back to the parent variable through the
-    ``ancillary_variables`` attribute.
+    aggregate flags are written to a new *_qc variable, linked
+    back to the parent variable through the ancillary_variables
+    attribute, and include a serialized flag_configuration
+    attribute documenting the QARTOD configuration used to
+    generate the aggregate flags.
 
     Existing QC variables may optionally be replaced when
     ``overwrite_qc=True``.
@@ -700,6 +1084,12 @@ def create_qc_variables(
                 ]
             }
 
+    config_dict : dict
+            Parsed QARTOD configuration dictionary containing the
+            deployment-specific threshold values used during the
+            current QC workflow. The configuration is used to record
+            QC provenance in the output ``*_qc`` variables.
+
     overwrite_qc : bool, optional
         If True, existing QC variables are removed and
         replaced with newly generated aggregate QARTOD
@@ -723,7 +1113,6 @@ def create_qc_variables(
 
         # AGGREGATE QARTOD FLAGS
         final_flags = np.maximum.reduce(test_results).astype("int8")
-
         qc_var = f"{var_name}_qc"
 
         # HANDLE EXISTING QC VARIABLES
@@ -745,17 +1134,12 @@ def create_qc_variables(
             coords=ds[var_name].coords,
             attrs={
                 "long_name": (
-                    "QARTOD aggregate quality flag for "
-                    f"{var_name}"
+                    "QARTOD aggregate quality flag for " f"{var_name}"
                 ),
                 "standard_name": get_qc_standard_name(ds, var_name),
                 "flag_values": np.array([1, 2, 3, 4, 9], dtype="int8"),
                 "flag_meanings": (
-                    "GOOD "
-                    "UNKNOWN "
-                    "SUSPECT "
-                    "FAIL "
-                    "MISSING"
+                    "GOOD " "UNKNOWN " "SUSPECT " "FAIL " "MISSING"
                 ),
                 "valid_min": 1,
                 "valid_max": 9,
@@ -763,6 +1147,10 @@ def create_qc_variables(
                     "Aggregate QARTOD flag "
                     "generated using "
                     "ioos_qc package."
+                ),
+                "flag_configuration": build_flag_configuration(
+                    config_dict,
+                    var_name,
                 ),
             },
         )
@@ -864,11 +1252,7 @@ def create_placeholder_qc_variables(ds_qc):
                 "standard_name": get_qc_standard_name(ds_qc, var_name),
                 "flag_values": np.array([1, 2, 3, 4, 9], dtype="int8"),
                 "flag_meanings": (
-                    "GOOD "
-                    "UNKNOWN "
-                    "SUSPECT "
-                    "FAIL "
-                    "MISSING"
+                    "GOOD " "UNKNOWN " "SUSPECT " "FAIL " "MISSING"
                 ),
                 "valid_min": 1,
                 "valid_max": 9,
@@ -1099,6 +1483,12 @@ def run_qartod_qc(
         time_variables,
     )
 
+    # UPDATE DEPLOYMENT-SPECIFIC THRESHOLDS
+    config_dict = update_dynamic_thresholds(
+        ds,
+        config_dict,
+    )
+
     # BUILD IOOS QC CONFIGURATION OBJECT
     config = build_ioos_qc_config(config_dict)
 
@@ -1109,9 +1499,9 @@ def run_qartod_qc(
     grouped_results = group_qartod_results(ds, collected)
 
     # CREATE AGGREGATE QC VARIABLES
-    print(list(grouped_results.keys()))
-
-    ds_qc = create_qc_variables(ds, grouped_results, overwrite_qc=overwrite_qc)
+    ds_qc = create_qc_variables(
+        ds, grouped_results, config_dict, overwrite_qc=overwrite_qc
+    )
 
     # ADD QC PROVENANCE METADATA
     ds_qc.attrs["ioos_qc_version"] = ioos_qc.__version__

@@ -60,15 +60,20 @@ contexts:
       pressure:
         qartod:
           gross_range_test:
-            suspect_span: [0, 300]
-            fail_span: [0, 2000]
+            suspect_span: [0, 1000]
+            fail_span: [0, 6000]
 
           spike_test:
-            suspect_threshold: 20
-            fail_threshold: 50
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
 
           rate_of_change_test:
-            threshold: 100
+            threshold: 0.1
+
+          flat_line_test:
+            tolerance: 0.001
+            suspect_threshold: 3000
+            fail_threshold: 5000
 
       depth:
         qartod:
@@ -77,11 +82,11 @@ contexts:
             fail_span: [0, 2000]
 
           spike_test:
-            suspect_threshold: 20
-            fail_threshold: 50
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
 
           rate_of_change_test:
-            threshold: 100
+            threshold: 0.1
 
       # =====================================================
       # TEMPERATURE
@@ -90,20 +95,20 @@ contexts:
       temperature:
         qartod:
           gross_range_test:
-            suspect_span: [7.0, 18.0]
-            fail_span: [-5, 40]
+            suspect_span: [0, 35]
+            fail_span: [-2, 40]
 
           spike_test:
-            suspect_threshold: 0.5
-            fail_threshold: 1.0
-
-          flat_line_test:
-            suspect_threshold: 1800
-            fail_threshold: 3600
-            tolerance: 0.002
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
 
           rate_of_change_test:
-            threshold: 1.0
+            threshold: 0.1
+
+          flat_line_test:
+            tolerance: 0.001
+            suspect_threshold: 3000
+            fail_threshold: 5000
 
       # =====================================================
       # CONDUCTIVITY
@@ -112,17 +117,20 @@ contexts:
       conductivity:
         qartod:
           gross_range_test:
-            suspect_span: [3.4, 4.5]
-            fail_span: [0, 10]
+            suspect_span: [0, 6]
+            fail_span: [0, 9]
 
           spike_test:
-            suspect_threshold: 0.25
-            fail_threshold: 0.5
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
+
+          rate_of_change_test:
+            threshold: 0.1
 
           flat_line_test:
-            suspect_threshold: 1800
-            fail_threshold: 3600
-            tolerance: 0.0005
+            tolerance: 0.001
+            suspect_threshold: 3000
+            fail_threshold: 5000
 
       # =====================================================
       # SALINITY
@@ -130,18 +138,21 @@ contexts:
 
       salinity:
         qartod:
-          gross_range_test:
-            suspect_span: [28, 37]
-            fail_span: [0, 45]
+            gross_range_test:
+              fail_span: [0, 42]
+              suspect_span: [10, 38]
 
-          spike_test:
-            suspect_threshold: 1
-            fail_threshold: 2
+            spike_test:
+              suspect_threshold: 0.0
+              fail_threshold: 0.0
 
-          flat_line_test:
-            suspect_threshold: 1800
-            fail_threshold: 3600
-            tolerance: 0.01
+            rate_of_change_test:
+              threshold: 0.1
+
+            flat_line_test:
+              tolerance: 0.001
+              suspect_threshold: 3000
+              fail_threshold: 5000
 
       # =====================================================
       # DENSITY
@@ -149,13 +160,21 @@ contexts:
 
       density:
         qartod:
-          gross_range_test:
-            suspect_span: [1015, 1035]
-            fail_span: [900, 1100]
+            gross_range_test:
+              fail_span: [1000, 1100]
+              suspect_span: null
 
-          spike_test:
-            suspect_threshold: 1
-            fail_threshold: 2
+            spike_test:
+              suspect_threshold: 0.0
+              fail_threshold: 0.0
+
+            rate_of_change_test:
+              threshold: 0.1
+
+            flat_line_test:
+              tolerance: 0.001
+              suspect_threshold: 3000
+              fail_threshold: 5000
 
       # =====================================================
       # VELOCITY
@@ -168,8 +187,11 @@ contexts:
             fail_span: [-10, 10]
 
           spike_test:
-            suspect_threshold: 0.5
-            fail_threshold: 1.0
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
+
+          rate_of_change_test:
+            threshold: 0.1
 
       v:
         qartod:
@@ -178,5 +200,8 @@ contexts:
             fail_span: [-10, 10]
 
           spike_test:
-            suspect_threshold: 0.5
-            fail_threshold: 1.0
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
+
+          rate_of_change_test:
+            threshold: 0.1 

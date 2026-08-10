@@ -9,13 +9,16 @@ import cartopy.feature as cfeature
 import cmocean.cm as cmo
 import matplotlib
 import matplotlib.dates as mdates
+import matplotlib.lines as mlines
 import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
+import pandas as pd
 from cartopy.mpl.geoaxes import GeoAxes
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
+from pathlib import Path
 from numpy.typing import NDArray
 
 from esdglider import utils
@@ -272,7 +275,9 @@ def esd_all_plots(
 
     if bar_file is not None:
         _log.info(f"Loading bar file from {bar_file}")
-        bar = xr.load_dataset(bar_file).rename({"latitude": "lat", "longitude": "lon"})
+        bar = xr.load_dataset(bar_file).rename(
+            {"latitude": "lat", "longitude": "lon"}
+        )
         bar = bar.where(bar.z <= 0, drop=True)
     else:
         _log.info("No bar file path")
@@ -450,7 +455,9 @@ def sci_timeseries_loop_helper(
     concurrent.futures.ProcessPoolExecutor
     """
     _log.debug(f"var {var}")
-    sci_timeseries_plot(var, ds, depth_var=depth_var, base_path=base_path, show=show)
+    sci_timeseries_plot(
+        var, ds, depth_var=depth_var, base_path=base_path, show=show
+    )
     sci_timesection_gt_plot(
         var,
         ds,
@@ -1182,7 +1189,9 @@ def sci_spatialgrid_plot(
 
     # ax0.scatter(sci_ds.longitude, sci_ds.latitude, c=sci_ds[var], cmap=sci_vars[var])
     ds1 = ds.sortby("longitude")
-    ax1.pcolormesh(ds1.longitude, ds1.depth, adj_var(ds1, var), cmap=sci_vars[var])
+    ax1.pcolormesh(
+        ds1.longitude, ds1.depth, adj_var(ds1, var), cmap=sci_vars[var]
+    )
     ax1.set_ylabel("Depth [m]", size=label_size)
     ax1.set_xlabel("Longitude [Deg]", size=label_size)
     ax1.invert_yaxis()
@@ -1203,7 +1212,9 @@ def sci_spatialgrid_plot(
         label=adj_var_label(ds, var),
         size=label_size,
     )
-    fig.suptitle(f"Deployment {deployment} for project {project}", size=title_size)
+    fig.suptitle(
+        f"Deployment {deployment} for project {project}", size=title_size
+    )
 
     if base_path is not None:
         fname = os.path.join(
@@ -1274,8 +1285,12 @@ def eng_plots_to_make(ds: xr.Dataset):
             "X": ds["time"],
             "Y": [
                 ds["leak_detect"].rolling(time=900, min_periods=10).mean(),
-                ds["leak_detect_forward"].rolling(time=900, min_periods=10).mean(),
-                ds["leak_detect_science"].rolling(time=900, min_periods=10).mean(),
+                ds["leak_detect_forward"]
+                .rolling(time=900, min_periods=10)
+                .mean(),
+                ds["leak_detect_science"]
+                .rolling(time=900, min_periods=10)
+                .mean(),
             ],
             "C": ["C0", "C1", "C2"],
             "cb": None,
@@ -1324,13 +1339,14 @@ def eng_tvt_plot(
     """
 
     if key not in list(eng_dict.keys()):
-        raise ValueError(f"Variable name {key} not present in eng_dict. Skipping plot")
+        raise ValueError(
+            f"Variable name {key} not present in eng_dict. Skipping plot"
+        )
 
     deployment = ds.deployment_name
     _log.info(f"Making tvt plot for dictionary key {key}")
 
     fig, ax = plt.subplots(figsize=(8.5, 8.5))
-
 
     for i in range(len(eng_dict[key]["Y"])):
         if key == "oilVol":
@@ -1360,7 +1376,9 @@ def eng_tvt_plot(
         fig.autofmt_xdate()
 
     if base_path is not None:
-        fname = os.path.join(base_path, tvt_path, f"{deployment}_{key}_engtvt.png")
+        fname = os.path.join(
+            base_path, tvt_path, f"{deployment}_{key}_engtvt.png"
+        )
         save_plot(fig, fname)
 
     if show:
@@ -1411,7 +1429,9 @@ def eng_timeseries_plot(
     ax.set_xlabel("Time", size=label_size)
     ax.set_ylabel(adj_var_label(ds, var), size=label_size)
     # ax.invert_yaxis()
-    ax.set_title(f"Deployment {deployment} for project {project}", size=title_size)
+    ax.set_title(
+        f"Deployment {deployment} for project {project}", size=title_size
+    )
 
     ax.scatter(ds.time, ds[var], s=3)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
@@ -1483,11 +1503,17 @@ def sci_timeseries_plot(
     ax.set_xlabel("Time", size=label_size)
     ax.set_ylabel("Depth [m]", size=label_size)
     ax.invert_yaxis()
-    ax.set_title(f"Deployment {deployment} for project {project}", size=title_size)
+    ax.set_title(
+        f"Deployment {deployment} for project {project}", size=title_size
+    )
 
-    p = ax.scatter(ds.time, ds[depth_var], c=adj_var(ds, var), cmap=sci_vars[var], s=3)
+    p = ax.scatter(
+        ds.time, ds[depth_var], c=adj_var(ds, var), cmap=sci_vars[var], s=3
+    )
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
-    fig.colorbar(p, location="right").set_label(adj_var_label(ds, var), size=label_size)
+    fig.colorbar(p, location="right").set_label(
+        adj_var_label(ds, var), size=label_size
+    )
     fig.autofmt_xdate()
 
     if base_path is not None:
@@ -1571,10 +1597,14 @@ def sci_timesection_gt_plot(
     y = dat[depth_var]
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
-    ax = gt.plot(x, y, adj_var(dat, var), cmap=sci_vars[var], ax=ax, robust=robust)
+    ax = gt.plot(
+        x, y, adj_var(dat, var), cmap=sci_vars[var], ax=ax, robust=robust
+    )
     ax.set_xlabel("Profile", size=label_size)
     ax.set_ylabel("Depth [m]", size=label_size)
-    ax.set_title(f"Deployment {deployment} for project {project}", size=title_size)
+    ax.set_title(
+        f"Deployment {deployment} for project {project}", size=title_size
+    )
 
     # Sometimes glidertools won't plot label, so guarantee it
     ax.cb.set_label(adj_var_label(ds, var), size=label_size)  # type: ignore
@@ -1662,7 +1692,9 @@ def ts_plot(
     # ax.set_ylabel("Potential temperature [°C]", size=label_size)
 
     if base_path is not None:
-        fname = os.path.join(base_path, ts_path, f"{deployment}_{var}_tsPlot.png")
+        fname = os.path.join(
+            base_path, ts_path, f"{deployment}_{var}_tsPlot.png"
+        )
         save_plot(fig, fname)
 
     if show:
@@ -1833,3 +1865,470 @@ def sci_surface_map(
     plt.close(fig)
 
     return fig
+
+
+def plot_qc_summary(
+    ds_qc,
+    plot_file,
+):
+    """
+    Create a stacked bar chart summarizing QARTOD
+    quality-control flag counts.
+
+    This function summarizes all time-varying QARTOD
+    ``*_qc`` variables contained in an xarray Dataset by
+    counting the number of GOOD, UNKNOWN, SUSPECT, FAIL,
+    and MISSING observations for each QC variable.
+
+    Parameters
+    ----------
+    ds_qc : xarray.Dataset
+        Dataset containing QARTOD ``*_qc`` variables.
+
+    plot_file : str or pathlib.Path
+        Output PNG filename.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Summary table of QC flag counts used to generate
+        the stacked bar chart.
+    """
+
+    # EXCLUDE THESE VARIABLES
+    exclude_data_vars = {
+        "time",
+        "profile_time",
+        "time_uv",
+        "lat_uv",
+        "lon_uv",
+        "u",
+        "v",
+    }
+
+    # IDENTIFY VARIABLES FOR SUMMARY
+    qc_variables = []
+    for var in ds_qc.data_vars:
+        if not var.endswith("_qc"):
+            continue
+        data_var = var.replace("_qc", "")
+        if data_var in exclude_data_vars:
+            continue
+        qc_variables.append(var)
+
+    # BUILD SUMMARY TABLE
+    summary = []
+    for var in qc_variables:
+        flags = ds_qc[var].values.ravel()
+        # REMOVE FILL VALUES
+        flags = flags[flags != -127]
+        if len(flags) == 0:
+            continue
+        summary.append(
+            {
+                "variable": var.replace("_qc", ""),
+                "GOOD": np.sum(flags == 1),
+                "UNKNOWN": np.sum(flags == 2),
+                "SUSPECT": np.sum(flags == 3),
+                "FAIL": np.sum(flags == 4),
+                "MISSING": np.sum(flags == 9),
+            }
+        )
+    summary_df = pd.DataFrame(summary)
+
+    # RETURN EARLY IF THERE IS NOTHING TO PLOT
+    if summary_df.empty:
+        return summary_df
+
+    # CREATE FIGURE
+    fig, ax = plt.subplots(figsize=(max(12, 1.1 * len(summary_df)), 10))
+    colors = {
+        "GOOD": "#2ca02c",
+        "UNKNOWN": "#7f7f7f",
+        "SUSPECT": "#ffbf00",
+        "FAIL": "#d62728",
+        "MISSING": "#000000",
+    }
+    totals = (
+        summary_df["GOOD"]
+        + summary_df["UNKNOWN"]
+        + summary_df["SUSPECT"]
+        + summary_df["FAIL"]
+        + summary_df["MISSING"]
+    )
+
+    bottom = np.zeros(len(summary_df))
+
+    # PLOT STACKED BAR SEGMENTS
+    for flag in colors:
+        heights = summary_df[flag]
+        ax.bar(
+            summary_df["variable"],
+            heights,
+            bottom=bottom,
+            color=colors[flag],
+            width=0.7,
+            label=flag,
+        )
+
+        percentages = 100 * heights / totals
+
+        # LABEL BARS SEGMENTS
+        for i, (height, pct) in enumerate(zip(heights, percentages)):
+            # SKIP EMPTY SEGMENTS
+            if height == 0:
+                continue
+            # SKIP LABELS SMALLER THAN 2%
+            if pct < 2:
+                continue
+            if pct >= 10:
+                ax.text(
+                    i,
+                    bottom[i] + height / 2,
+                    f"{pct:.0f}%",
+                    ha="center",
+                    va="center",
+                    fontsize=10,
+                    color="white",
+                    fontweight="bold",
+                )
+            else:
+                ax.text(
+                    i,
+                    bottom[i] + height / 2,
+                    f"{pct:.0f}%",
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    color="black",
+                )
+        bottom += heights
+
+    # ADD TOTAL OBSERVATIONS ONLY IF THEY DIFFER
+    if len(np.unique(totals)) > 1:
+        y_offset = totals.max() * 0.01
+        for i, total in enumerate(totals):
+            ax.text(
+                i,
+                total + y_offset,
+                f"n={total:,}",
+                ha="center",
+                va="bottom",
+                fontsize=11,
+            )
+        title = f"QARTOD QC Flag Summary\n" f"{Path(plot_file).stem}"
+        ax.set_ylim(
+            0,
+            totals.max() * 1.08,
+        )
+    else:
+        title = (
+            f"QARTOD QC Flag Summary\n"
+            f"{Path(plot_file).stem}\n"
+            f"Total observations per variable: "
+            f"{totals.iloc[0]:,}"
+        )
+        ax.set_ylim(
+            0,
+            totals.max() * 1.05,
+        )
+
+    ax.set_ylabel(
+        "Number of observations",
+        fontsize=12,
+    )
+    ax.set_xlabel(
+        "Variable",
+        fontsize=12,
+    )
+    ax.set_title(
+        title,
+        fontsize=15,
+    )
+    ax.legend(
+        title="QC Flag",
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+        frameon=False,
+        fontsize=11,
+        title_fontsize=12,
+    )
+    plt.xticks(
+        rotation=45,
+        ha="right",
+        fontsize=11,
+    )
+    plt.yticks(
+        fontsize=11,
+    )
+    plt.tight_layout()
+    plt.savefig(
+        plot_file,
+        dpi=300,
+    )
+    plt.close(fig)
+
+    return summary_df
+
+
+def combine_qc_datasets(qc_dir):
+    """
+    Combine QARTOD QC NetCDF files from a deployment into a
+    single xarray Dataset and generate a profile-level QC
+    summary table.
+
+    Parameters
+    ----------
+    qc_dir : str or pathlib.Path
+        Directory containing QC NetCDF files.
+
+    Returns
+    -------
+    tuple
+        deployment_ds : xarray.Dataset
+            Dataset containing all profiles concatenated
+            along the ``time`` dimension.
+
+        profile_summary_df : pandas.DataFrame
+            One row per profile containing the profile
+            filename, profile index, and the total number
+            of GOOD, UNKNOWN, SUSPECT, FAIL, and MISSING
+            flags.
+    """
+
+    # CONVERT INPUT TO A PATH OBJECT
+    qc_dir = Path(qc_dir)
+
+    # FIND ALL QARTOD QC NETCDF FILES
+    qc_files = sorted(qc_dir.glob("*_qc.nc"))
+
+    if not qc_files:
+        raise FileNotFoundError(f"No QC NetCDF files found in {qc_dir}")
+
+    # STORE DATASETS & PROFILE LEVEL QC FLAG COUNTS
+    deployment_datasets = []
+    profile_summary = []
+
+    # VARIABLES THAT ARE EXCLUDED
+    skip = {
+        "time_qc",
+        "profile_time_qc",
+        "time_uv_qc",
+    }
+
+    # PROCESS EACH PROFILE NETCDF FILE
+    for qc_file in qc_files:
+        ds = xr.open_dataset(qc_file)
+        # KEEP THE PROFILE NAME FOR EVERY OBSERVATION
+        profile_name = qc_file.stem.replace("_qc", "")
+        # GET THE PROFILE INDEX
+        profile_index = int(np.ravel(ds["profile_index"].values)[0])
+        # ADD THE PROFILE NAME AS A VARIABLE
+        ds = ds.assign(
+            profile=xr.DataArray(
+                np.full(ds.sizes["time"], profile_name),
+                dims=("time",),
+            )
+        )
+        # SAVE THE DATASET FOR LATER CONCATENATION
+        deployment_datasets.append(ds)
+        # INITIALIZE QC FLAG COUNTS FOR THIS PROFILE
+        good = unknown = suspect = fail = missing = 0
+        # IDENTIFY ALL TIME-VARYING QC VARIABLES
+        qc_variables = [
+            var
+            for var in ds.data_vars
+            if (var.endswith("_qc") and ds[var].ndim > 0 and var not in skip)
+        ]
+
+        # COUNT QC FLAGS ACROSS ALL VARIABLES IN THIS PROFILE
+        for var in qc_variables:
+            flags = ds[var].values.ravel()
+            flags = flags[flags != -127]
+            # ACCUMULATE FLAG COUNTS
+            good += np.sum(flags == 1)
+            unknown += np.sum(flags == 2)
+            suspect += np.sum(flags == 3)
+            fail += np.sum(flags == 4)
+            missing += np.sum(flags == 9)
+
+        # SAVE THE PROFILE SUMMARY
+        profile_summary.append(
+            {
+                "profile": profile_name,
+                "profile_index": profile_index,
+                "GOOD": good,
+                "UNKNOWN": unknown,
+                "SUSPECT": suspect,
+                "FAIL": fail,
+                "MISSING": missing,
+            }
+        )
+
+    # COMBINE ALL PROFILE DATASETS INTO A SINGLE
+    # DEPLOYMENT DATASET ALONG THE TIME DIMENSION
+    deployment_ds = xr.concat(
+        deployment_datasets,
+        dim="time",
+        combine_attrs="override",
+    )
+
+    # CONVERT THE PROFILE SUMMARY INTO A DATAFRAME
+    profile_summary_df = pd.DataFrame(profile_summary)
+
+    return deployment_ds, profile_summary_df
+
+
+def plot_qc_timeseries(
+    ds_qc,
+    output_dir,
+    deployment_name=None,
+):
+    """
+    Plot the location of QARTOD QC flags throughout a glider
+    deployment.
+
+    A separate figure is generated for every ``*_qc`` variable.
+    Observations are plotted in time-depth space and colored by
+    their QARTOD quality flag.
+
+    Parameters
+    ----------
+    ds_qc : xarray.Dataset
+        Dataset containing ``time``, ``depth``, and QARTOD
+        ``*_qc`` variables.
+
+    output_dir : str or pathlib.Path
+        Directory where PNG files will be written.
+
+    deployment_name : str, optional
+        Deployment identifier to include in each figure title.
+        If omitted, only the variable name is displayed.
+
+    Returns
+    -------
+    None
+    """
+
+    # CREATE OUTPUT DIR
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # EXCLUDE THESE VARIABLES
+    exclude_data_vars = {
+        "time",
+        "profile_time",
+        "time_uv",
+        "lat_uv",
+        "lon_uv",
+        "u",
+        "v",
+    }
+
+    # IDENTIFY QC VARIABLES TO PLOT
+    qc_variables = []
+    for var in ds_qc.data_vars:
+        if not var.endswith("_qc"):
+            continue
+        data_var = var.replace("_qc", "")
+        if data_var in exclude_data_vars:
+            continue
+        qc_variables.append(var)
+
+    colors = {
+        1: "#2ca02c",  # GOOD
+        2: "#7f7f7f",  # UNKNOWN
+        3: "#ffbf00",  # SUSPECT
+        4: "#d62728",  # FAIL
+        9: "#000000",  # MISSING
+    }
+
+    labels = {
+        1: "GOOD",
+        2: "UNKNOWN",
+        3: "SUSPECT",
+        4: "FAIL",
+        9: "MISSING",
+    }
+
+    # CREATE ONE FIGURE FOR EACH QC VARIABLE
+    for qc_var in qc_variables:
+        data_var = qc_var.replace("_qc", "")
+
+        # SKIP VARIABLES THAT DO NOT HAVE A
+        # CORRESPONDING SCIENCE VARIABLE
+        if data_var not in ds_qc:
+            continue
+
+        # EXTRACT THE TIME, DEPTH, AND QC FLAGS
+        time = ds_qc["time"].values
+        depth = ds_qc["depth"].values
+        flags = ds_qc[qc_var].values
+
+        # REMOVE OBSERVATIONS WITH INVALID DEPTHS
+        # OR NETCDF FILL VALUES
+        valid = np.isfinite(depth) & (flags != -127)
+        time = time[valid]
+        depth = depth[valid]
+        flags = flags[valid]
+
+        # CREATE THE FIGURE
+        fig, ax = plt.subplots(figsize=(14, 8))
+
+        # PLOT EACH QARTOD FLAG SEPARATELY SO THAT
+        # OBSERVATIONS CAN BE COLOR-CODED BY FLAG
+        for flag in [1, 2, 3, 4, 9]:
+            mask = flags == flag
+            if np.any(mask):
+                ax.scatter(
+                    time[mask],
+                    depth[mask],
+                    s=18,
+                    color=colors[flag],
+                    edgecolors="none",
+                )
+
+        ax.invert_yaxis()
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Depth (m)")
+
+        # BUILD FIGURE TITLE
+        if deployment_name is None:
+            title = f"{data_var} QARTOD QC Flags"
+        else:
+            title = f"{deployment_name}\n" f"{data_var} QARTOD QC Flags"
+
+        ax.set_title(title)
+
+        # FORMAT X-AXIS AS MM/DD HH:MM
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
+
+        fig.autofmt_xdate()
+
+        # MAKE CUSTOM LEGEND
+        legend_handles = [
+            mlines.Line2D(
+                [],
+                [],
+                color=colors[f],
+                marker="o",
+                linestyle="None",
+                markersize=6,
+                label=labels[f],
+            )
+            for f in [1, 2, 3, 4, 9]
+        ]
+        ax.legend(
+            handles=legend_handles,
+            title="QC Flag",
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1),
+            frameon=False,
+        )
+
+        plt.tight_layout()
+        plt.savefig(
+            output_dir / f"{data_var}_qc_timeseries.png",
+            dpi=300,
+        )
+        plt.close(fig)
