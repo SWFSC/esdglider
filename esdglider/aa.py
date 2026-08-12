@@ -5,6 +5,7 @@ import math
 import pandas as pd
 import xarray as xr
 
+import esdglider.profiles as prof
 from esdglider import utils
 
 _log = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ def regions_evr(ds: xr.Dataset, evr_file_prefix: str) -> pd.DataFrame:
 
     # Process the dataset to create 'regions' dataframe
     _log.debug("Calculating regions")
-    regions_df = utils.calc_profile_summary(ds, "depth").assign(
+    regions_df = prof.calc_profile_summary(ds, "depth").assign(
         start_date_str=lambda d: d["start_time"].dt.strftime("%Y%m%d"),
         start_time_str=lambda d: d["start_time"].dt.strftime("%H%M%S0000"),
         end_date_str=lambda d: d["end_time"].dt.strftime("%Y%m%d"),
