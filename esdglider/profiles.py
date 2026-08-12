@@ -1,4 +1,5 @@
 import collections
+import json
 import logging
 
 import numpy as np
@@ -21,6 +22,12 @@ profileOptionsList = {
     "stall": 3,
     "shake": 20,
 }
+
+
+profile_idx_comment = (
+    "N = inside profile N, N + 0.5 = between profiles N and N + 1. "
+    + "Parameters listed as attributes"
+)
 
 
 def findProfiles(stamp: np.ndarray, depth: np.ndarray, **kwargs):
@@ -173,19 +180,16 @@ def get_fill_profiles(ds, time_var, depth_var, **kwargs) -> xr.Dataset:
     depth_vals = ds[depth_var].values
     prof_idx, prof_dir, prof_opt = findProfiles(time_vals, depth_vals, **kwargs)
 
-    idx_comment = (
-        "N = inside profile N, N + 0.5 = between profiles N and N + 1. "
-        + "Parameters listed as attributes"
-    )
+
     attrs = collections.OrderedDict(
         [
             ("long_name", "profile index"),
             ("units", "1"),
-            ("comment", idx_comment),
+            ("comment", profile_idx_comment),
             ("sources", f"{time_var} {depth_var}"),
             ("method", "esdglider.utils.findProfiles"),
-        ]
-        + [(key, val) for key, val in prof_opt.items()],
+            ("method_configuration", json.dumps(prof_opt))
+        ], 
     )
     ds["profile_index"] = (time_var, prof_idx, attrs)
 
@@ -249,19 +253,15 @@ def join_profiles(ds, df, **kwargs):
         )
 
     # Attributes and add to dataset
-    idx_comment = (
-        "N = inside profile N, N + 0.5 = between profiles N and N + 1. "
-        + "Parameters listed as attributes"
-    )
     attrs = collections.OrderedDict(
         [
             ("long_name", "profile index"),
             ("units", "1"),
-            ("comment", idx_comment),
+            ("comment", profile_idx_comment),
             ("sources", "time depth"),
             ("method", "esdglider.utils.findProfiles (run on the raw dataset)"),
-        ]
-        + [(key, val) for key, val in kwargs.items()],
+            ("method_configuration", json.dumps(kwargs))
+        ], 
     )
     ds["profile_index"] = ("time", idx_values, attrs)
 

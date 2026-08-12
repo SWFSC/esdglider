@@ -10,14 +10,14 @@ import math
 
 import numpy as np
 import pandas as pd
-import pyglider.ncprocess as pgncprocess
-import pyglider.slocum as pgslocum
-import pyglider.utils as pgutils
+import pyglider.ncprocess as pgncprocess # type: ignore
+import pyglider.slocum as pgslocum # type: ignore
+import pyglider.utils as pgutils # type: ignore
 import xarray as xr
 import yaml
 import dbdreader
 
-from esdglider import profiles, utils
+from esdglider import utils # type: ignore
 import esdglider.profiles as prof
 from esdglider.plots import scatter_drop_plot
 from esdglider.paths import get_path_yaml_deployment_vars, get_path_flbbcd_calibrations
@@ -422,7 +422,7 @@ def postproc_general(
     **kwargs,
 ) -> xr.Dataset:
     """
-    Post-processing steps shared by the science and engineering timeseries
+    Post-processing steps shared by both the science and engineering timeseries
 
     Returns the ds Dataset with updated values and attributes
     """
@@ -1090,3 +1090,58 @@ def correct_cdom_raw_sci(glider_paths: dict):
 
     _log.info("Done CDOM correction")
     return outname_tsraw, outname_tssci
+
+
+def complete_profile_correction(tsraw, tseng, tssci, glider_paths, **kwargs):
+    """
+    Sometimes, the profile indices need to be adjusted by hand. For instance:
+    `tsraw["profile_index"].loc[{"time": "2024-11-13 15:14:59"}] = 590.5`
+
+    Typically, this is done for the raw dataset, 
+    the profile summary CSV is written, 
+    and the new profiles are applied to the eng and sci datasets.
+    This function performs these steps, and writes the profile summary CSV 
+    and eng/sci datasets to disk.
+
+    Parameters
+    ----------
+    tsraw : xarray.Dataset
+        Raw timeseries dataset
+    tseng : xarray.Dataset
+        Engineering timeseries dataset
+    tssci : xarray.Dataset
+        Science timeseries dataset
+    glider_paths : dict
+        Dictionary containing glider-related paths.
+    **kwargs : dict
+        Additional keyword arguments passed to profile functions.
+
+    Returns
+    -------
+    None
+    """
+
+    # Finish raw dataset work
+    prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
+    prof_summ.to_csv(glider_paths["profsummpath"], index=False)
+    prof.check_profiles(prof_summ)
+    tsraw.to_netcdf(
+        glider_paths["tsrawpath"], 
+        encoding={'time': time_encoding}
+    )
+    _log.info("Wrote new profile summary to %s", glider_paths["profsummpath"])
+
+    # Apply new profiles to sci and eng
+    tseng = prof.join_profiles(tseng, prof_summ, **kwargs)
+    tseng.to_netcdf(
+        glider_paths["tsengpath"], 
+        encoding={'time': time_encoding}
+    )
+    _log.info("Wrote eng timeseries with new profiles to %s", glider_paths["tsengpath"])
+
+    tssci = prof.join_profiles(tssci, prof_summ, **kwargs)
+    tssci.to_netcdf(
+        glider_paths["tsscipath"], 
+        encoding={'time': time_encoding}
+    )
+    _log.info("Wrote science timeseries with new profiles to %s", glider_paths["tsscipath"])

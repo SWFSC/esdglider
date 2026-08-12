@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `get_instrument_sn_date` to `utils`, for extracting the serial number and calibration date for the given instrument
 - Added data file `deployment-raw-solocam-vars.yml`, to add 'sci_solocam_free_disk_space' and 'sci_solocam_image_files' to the raw netCDF file. (#45) 
 - Changed so paths to package yaml files are not included in glider path output. 
+- Added `complete_profile_correction` to `slocum.pipeline`, to handle consistent steps that occur if profile indices need to be adjusted by hand in the processing script.
 
 ## [0.4.0] - 2026-04-17
 
