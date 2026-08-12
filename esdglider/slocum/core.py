@@ -12,6 +12,7 @@ import xarray as xr
 import yaml
 
 from esdglider import utils
+import esdglider.profiles as prof
 import pyglider.utils as pgutils
 
 try:
@@ -386,7 +387,7 @@ def binary_to_raw_timeseries(
             val[eng_indices] = data[nn]
             val = convert(val)
         else:
-            ValueError(f"{sensorname} not in sci or eng parameter names")
+            raise ValueError(f"{sensorname} not in sci or eng parameter names")
 
         # make the attributes:
         ncvar[name]["coordinates"] = "time"
@@ -431,7 +432,7 @@ def binary_to_raw_timeseries(
 
     # Calculate depth_ctd, profiles and distance_over_ground
     ds = pgutils.get_glider_depth(ds).rename({"depth": "depth_ctd"})
-    ds = utils.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
+    ds = prof.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
     ds = pgutils.get_distance_over_ground(ds)
 
     # Only keep depth_ctd values where pressure is not nan
