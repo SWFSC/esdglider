@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed `slocum.pipline.binary_to_nc` to be split into separate functions for generating timeseries (`genertate_timeseries`) and gridded (`generate_gridded`) netcdf files. This allows for timeseries corrections to more easily be performed before gridding.
 - Changed the name of the module `acoustics` to `aa`, to refect that this module is specific to active acoustic data
 - Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD prod directory structure. 
+- Added a `profiles` module for all functions related to profiles: calculating, checking, summarizing, etc. These functions all came from the `utils` module (#46)
 - Changed `gcp` module, using Gemini to follow a "Fail-Fast" module design. 
 
 ### Imagery

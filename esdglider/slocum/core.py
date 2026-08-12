@@ -8,21 +8,17 @@ import os
 
 import netCDF4
 import numpy as np
-# import pandas as pd
-# import pyglider.ncprocess as pgncprocess
-# import pyglider.slocum as pgslocum
-import pyglider.utils as pgutils
 import xarray as xr
 import yaml
 
+from esdglider import utils
+import pyglider.utils as pgutils
+
 try:
     import dbdreader
-
     have_dbdreader = True
 except ImportError:
     have_dbdreader = False
-
-import esdglider.utils as utils
 
 _log = logging.getLogger(__name__)
 

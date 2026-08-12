@@ -17,7 +17,8 @@ import xarray as xr
 import yaml
 import dbdreader
 
-import esdglider.utils as utils
+from esdglider import profiles, utils
+import esdglider.profiles as prof
 from esdglider.plots import scatter_drop_plot
 from esdglider.paths import get_path_yaml_deployment_vars, get_path_flbbcd_calibrations
 from esdglider.slocum.core import binary_to_raw_timeseries, raw_to_sci_timeseries, time_encoding
@@ -55,7 +56,7 @@ def generate_timeseries(
     binary_search: str | None = None,
     file_info: str | None = None,
     **kwargs,
-):
+) -> dict:
     """
     Generate timeseries netCDF files for the slocum glider deployment.
 
@@ -182,7 +183,7 @@ def generate_timeseries(
         # Save profile summary
         prof_summ_path = postproc_info["profile_summary_path"]
         _log.info("Writing profile summary CSV to %s", prof_summ_path)
-        prof_summ = utils.calc_profile_summary(tsraw, "depth_measured")
+        prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
         prof_summ.to_csv(prof_summ_path, index=False)
         num_dives = np.count_nonzero(prof_summ.profile_direction.values == 1)
         _log.info("Deployment %s performed %s dives", deployment_name, num_dives)
@@ -193,7 +194,7 @@ def generate_timeseries(
 
         # Brief profile and depth sanity checks
         _log.info("raw timeseries checks")
-        utils.check_profiles(prof_summ)
+        prof.check_profiles(prof_summ)
         utils.check_depth(tsraw["depth_measured"], tsraw["depth_ctd"])
 
 
@@ -468,7 +469,7 @@ def postproc_general(
 
     # Calculate profiles using measured depth
     # This is required because we need profile_direction for sci/eng
-    ds = utils.get_fill_profiles(ds, "time", "depth", **kwargs)
+    ds = prof.get_fill_profiles(ds, "time", "depth", **kwargs)
 
     # If provided, then update the profile indices by joining raw profiles
     if "profile_summary_path" in pp:
@@ -477,7 +478,7 @@ def postproc_general(
             pp["profile_summary_path"],
             parse_dates=["start_time", "end_time"],
         )
-        ds = utils.join_profiles(ds, prof_summ, **kwargs)
+        ds = prof.join_profiles(ds, prof_summ, **kwargs)
         depth_var = "depth"
     else:
         # Assuming the raw dataset
@@ -487,8 +488,8 @@ def postproc_general(
     ds = postproc_attrs(ds, pp)
 
     # Profiles check
-    prof_summ = utils.calc_profile_summary(ds, depth_var)
-    utils.check_profiles(prof_summ)
+    prof_summ = prof.calc_profile_summary(ds, depth_var)
+    prof.check_profiles(prof_summ)
 
     return ds
 
@@ -625,104 +626,80 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
 def generate_gridded(
     glider_paths: dict,
     write_gridded: bool = True,
-    sci_timeseries_pyglider: bool = True,
-):
+    use_measured_depth: bool = False,
+    raw_to_sci: bool = False,
+) -> dict:
     """
     Generate gridded netCDF files for the slocum glider deployment.
-    ...
+    
+    Parameters
+    ----------
+    glider_paths : dict
+        A dictionary containing paths relevant to the glider deployment.
+    write_gridded : bool, optional
+        Whether to write gridded netCDF files, by default True.
+    use_measured_depth : bool, optional
+        If True, grid using the glider's measured depth ('depth_measured')
+        instead of the CTD-calculated 'depth'. Default is False.
+    raw_to_sci : bool, optional
+        Deprecated fallback alias for `use_measured_depth`.
+    
+    Returns
+    -------
+    dict
+        A dictionary containing the paths to the gridded netCDF files.
     """
+    if raw_to_sci:
+        use_measured_depth = True
     
     outname_tssci = glider_paths["tsscipath"]
-    outname_gr1m  = glider_paths["gr1path"]
-    outname_gr5m  = glider_paths["gr5path"]
+    if bin_size != [1, 5]:
+        _log.warning(
+            "The bin_size variable is not the default [1, 5]. "
+            "The output paths may be different than expected."
+        )
 
     if write_gridded:
         if not os.path.isfile(outname_tssci):
             raise FileNotFoundError(f"Could not find {outname_tssci}")
-        utils.remove_file(outname_gr1m)
-        utils.remove_file(outname_gr5m)
-        # TODO: change to delete all files in glider_paths["griddir"]
+        utils.rmtree(glider_paths["griddir"])
 
-        if sci_timeseries_pyglider: #use_m_depth #use_depth="ctd" | "m"
-            # depth_touse = "vt" | "m"
-            _log.info("Gridding science data using CTD-calculated depth")
-            outnames = make_gridfiles_esd(outname_tssci, glider_paths=glider_paths)
+        if use_measured_depth:
+            _log.info("Gridding science data using glider measured depth (depth_measured)")
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_file = os.path.join(temp_dir, os.path.basename(outname_tssci))
+                _log.debug("Creating temporary science dataset with measured depth as depth: %s", temp_file)
+                
+                with xr.open_dataset(outname_tssci) as ds_sci:
+                    ds_sci_tmp = (
+                        ds_sci.drop_vars(["depth"])
+                        .rename({"depth_measured": "depth"})
+                    )
+                    # Add a comment that the bins were created using depth_measured
+                    tmp_comment = "Glider data was gridded using the glider measured depth (m_depth)"
+                    ds_sci_tmp.attrs["comment"] = utils.append_string(
+                        ds_sci_tmp.attrs.get("comment", ""), tmp_comment)
+                    ds_sci_tmp.to_netcdf(temp_file, encoding={'time': time_encoding})
+                
+                outnames = _run_pyglider_gridding(temp_file, glider_paths)
         else:
-            outnames = make_gridfiles_depth_measured(glider_paths)
+            _log.info("Gridding science data using CTD-calculated depth")
+            outnames = _run_pyglider_gridding(outname_tssci, glider_paths)
         _log.debug("gridded outnames %s", "; ".join(outnames))
 
     else:
         _log.info("Not writing gridded nc")
+        keys_to_extract = [f"outname_gr{i}m" for i in bin_size]
+        outnames = {k: glider_paths[k] for k in keys_to_extract}
 
-    # --------------------------------------------
-    return {
-        "outname_gr1m": outname_gr1m,
-        "outname_gr5m": outname_gr5m,
-    }
-
-
-def make_gridfiles_depth_measured(glider_paths):
-    """
-    Make gridfiles using the measured depth. This function will be used
-    if for instance the CTD was turned off during parts of a deployment, and
-    thus the depth calculated from the CTD does not span the full timeseries.
-
-    A temporary nc file is written, to pass to glider.grid_esd (and thus to 
-    pyglider.ncprocess.make_gridfiles). The science dataset is not altered.
-
-    Parameters
-    ----------
-    glider_paths : dict
-        A dictionary of file/directory paths for various processing steps.
-        Intended to be the output of get_path_glider()
-        See this function for the expected key/value pairs
-
-    Returns
-    -------
-    The output of grid_esd
-    """
-
-    _log.info("Gridding science data using glider measured depth (m_depth)")
-    outname_tssci = glider_paths["tsscipath"]
-
-    # Leave these checks, in case this function is called directly
-    utils.remove_file(glider_paths["gr1path"])
-    utils.remove_file(glider_paths["gr5path"])
-    if not os.path.isfile(outname_tssci):
-        raise FileNotFoundError(f"Could not find {outname_tssci}")
-
-    # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Creating temporary science dataset with measured depth as depth
-        temp_file = os.path.join(temp_dir, os.path.basename(outname_tssci))
-        _log.debug("temp_file %s", temp_file)
-        ds_sci_tmp = xr.load_dataset(outname_tssci)
-        ds_sci_tmp = (
-            ds_sci_tmp.drop_vars(["depth"])
-            .rename({"depth_measured": "depth"})
-        )
-
-        # Add a comment that the bins were created useing depth_measured
-        tmp_comment = (
-            "Glider data was gridded using the glider measured depth (m_depth)"
-        )
-        if not ds_sci_tmp.attrs["comment"].strip():
-            ds_sci_tmp.attrs["comment"] = tmp_comment
-        else:
-            ds_sci_tmp.attrs["comment"] += ". " + tmp_comment
-        ds_sci_tmp.to_netcdf(temp_file, encoding={'time': time_encoding})
-
-        outnames = make_gridfiles_esd(temp_file, glider_paths=glider_paths)
     return outnames
 
 
-
-def make_gridfiles_esd(inname, glider_paths):
+def _run_pyglider_gridding(inname, glider_paths) -> dict:
     """
     A consistent way of creating gridded datafiles for ESD. 
     Note that this function uses the module-level variables: 
-    bin_size, depth_max, and gridded_exclude_vars. 
+    bin_size, depth_max. 
 
     Parameters
     ----------
@@ -736,12 +713,12 @@ def make_gridfiles_esd(inname, glider_paths):
 
     Returns
     -------
-    list of strings
-        A list of the generated gridded datasets, i.e.
-        a list of the output(s) from pyglider.ncprocess.make_gridfiles
+    dict
+        A dictionary of the generated gridded datasets, 
+        with keys like "outname_gr1m" and "outname_gr5m"
     """
 
-    outnames = []
+    outnames = {}
     # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
 
     for i in bin_size:
@@ -752,10 +729,8 @@ def make_gridfiles_esd(inname, glider_paths):
             glider_paths["deploymentyaml"],
             depth_bins=np.arange(0, depth_max, i),
             fnamesuffix=f"-{glider_paths['mode']}-{i}m",
-            # exclude_vars=gridded_exclude_vars,
         )
-        outnames.append(outname_gr)
-
+        outnames = outnames | {f"outname_gr{i}m": outname_gr}
     return outnames
 
 
@@ -848,16 +823,16 @@ def drop_ts_ranges(
     # Profiles
     if dstype == "raw" and profsummdir is not None:
         _log.info("Calculating new profiles for raw dataset")
-        tsraw = utils.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
-        prof_summ = utils.calc_profile_summary(tsraw, "depth_measured")
+        tsraw = prof.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
+        prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
         prof_summ.to_csv(profsummdir, index=False)
-        utils.check_profiles(prof_summ)
+        prof.check_profiles(prof_summ)
     elif profsummdir is not None:
         _log.info("Join-calculating new profiles for eng/sci dataset")
         prof_summ_raw = pd.read_csv(profsummdir, parse_dates=["start_time", "end_time"])
-        utils.join_profiles(ds, prof_summ_raw, **kwargs)
-        prof_summ = utils.calc_profile_summary(ds, "depth")
-        utils.check_profiles(prof_summ)
+        prof.join_profiles(ds, prof_summ_raw, **kwargs)
+        prof_summ = prof.calc_profile_summary(ds, "depth")
+        prof.check_profiles(prof_summ)
     else:
         _log.info("No profile work")
 
