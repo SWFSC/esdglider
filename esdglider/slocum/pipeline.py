@@ -56,7 +56,7 @@ def generate_timeseries(
     file_info: str | None = None,
     binary_search: str | None = None,
     maxgap: int | None = None,
-    **kwargs,
+    prof_args: dict | None = None,
 ) -> dict:
     """
     Generate timeseries netCDF files for the slocum glider deployment.
@@ -88,8 +88,8 @@ def generate_timeseries(
     maxgap : int | None, optional
         The maximum allowed gap (in seconds) for interpolation. 
         If None (default), will use the module's maxgap_esd value.
-    **kwargs
-        Additional keyword arguments passed to the underlying functions.
+    prof_args : dict | None, optional
+        named optional arguments, for esdglider.profiles.findProfiles
 
     Returns
     -------
@@ -113,9 +113,12 @@ def generate_timeseries(
     else:
         raise ValueError("mode must be either 'rt' or 'delayed'")
 
-    # If maxgap is not provided, use the default maxgap_esd value
+    # Set defaults
     if maxgap is None:
         maxgap = maxgap_esd
+
+    if prof_args is None:
+        prof_args = {}
 
     # # Dictionary with info needed by post-processing functions
     # postproc_info = {
@@ -167,7 +170,7 @@ def generate_timeseries(
             search=binary_search,
             include_source=True,
             fnamesuffix=f"-{mode}-raw",
-            **kwargs,
+            prof_args=prof_args,
         )
 
         # Run postprocessing
@@ -261,7 +264,7 @@ def generate_timeseries(
             # deployment_end=deployment_end,
             profile_summary_path=glider_paths["profsummpath"],
             file_info=file_info,
-            **kwargs
+            prof_args=prof_args
         )
         pgutils._save_dataset(
             tseng,
@@ -323,7 +326,7 @@ def generate_timeseries(
             profile_summary_path=glider_paths["profsummpath"],
             file_info=file_info,
             drop_vars=drop_vars, 
-            **kwargs
+            prof_args=prof_args
         )
         pgutils._save_dataset(
             tssci,
@@ -489,7 +492,7 @@ def postproc_ts_l1(
     profile_summary_path: str | None = None,
     file_info: str | None = None,
     drop_vars: list | None = None,
-    **kwargs,
+    prof_args: dict | None = None,
 ) -> xr.Dataset:
     """
     Post-processing steps shared by both the science and engineering timeseries
@@ -511,8 +514,8 @@ def postproc_ts_l1(
     drop_vars : list | None, optional
         List of variables for which to drop the whole timestamp 
         if they contain NaN values, by default None.
-    kwargs
-        Passed to profile functions
+    prof_args : dict | None, optional
+        Additional keyword arguments passed to profile functions
 
     Returns
     -------
@@ -565,8 +568,10 @@ def postproc_ts_l1(
     ds = pgutils.get_distance_over_ground(ds)
 
     # PROFILES
+    if prof_args is None:
+        prof_args = {}
     # This is required because we need profile_direction for sci/eng
-    ds = prof.get_fill_profiles(ds, "time", "depth", **kwargs)
+    ds = prof.get_fill_profiles(ds, "time", "depth", **prof_args)
 
     # If provided, then update the profile indices by joining raw profiles
     if profile_summary_path is not None:
@@ -575,7 +580,7 @@ def postproc_ts_l1(
             profile_summary_path,
             parse_dates=["start_time", "end_time"],
         )
-        ds = prof.join_profiles(ds, prof_summ, **kwargs)
+        ds = prof.join_profiles(ds, prof_summ, prof_args)
         depth_var = "depth"
     else:
         # Assuming the raw dataset
@@ -613,7 +618,7 @@ def postproc_ts_eng(
     # deployment_end: str | None = None,
     profile_summary_path: str | None = None,
     file_info: str | None = None,
-    **kwargs,
+    prof_args: dict | None = None,
 ) -> xr.Dataset:
     """
     Engineering timeseries-specific post-processing, including:
@@ -633,8 +638,8 @@ def postproc_ts_eng(
         Path to the profile summary CSV file, by default None.
     file_info : str | None, optional
         Information about the processing file, by default None.
-    kwargs
-        Passed to profile functions
+    prof_args : dict | None, optional
+        Additional keyword arguments passed to profile functions
 
     Returns
     -------
@@ -657,7 +662,7 @@ def postproc_ts_eng(
         # deployment_end=deployment_end,
         profile_summary_path=profile_summary_path,
         file_info=file_info,
-        **kwargs
+        prof_args=prof_args
     )
 
     # Reorder data variables
@@ -683,13 +688,13 @@ def postproc_ts_sci(
         ds: xr.Dataset, 
         mode: str,
         maxgap: int, 
-        *, 
+        *,
         # deployment_start: str | None = None,
         # deployment_end: str | None = None,
         profile_summary_path: str | None = None,
         file_info: str | None = None,
         drop_vars: list | None = None,
-        **kwargs
+        prof_args: dict | None = None,
     ) -> xr.Dataset:
     """
     Science timeseries-specific post-processing, including:
@@ -711,8 +716,8 @@ def postproc_ts_sci(
     drop_vars : list | None, optional
         List of variables for which to drop the whole timestamp 
         if they contain NaN values, by default None.
-    kwargs
-        Passed to profile functions
+    prof_args : dict | None, optional
+        Additional keyword arguments passed to profile functions
 
     Returns
     -------
@@ -742,7 +747,7 @@ def postproc_ts_sci(
         profile_summary_path=profile_summary_path,
         file_info=file_info,
         drop_vars=drop_vars,
-        **kwargs
+        prof_args=prof_args
     )
 
     # # Science-specific attribute updates
@@ -887,14 +892,14 @@ def _run_pyglider_gridding(inname, glider_paths) -> dict:
 
 
 def drop_ts_ranges(
-    ds,
-    drop_list,
-    dstype,
-    plotdir=None,
-    profsummdir=None,
-    outname=None,
-    **kwargs,
-):
+    ds : xr.Dataset,
+    drop_list : list[tuple[str, str]],
+    dstype : str,
+    plotdir: str | None = None,
+    profsummdir: str | None = None,
+    outname: str | None = None,
+    prof_args : dict | None = None,
+) -> xr.Dataset:
     """
     Drop dataset points that are within given time ranges,
     and perform relevant post-processing.
@@ -912,7 +917,7 @@ def drop_ts_ranges(
     4) Running utils.check_profiles
     5) Writing to netcdf file, if outnname is not None
 
-    Paramaters
+    Parameters
     ----------
     ds : xarray Dataset
         Timeseries dataset
@@ -931,8 +936,8 @@ def drop_ts_ranges(
         If not None and dstype is eng or sci, will join profiles
     outname : str | None (default None)
         If not None, then ds is written to this path
-    kwargs
-        Passed to profile functions
+    prof_args : dict | None, optional
+        named optional arguments, for esdglider.profiles.findProfiles
 
     Returns
     -------
@@ -940,6 +945,7 @@ def drop_ts_ranges(
         Input ds, with points within specified time ranges dropped.
         Also saves 'dropped' scatter plots to plotdir, if specified.
     """
+
     _log.info(
         "There are %s points in the original %s dataset",
         len(ds.time),
@@ -975,16 +981,15 @@ def drop_ts_ranges(
     # Profiles
     if dstype == "raw" and profsummdir is not None:
         _log.info("Calculating new profiles for raw dataset")
-        tsraw = prof.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
+        tsraw = prof.get_fill_profiles(ds, "time", "depth_measured", prof_args)
         prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
         prof_summ.to_csv(profsummdir, index=False)
         prof.check_profiles(prof_summ)
     elif profsummdir is not None:
         _log.info("Join-calculating new profiles for eng/sci dataset")
         prof_summ_raw = pd.read_csv(profsummdir, parse_dates=["start_time", "end_time"])
-        prof.join_profiles(ds, prof_summ_raw, **kwargs)
-        prof_summ = prof.calc_profile_summary(ds, "depth")
-        prof.check_profiles(prof_summ)
+        prof.join_profiles(ds, prof_summ_raw, prof_args)
+        prof.check_profiles(prof.calc_profile_summary(ds, "depth"))
     else:
         _log.info("No profile work")
 
@@ -1244,7 +1249,13 @@ def correct_cdom_raw_sci(glider_paths: dict):
     return outname_tsraw, outname_tssci
 
 
-def complete_profile_correction(tsraw, tseng, tssci, glider_paths, **kwargs):
+def complete_profile_correction(
+        tsraw: xr.Dataset, 
+        tseng: xr.Dataset, 
+        tssci: xr.Dataset, 
+        glider_paths: dict, 
+        prof_args: dict | None = None
+    ):
     """
     Sometimes, the profile indices need to be adjusted by hand. For instance:
     `tsraw["profile_index"].loc[{"time": "2024-11-13 15:14:59"}] = 590.5`
@@ -1265,13 +1276,16 @@ def complete_profile_correction(tsraw, tseng, tssci, glider_paths, **kwargs):
         Science timeseries dataset
     glider_paths : dict
         Dictionary containing glider-related paths.
-    **kwargs : dict
+    prof_args : dict, optional
         Additional keyword arguments passed to profile functions.
 
     Returns
     -------
     None
     """
+
+    if prof_args is None:
+        prof_args = {}
 
     # Finish raw dataset work
     prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
@@ -1284,14 +1298,14 @@ def complete_profile_correction(tsraw, tseng, tssci, glider_paths, **kwargs):
     _log.info("Wrote new profile summary to %s", glider_paths["profsummpath"])
 
     # Apply new profiles to sci and eng
-    tseng = prof.join_profiles(tseng, prof_summ, **kwargs)
+    tseng = prof.join_profiles(tseng, prof_summ, prof_args)
     tseng.to_netcdf(
         glider_paths["tsengpath"], 
         encoding={'time': time_encoding}
     )
     _log.info("Wrote eng timeseries with new profiles to %s", glider_paths["tsengpath"])
 
-    tssci = prof.join_profiles(tssci, prof_summ, **kwargs)
+    tssci = prof.join_profiles(tssci, prof_summ, prof_args)
     tssci.to_netcdf(
         glider_paths["tsscipath"], 
         encoding={'time': time_encoding}

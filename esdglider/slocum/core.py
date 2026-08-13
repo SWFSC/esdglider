@@ -11,9 +11,9 @@ import numpy as np
 import xarray as xr
 import yaml
 
-from esdglider import utils
+from esdglider import utils # type: ignore
 import esdglider.profiles as prof
-import pyglider.utils as pgutils
+import pyglider.utils as pgutils # type: ignore
 
 try:
     import dbdreader
@@ -236,7 +236,8 @@ def binary_to_raw_timeseries(
     search="*.[D|E]BD",
     include_source=False,
     fnamesuffix="",
-    **kwargs,
+    depth_var="depth_measured",
+    prof_args: dict | None = None,
 ):
     """
     An adaptation of pyglider.slocum.binary_to_timeseries to 
@@ -261,8 +262,12 @@ def binary_to_raw_timeseries(
     include_source : bool
         Boolean indicating if the source file should be included in the raw ds.
         Passed to dbdreader.MULTIDBD.get
-    kwargs 
-        arguments passed to utils.findProfiles
+    depth_var : str
+        Name of the depth variable to use for profile detection in findProfiles.
+        Must be either 'depth_measured' (default, for m_depth) 
+        or 'depth' (for CTD-calculated depth).
+    prof_args : dict, optional
+        named optional arguments, for esdglider.profiles.findProfiles
 
     Returns
     -------
@@ -272,6 +277,9 @@ def binary_to_raw_timeseries(
 
     if not have_dbdreader:
         raise ImportError("Cannot import dbdreader")
+
+    if prof_args is None:
+        prof_args = {}
 
     # Read and parse deployment yaml(s)
     deployment = pgutils._get_deployment(deploymentyaml)
@@ -432,18 +440,17 @@ def binary_to_raw_timeseries(
 
     # Calculate depth_ctd, profiles and distance_over_ground
     ds = pgutils.get_glider_depth(ds).rename({"depth": "depth_ctd"})
-    ds = prof.get_fill_profiles(ds, "time", "depth_measured", **kwargs)
+    ds = prof.get_fill_profiles(ds, "time", depth_var, prof_args)
     ds = pgutils.get_distance_over_ground(ds)
 
     # Only keep depth_ctd values where pressure is not nan
-    # TODO: is this using mean lat for everything??
     ds["depth_ctd"] = ds["depth_ctd"].where(~np.isnan(ds["pressure"]))
 
     # Only keep distance_over_ground values where lat/lon is not nan
     ll_good = ~np.isnan(ds.latitude.values + ds.longitude.values)
     ds["distance_over_ground"] = ds["distance_over_ground"].where(ll_good)
 
-    # For consistency with pyglider, even though postproc_sci is run later
+    # For consistency with pyglider
     device_data = deployment['glider_devices']
     ds = pgutils.fill_metadata(ds, deployment['metadata'], device_data)
 
@@ -536,7 +543,7 @@ def raw_to_sci_timeseries(
         ds[i].attrs["method"] = "linear fill"
         # The var already has the yaml-specified attributes from binary_to_raw
 
-    # For consistency with pyglider, even though postproc_sci is run later
+    # For consistency with pyglider
     device_data = deployment['glider_devices']
     ds = pgutils.fill_metadata(ds, deployment['metadata'], device_data)
 

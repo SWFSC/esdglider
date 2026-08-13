@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed so paths to package yaml files are not included in glider path output. 
 - Added `complete_profile_correction` to `slocum.pipeline`, to handle consistent steps that occur if profile indices need to be adjusted by hand in the processing script.
 - Added a `check-nc-old-new.py` script for comparing sets of old and new processed glider deployment files. Useful to make sure code cleanup don't affect output files. 
+- Changed multiple functions so optional arguments, for `esdglider.profiles.findProfiles`, are passed into functions as a dictionary with the named arguments, rather than kwargs
 
 ## [0.4.0] - 2026-04-17
 

@@ -149,7 +149,7 @@ def findProfiles(stamp: np.ndarray, depth: np.ndarray, **kwargs):
     return profileIndex, profileDirection, optionsList
 
 
-def get_fill_profiles(ds, time_var, depth_var, **kwargs) -> xr.Dataset:
+def get_fill_profiles(ds, time_var, depth_var, prof_args = None) -> xr.Dataset:
     """
     Calculate profile index and direction values,
     and fill both the values and attributes into ds
@@ -166,7 +166,11 @@ def get_fill_profiles(ds, time_var, depth_var, **kwargs) -> xr.Dataset:
 
     time_vals = ds[time_var].values
     depth_vals = ds[depth_var].values
-    prof_idx, prof_dir, prof_opt = findProfiles(time_vals, depth_vals, **kwargs)
+    if prof_args is None:
+        prof_args = {}
+    prof_idx, prof_dir, prof_opt = findProfiles(
+        time_vals, depth_vals, **prof_args
+    )
 
 
     attrs = collections.OrderedDict(
@@ -197,7 +201,7 @@ def get_fill_profiles(ds, time_var, depth_var, **kwargs) -> xr.Dataset:
     return ds
 
 
-def join_profiles(ds, df, **kwargs):
+def join_profiles(ds, df, prof_args) -> xr.Dataset:
     """
     'Join' profile indexes to a dataset by time,
     using a summary dataframe with profile start and end times
@@ -209,7 +213,7 @@ def join_profiles(ds, df, **kwargs):
     df : pandas.DataFrame
         Profile summary dataframe; output of calc_profile_summary()
         Contains the true profile indices
-    **kwargs:
+    prof_args : dict
         findProfile arguments, included here for metadata
 
     Returns
@@ -248,7 +252,7 @@ def join_profiles(ds, df, **kwargs):
             ("comment", _profile_idx_comment),
             ("sources", "time depth"),
             ("method", "esdglider.utils.findProfiles (run on the raw dataset)"),
-            ("method_configuration", json.dumps(kwargs))
+            ("method_configuration", json.dumps(prof_args))
         ], 
     )
     ds["profile_index"] = ("time", idx_values, attrs)
