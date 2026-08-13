@@ -11,6 +11,7 @@ license = "Apache-2.0"
 authors = [
   { name = "Sam Woodman", email = "sam.woodman@noaa.gov" },
   { name = "Caleb Flaim" },
+  { name = "Madison Richardson" },
 ]
 requires-python = ">=3.10"
 classifiers = [
@@ -33,6 +34,7 @@ dependencies = [
   "pyglider",
   "pyyaml",
   "xarray",
+  "ioos_qc",
 ]
 
 optional-dependencies.imagery = [

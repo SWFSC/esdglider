@@ -1,0 +1,207 @@
+contexts:
+  - streams:
+
+      # =====================================================
+      # POSITION
+      # =====================================================
+
+      latitude:
+        qartod:
+          gross_range_test:
+            suspect_span: [-90, 90]
+            fail_span: [-90, 90]
+
+      longitude:
+        qartod:
+          gross_range_test:
+            suspect_span: [-180, 180]
+            fail_span: [-180, 180]
+
+      lat:
+        qartod:
+          gross_range_test:
+            suspect_span: [-90, 90]
+            fail_span: [-90, 90]
+
+      lon:
+        qartod:
+          gross_range_test:
+            suspect_span: [-180, 180]
+            fail_span: [-180, 180]
+
+      profile_lat:
+        qartod:
+          gross_range_test:
+            suspect_span: [-90, 90]
+            fail_span: [-90, 90]
+
+      profile_lon:
+        qartod:
+          gross_range_test:
+            suspect_span: [-180, 180]
+            fail_span: [-180, 180]
+
+      lat_uv:
+        qartod:
+          gross_range_test:
+            suspect_span: [-90, 90]
+            fail_span: [-90, 90]
+
+      lon_uv:
+        qartod:
+          gross_range_test:
+            suspect_span: [-180, 180]
+            fail_span: [-180, 180]
+
+      # =====================================================
+      # PRESSURE / DEPTH
+      # =====================================================
+
+      pressure:
+        qartod:
+          gross_range_test:
+            suspect_span: [0, 1000]
+            fail_span: [0, 6000]
+
+          spike_test:
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
+
+          rate_of_change_test:
+            threshold: 0.1
+
+          flat_line_test:
+            tolerance: 0.001
+            suspect_threshold: 3000
+            fail_threshold: 5000
+
+      depth:
+        qartod:
+          gross_range_test:
+            suspect_span: [0, 1200]
+            fail_span: [0, 2000]
+
+          spike_test:
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
+
+          rate_of_change_test:
+            threshold: 0.1
+
+      # =====================================================
+      # TEMPERATURE
+      # =====================================================
+
+      temperature:
+        qartod:
+          gross_range_test:
+            suspect_span: [0, 35]
+            fail_span: [-2, 40]
+
+          spike_test:
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
+
+          rate_of_change_test:
+            threshold: 0.1
+
+          flat_line_test:
+            tolerance: 0.001
+            suspect_threshold: 3000
+            fail_threshold: 5000
+
+      # =====================================================
+      # CONDUCTIVITY
+      # =====================================================
+
+      conductivity:
+        qartod:
+          gross_range_test:
+            suspect_span: [0, 6]
+            fail_span: [0, 9]
+
+          spike_test:
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
+
+          rate_of_change_test:
+            threshold: 0.1
+
+          flat_line_test:
+            tolerance: 0.001
+            suspect_threshold: 3000
+            fail_threshold: 5000
+
+      # =====================================================
+      # SALINITY
+      # =====================================================
+
+      salinity:
+        qartod:
+            gross_range_test:
+              fail_span: [0, 42]
+              suspect_span: [10, 38]
+
+            spike_test:
+              suspect_threshold: 0.0
+              fail_threshold: 0.0
+
+            rate_of_change_test:
+              threshold: 0.1
+
+            flat_line_test:
+              tolerance: 0.001
+              suspect_threshold: 3000
+              fail_threshold: 5000
+
+      # =====================================================
+      # DENSITY
+      # =====================================================
+
+      density:
+        qartod:
+            gross_range_test:
+              fail_span: [1000, 1100]
+              suspect_span: null
+
+            spike_test:
+              suspect_threshold: 0.0
+              fail_threshold: 0.0
+
+            rate_of_change_test:
+              threshold: 0.1
+
+            flat_line_test:
+              tolerance: 0.001
+              suspect_threshold: 3000
+              fail_threshold: 5000
+
+      # =====================================================
+      # VELOCITY
+      # =====================================================
+
+      u:
+        qartod:
+          gross_range_test:
+            suspect_span: [-3, 3]
+            fail_span: [-10, 10]
+
+          spike_test:
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
+
+          rate_of_change_test:
+            threshold: 0.1
+
+      v:
+        qartod:
+          gross_range_test:
+            suspect_span: [-3, 3]
+            fail_span: [-10, 10]
+
+          spike_test:
+            suspect_threshold: 0.0
+            fail_threshold: 0.0
+
+          rate_of_change_test:
+            threshold: 0.1 
