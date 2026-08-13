@@ -78,7 +78,7 @@ contexts:
       depth:
         qartod:
           gross_range_test:
-            suspect_span: [0, 300]
+            suspect_span: [0, 1200]
             fail_span: [0, 2000]
 
           spike_test:
