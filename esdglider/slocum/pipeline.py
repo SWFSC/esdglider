@@ -53,8 +53,9 @@ def generate_timeseries(
     write_eng: bool = True,
     write_sci: bool = True,
     raw_to_sci: bool = False,
-    binary_search: str | None = None,
     file_info: str | None = None,
+    binary_search: str | None = None,
+    maxgap: int | None = None,
     **kwargs,
 ) -> dict:
     """
@@ -75,14 +76,18 @@ def generate_timeseries(
     write_sci : bool, optional
         Whether to write science timeseries files, by default True.
     raw_to_sci : bool, optional
-        Whether to convert raw data to science data (False, default)
-        or to use pyglider's binary_to_timeseries to generate the 
-        science timeseries file (True).
-    binary_search : str | None, optional
-        The search pattern for binary files, by default None.
-        If None, will default to all uncompressed binary files 
+        Whether to use pyglider's binary_to_timeseries to generate the 
+        science timeseries (False, default), 
+        or interpolate the science timeseries from the raw timeseries (True)
     file_info : str | None, optional
-        Additional file information, for postproc information.
+        Information about the processing file, by default None.
+        Will be included in the history attribute of the output netCDF files.
+    binary_search : str | None, optional
+        The search pattern for binary files.
+        If None (default), will default to all uncompressed binary files
+    maxgap : int | None, optional
+        The maximum allowed gap (in seconds) for interpolation. 
+        If None (default), will use the module's maxgap_esd value.
     **kwargs
         Additional keyword arguments passed to the underlying functions.
 
@@ -108,16 +113,20 @@ def generate_timeseries(
     else:
         raise ValueError("mode must be either 'rt' or 'delayed'")
 
-    # Dictionary with info needed by post-processing functions
-    postproc_info = {
-        "deploymentyaml": deploymentyaml, 
-        "mode": mode, 
-        "file_info": file_info,
-        "metadata_dict": {"deployment_name": deployment_name},
-        "device_dict": {},
-        "profile_summary_path": glider_paths["profsummpath"],
-        "maxgap": maxgap_esd,
-    }
+    # If maxgap is not provided, use the default maxgap_esd value
+    if maxgap is None:
+        maxgap = maxgap_esd
+
+    # # Dictionary with info needed by post-processing functions
+    # postproc_info = {
+    #     "deploymentyaml": deploymentyaml, 
+    #     "mode": mode, 
+    #     "file_info": file_info,
+    #     "metadata_dict": {"deployment_name": deployment_name},
+    #     "device_dict": {},
+    #     "profile_summary_path": glider_paths["profsummpath"],
+    #     "maxgap": maxgap_esd,
+    # }
 
     # Check which dbdreader backend is being used
     if write_raw or write_eng or write_sci:
@@ -171,7 +180,11 @@ def generate_timeseries(
             "profile_direction",
         ]
         tsraw = utils.data_var_reorder(tsraw, new_start)
-        tsraw = postproc_attrs(tsraw, postproc_info)
+        tsraw = postproc_attrs(
+            tsraw, 
+            mode, 
+            file_info=file_info,
+        )
         pgutils._save_dataset(
             tsraw,
             outname_tsraw, 
@@ -181,16 +194,16 @@ def generate_timeseries(
         )
 
         # Save profile summary
-        prof_summ_path = postproc_info["profile_summary_path"]
+        prof_summ_path = glider_paths["profsummpath"]
         _log.info("Writing profile summary CSV to %s", prof_summ_path)
         prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
         prof_summ.to_csv(prof_summ_path, index=False)
         num_dives = np.count_nonzero(prof_summ.profile_direction.values == 1)
         _log.info("Deployment %s performed %s dives", deployment_name, num_dives)
 
-        # Write deployment_start and deployment_end to postproc_info
-        postproc_info["deployment_start"] = tsraw.attrs["deployment_start"]
-        postproc_info["deployment_end"] = tsraw.attrs["deployment_end"]
+        # # Write deployment_start and deployment_end to postproc_info
+        # deployment_start = tsraw.attrs["deployment_start"]
+        # deployment_end = tsraw.attrs["deployment_end"]
 
         # Brief profile and depth sanity checks
         _log.info("raw timeseries checks")
@@ -202,9 +215,10 @@ def generate_timeseries(
         _log.info("Not writing raw nc")
         try:
             with xr.open_dataset(outname_tsraw) as tsraw:
-                # tsraw = xr.load_dataset(outname_tsraw)
-                postproc_info["deployment_start"] = tsraw.attrs["deployment_start"]
-                postproc_info["deployment_end"] = tsraw.attrs["deployment_end"]
+                _log.debug("Opened existing raw nc file: %s", outname_tsraw)
+                # # tsraw = xr.load_dataset(outname_tsraw)
+                # deployment_start = tsraw.attrs["deployment_start"]
+                # deployment_end = tsraw.attrs["deployment_end"]
         except FileNotFoundError:
             _log.debug("Not writing raw nc file, and file could not be found")
             if write_sci or write_eng:
@@ -239,7 +253,16 @@ def generate_timeseries(
 
         _log.info(f"Post-processing engineering timeseries: {outname_tseng}")
         tseng = xr.load_dataset(outname_tseng)
-        tseng = postproc_eng_timeseries(tseng, postproc_info, **kwargs)
+        tseng = postproc_ts_eng(
+            tseng, 
+            mode, 
+            maxgap, 
+            # deployment_start=deployment_start,
+            # deployment_end=deployment_end,
+            profile_summary_path=glider_paths["profsummpath"],
+            file_info=file_info,
+            **kwargs
+        )
         pgutils._save_dataset(
             tseng,
             outname_tseng, 
@@ -276,7 +299,7 @@ def generate_timeseries(
                 profile_filt_time=None,  # type: ignore
                 maxgap=maxgap_esd,
             )
-            postproc_info["drop_vars"] = ["pressure"]
+            drop_vars = ["pressure"]
 
         else:
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
@@ -287,10 +310,21 @@ def generate_timeseries(
                 fnamesuffix=f"-{mode}-sci",
                 maxgap=maxgap_esd,
             )
+            drop_vars = None
 
         _log.info(f"Post-processing science timeseries: {outname_tssci}")
         tssci = xr.load_dataset(outname_tssci)
-        tssci = postproc_sci_timeseries(tssci, postproc_info, **kwargs)
+        tssci = postproc_ts_sci(
+            tssci, 
+            mode, 
+            maxgap, 
+            # deployment_start=deployment_start,
+            # deployment_end=deployment_end,
+            profile_summary_path=glider_paths["profsummpath"],
+            file_info=file_info,
+            drop_vars=drop_vars, 
+            **kwargs
+        )
         pgutils._save_dataset(
             tssci,
             outname_tssci, 
@@ -355,57 +389,87 @@ def generate_timeseries(
     }
 
 
-def postproc_attrs(ds: xr.Dataset, pp: dict):
+def postproc_attrs(
+        ds: xr.Dataset, 
+        mode: str, 
+        *, 
+        # deployment_start: str | None = None,
+        # deployment_end: str | None = None,
+        file_info: str | None = None,
+    ) -> xr.Dataset:
     """
-    Update attrbites of xarray DataSet ds
-    pp is dictionary that provides values needed by postproc_attrs
+    Update attributes of xarray Dataset ds
     Used for all of eng, sci, and raw timeseries
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The dataset to update attributes for.
+    mode : str
+        Deployment mode, either 'rt' or 'delayed'
+    file_info : str | None, optional
+        Information about the processing file, by default None.
+
+    Returns
+    -------
+    xr.Dataset
+        ds, with updated attributes
     """
 
     # Rerun pyglider metadata functions, now that drop_bogus has been run
-    #   pp is a 'hack' to be able to use pyglider function
-    ds = pgutils.fill_metadata(ds, pp["metadata_dict"], pp["device_dict"])
+    # metadata and device info have already been added
+    ds = pgutils.fill_metadata(ds, {}, {})
 
-    # When used within binary_to_nc, this code makes sure the values
-    # are only calculated from the raw dataset
-    if "deployment_start" in pp:
-        ds.attrs["deployment_start"] = pp["deployment_start"]
-        ds.attrs["deployment_end"] = pp["deployment_end"]
-    else:
-        ds.attrs["deployment_start"] = str(ds["time"].values[0].astype("datetime64[s]"))
-        ds.attrs["deployment_end"] = str(ds["time"].values[-1].astype("datetime64[s]"))
+    # # When used within pipelines, this code makes sure the values
+    # # are only calculated from the raw dataset
+    # if deployment_start is not None:
+    #     ds.attrs["deployment_start"] = deployment_start
+    #     ds.attrs["deployment_end"] = deployment_end
+    # else:
+    #     ds.attrs["deployment_start"] = str(ds["time"].values[0].astype("datetime64[s]"))
+    #     ds.attrs["deployment_end"] = str(ds["time"].values[-1].astype("datetime64[s]"))
 
     # Determine the glider ID using min_dt, and check vs ID from time
-    # min_dt = ds.deployment_min_dt
-    min_dt64 = np.datetime64(ds.deployment_min_dt)
-    min_dt_str = min_dt64.item().strftime("%Y%m%dT%H%M")
-    ds.attrs["id"] = f"{ds.attrs['glider_name']}-{min_dt_str}"
-
     time_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M")
-    if min_dt_str != time_str:
+    if "deployment_min_dt" in ds.attrs:
+        min_dt64 = np.datetime64(ds.deployment_min_dt)
+        min_dt_str = min_dt64.item().strftime("%Y%m%dT%H%M")
+        if min_dt_str != time_str:
+            _log.warning(
+                "The dataset ID generated from the metadata (%s) "
+                + "is different from that generated from the time (%s)."
+                + "Using the ID from the metadata",
+                min_dt_str,
+                time_str,
+            )
+    else:
         _log.warning(
-            "The dataset ID generated from the metadata (%s) "
-            + "is different from that generated from the time (%s)."
-            + "Using the ID from the metadata",
-            min_dt_str,
-            time_str,
+            "There is no deployment_min_dt attribute in the dataset. "
+            + "Using the first time value for the ID."
         )
+        min_dt_str = time_str
+        
+    ds.attrs["id"] = f"{ds.attrs['glider_name']}-{min_dt_str}"
 
     # Other ESD updates, or fixes, of pyglider attributes
     # ds.attrs["id"] = utils.get_file_id_esd(ds)
     ds.attrs["title"] = ds.attrs["id"]
-    ds.attrs["processing_level"] = (
-        "Minimal data screening. "
-        + "Data provided as is, with no expressed or implied assurance "
-        + "of quality assurance or quality control."
+    ds.attrs["license"] = (
+        "This data may be redistributed and used without restriction.  "
+        + "Data provided as is with no expressed or implied assurance "
+        + "of quality assurance or quality control"
     )
-    file_info = pp["file_info"]
+    # ds.attrs["processing_level"] = (
+    #     "Minimal data screening. "
+    #     + "Data provided as is, with no expressed or implied assurance "
+    #     + "of quality assurance or quality control."
+    # )
     if file_info is None:
         file_info = "netCDF files created using"
     ds.attrs["history"] = f"{utils.datetime_now_utc()}: {file_info}: " + "; ".join(
         [
             f"deployment_name={ds.deployment_name}",
-            f"mode={pp['mode']}",
+            f"mode={mode}",
             f"dbdreader v{metadata.version('dbdreader')}",
             f"pyglider v{metadata.version('pyglider')}",
             f"esdglider v{metadata.version('esdglider')}",
@@ -415,29 +479,62 @@ def postproc_attrs(ds: xr.Dataset, pp: dict):
     return ds
 
 
-def postproc_general(
+def postproc_ts_l1(
     ds: xr.Dataset,
-    pp: dict,
-    # drop_vars: list | None = None,
+    mode: str,
+    maxgap: int, 
+    *, 
+    # deployment_start: str | None = None,
+    # deployment_end: str | None = None,
+    profile_summary_path: str | None = None,
+    file_info: str | None = None,
+    drop_vars: list | None = None,
     **kwargs,
 ) -> xr.Dataset:
     """
     Post-processing steps shared by both the science and engineering timeseries
 
     Returns the ds Dataset with updated values and attributes
+
+    Parameters
+    ----------    
+    ds : xarray.Dataset
+        L1 (eng or sci) timeseries dataset
+    mode : str
+        Deployment mode, either 'rt' or 'delayed'
+    maxgap : int
+        The maximum allowed gap (in seconds) for interpolation.
+    profile_summary_path : str | None, optional
+        Path to the profile summary CSV file, by default None.
+    file_info : str | None, optional
+        Information about the processing file, by default None.
+    drop_vars : list | None, optional
+        List of variables for which to drop the whole timestamp 
+        if they contain NaN values, by default None.
+    kwargs
+        Passed to profile functions
+
+    Returns
+    -------
+    xarray.Dataset
+        post-processed L1 timeseries dataset
     """
 
-    # VALUES
-    # Remove times that are nan or <min_dt, and drop other bogus values
+    # DROP BOGUS VALUES
+    # Remove times that are nan / <min_dt / >current time, and drop other bogus values
     _log.info("The given timeseries has %s data points", ds.time.shape[0])
-    ds = utils.drop_bogus(ds, min_dt=ds.deployment_min_dt, max_drop=True)
+    if "deployment_min_dt" in ds.attrs:
+        min_dt = ds.deployment_min_dt
+    else:
+        min_dt = "1970-01-01"
+    ds = utils.drop_bogus(ds, min_dt=min_dt, max_drop=True)
 
     # Check for and verbosely remove any duplicated timestamps
     ds_index = ds.get_index("time")
     if ds_index.duplicated().any():
         df_dup = ds_index.duplicated()
         _log.warning(
-            "There are %s duplicated timestamps in the current dataset. "
+            "There are %d duplicated timestamps in the current dataset. "
             + "The second of the duplicated timestamps will be dropped. "
             + "Indexes, of the original dataset: %s",
             df_dup.sum(),
@@ -446,10 +543,9 @@ def postproc_general(
         ds = ds.sel(time=~df_dup)
 
     # Drop nan values for any other specified parameters
-    # if drop_vars is not None:
-    if "drop_vars" in pp:
+    if drop_vars is not None:
         # This functionality is here so it is run after drop_bogus
-        for var in pp["drop_vars"]:
+        for var in drop_vars:
             if var in list(ds.keys()):
                 _log.info(f"Dropping points with nan values for {var}")
                 num_orig = len(ds.time)
@@ -464,18 +560,19 @@ def postproc_general(
                 if (num_orig - len(ds.time)) > 0:
                     _log.info(f"Dropped {num_orig - len(ds.time)} nan {var} values")
 
+    # VALUES: RECALCULATE
     # After dropping bogus timestamps, recalculate distance over ground
     ds = pgutils.get_distance_over_ground(ds)
 
-    # Calculate profiles using measured depth
+    # PROFILES
     # This is required because we need profile_direction for sci/eng
     ds = prof.get_fill_profiles(ds, "time", "depth", **kwargs)
 
     # If provided, then update the profile indices by joining raw profiles
-    if "profile_summary_path" in pp:
+    if profile_summary_path is not None:
         # Join profiles generated using raw timeseries
         prof_summ = pd.read_csv(
-            pp["profile_summary_path"],
+            profile_summary_path,
             parse_dates=["start_time", "end_time"],
         )
         ds = prof.join_profiles(ds, prof_summ, **kwargs)
@@ -484,17 +581,40 @@ def postproc_general(
         # Assuming the raw dataset
         depth_var = "depth_measured"
 
-    # ATTRIBUTES, after dropping vars, etc
-    ds = postproc_attrs(ds, pp)
-
-    # Profiles check
+    # Check profiles
     prof_summ = prof.calc_profile_summary(ds, depth_var)
     prof.check_profiles(prof_summ)
+
+    # ATTRIBUTES
+    ds = postproc_attrs(
+        ds, 
+        mode, 
+        # deployment_start=deployment_start, 
+        # deployment_end=deployment_end, 
+        file_info=file_info, 
+    )
+
+    # Update attribute specific to eng and sci timeseries
+    ds.attrs["processing_level"] = (
+        "Values have been interpolated via linear fill, "
+        + f"with a maxgap of {maxgap} seconds. "
+        + "Minimal data screening."
+    )
 
     return ds
 
 
-def postproc_eng_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
+def postproc_ts_eng(
+    ds: xr.Dataset,
+    mode: str, 
+    maxgap: int, 
+    *, 
+    # deployment_start: str | None = None,
+    # deployment_end: str | None = None,
+    profile_summary_path: str | None = None,
+    file_info: str | None = None,
+    **kwargs,
+) -> xr.Dataset:
     """
     Engineering timeseries-specific post-processing, including:
         - Removing CTD vars
@@ -503,11 +623,18 @@ def postproc_eng_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
 
     Parameters
     ----------
-    ds : str
+    ds : xarray.dataset
         Engineering timeseries dataset
-    pp: dict
-        Dictionary with info needed for post-processing.
-        For instance: mode and min_dt
+    mode : str
+        Deployment mode, either 'rt' or 'delayed'
+    maxgap : int
+        The maximum allowed gap (in seconds) for interpolation.
+    profile_summary_path : str | None, optional
+        Path to the profile summary CSV file, by default None.
+    file_info : str | None, optional
+        Information about the processing file, by default None.
+    kwargs
+        Passed to profile functions
 
     Returns
     -------
@@ -515,30 +642,23 @@ def postproc_eng_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
         post-processed engineering timeseries dataset
     """
 
-    # ds = xr.load_dataset(ds_file)
     _log.debug(f"begin eng postproc: ds has {len(ds.time)} values")
-
-    # Drop CTD variables required or created by binary_to_timeseries,
-    # which are not relevant for the engineering NetCDF
-    # ds = ds.drop_vars(
-    #     [
-    #         "depth",
-    #         "conductivity",
-    #         "temperature",
-    #         "pressure",
-    #         "salinity",
-    #         "potential_density",
-    #         "density",
-    #         "potential_temperature",
-    #     ],
-    # )
 
     # With depth (CTD) gone, rename depth_measured
     if "depth_measured" in ds:
         ds = ds.rename({"depth_measured": "depth"})
 
     # General updates
-    ds = postproc_general(ds, pp, **kwargs)
+    ds = postproc_ts_l1(
+        ds=ds, 
+        mode=mode, 
+        maxgap=maxgap, 
+        # deployment_start=deployment_start,
+        # deployment_end=deployment_end,
+        profile_summary_path=profile_summary_path,
+        file_info=file_info,
+        **kwargs
+    )
 
     # Reorder data variables
     # new_start = ["latitude", "longitude", "depth", "profile_index"]
@@ -547,18 +667,30 @@ def postproc_eng_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
 
     # Update eng-specific attributes
     eng_comment = "Engineering-only timeseries. "
-    if not ds.attrs["comment"].strip():
-        ds.attrs["comment"] = eng_comment
-    else:
-        ds.attrs["comment"] += ". " + eng_comment
-    ds.attrs["processing_level"] += " All values have been interpolated via linear fill"
+    ds.attrs["comment"] = utils.append_string(ds.attrs["comment"], eng_comment)
+    # if not ds.attrs["comment"].strip():
+    #     ds.attrs["comment"] = eng_comment
+    # else:
+    #     ds.attrs["comment"] += ". " + eng_comment
+    # ds.attrs["processing_level"] += " All values have been interpolated via linear fill"
 
     _log.debug(f"end eng postproc: ds has {len(ds.time)} values")
 
     return ds
 
 
-def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
+def postproc_ts_sci(
+        ds: xr.Dataset, 
+        mode: str,
+        maxgap: int, 
+        *, 
+        # deployment_start: str | None = None,
+        # deployment_end: str | None = None,
+        profile_summary_path: str | None = None,
+        file_info: str | None = None,
+        drop_vars: list | None = None,
+        **kwargs
+    ) -> xr.Dataset:
     """
     Science timeseries-specific post-processing, including:
         - remove bogus times. Eg, 1970, or before deployment start date
@@ -566,11 +698,21 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
 
     Parameters
     ----------
-    ds : str
+    ds : xarray.Dataset
         Science timeseries dataset
-    pp: dict
-        Dictionary with info needed for post-processing.
-        For instance: mode and min_dt
+    mode : str
+        Deployment mode, either 'rt' or 'delayed'
+    maxgap : int
+        The maximum allowed gap (in seconds) for interpolation.
+    profile_summary_path : str | None, optional
+        Path to the profile summary CSV file, by default None.
+    file_info : str | None, optional
+        Information about the processing file, by default None.
+    drop_vars : list | None, optional
+        List of variables for which to drop the whole timestamp 
+        if they contain NaN values, by default None.
+    kwargs
+        Passed to profile functions
 
     Returns
     -------
@@ -591,14 +733,24 @@ def postproc_sci_timeseries(ds: xr.Dataset, pp: dict, **kwargs) -> xr.Dataset:
     #   2) pyglider does a 'zero screen'
     #   3) nan pressure values all appear to be at the surface,
     #       and often have weird associated values
-    # drop_vars is now part of pp
-    ds = postproc_general(ds, pp, **kwargs)
-
-    # Science-specific attribute updates
-    ds.attrs["processing_level"] += (
-        " Science values have been interpolated via linear fill, "
-        + f"with a maxgap of {pp['maxgap']} seconds. "
+    ds = postproc_ts_l1(
+        ds=ds,
+        mode=mode,
+        maxgap=maxgap,
+        # deployment_start=deployment_start,
+        # deployment_end=deployment_end,
+        profile_summary_path=profile_summary_path,
+        file_info=file_info,
+        drop_vars=drop_vars,
+        **kwargs
     )
+
+    # # Science-specific attribute updates
+    # ds.attrs["processing_level"] = (
+    #     "Values have been interpolated via linear fill, "
+    #     + f"with a maxgap of {maxgap} seconds. "
+    #     + "Minimal data screening. "
+    # )
 
     # Reorder data variables
     new_start = [

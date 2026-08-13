@@ -9,22 +9,7 @@ import xarray as xr
 _log = logging.getLogger(__name__)
 
 
-"""
-default optionsList for findProfiles.
-Pulled outside so it can also be used by get_fill_profiles. Values from:
-https://github.com/socib/glider_toolbox/blob/master/m/processing_tools/processGliderData.m#L113
-"""
-profileOptionsList = {
-    "length": 10,
-    "period": 0,
-    "inversion": 3,
-    "interrupt": 180,
-    "stall": 3,
-    "shake": 20,
-}
-
-
-profile_idx_comment = (
+_profile_idx_comment = (
     "N = inside profile N, N + 0.5 = between profiles N and N + 1. "
     + "Parameters listed as attributes"
 )
@@ -36,8 +21,10 @@ def findProfiles(stamp: np.ndarray, depth: np.ndarray, **kwargs):
     Function copied from:
     https://github.com/OceanGNS/PGPT/blob/main/scripts/gliderfuncs.py#L196
 
-    The only edits are a) pre-commit formatting and
-    b) Updating the default kwargs optional argument values.
+    The only edits are:
+        a) Pre-commit formatting and
+        b) Updating the default kwargs optional argument values, and
+        c) Returning the optionsList dictionary (options used for profile detection). 
     These have been updated to match SOCIB:
     https://github.com/socib/glider_toolbox/blob/master/m/processing_tools/processGliderData.m#L113
     -----
@@ -58,6 +45,7 @@ def findProfiles(stamp: np.ndarray, depth: np.ndarray, **kwargs):
     Returns:
             profile_index (np.ndarray): A 1D array of profile indices.
             profile_direction (np.ndarray): A 1D array of vertical directions.
+            optionsList (dict): A dictionary of the options used for profile detection.
     """
     if not (isinstance(stamp, np.ndarray) and isinstance(depth, np.ndarray)):
         stamp = stamp.to_numpy()
@@ -185,7 +173,7 @@ def get_fill_profiles(ds, time_var, depth_var, **kwargs) -> xr.Dataset:
         [
             ("long_name", "profile index"),
             ("units", "1"),
-            ("comment", profile_idx_comment),
+            ("comment", _profile_idx_comment),
             ("sources", f"{time_var} {depth_var}"),
             ("method", "esdglider.utils.findProfiles"),
             ("method_configuration", json.dumps(prof_opt))
@@ -257,7 +245,7 @@ def join_profiles(ds, df, **kwargs):
         [
             ("long_name", "profile index"),
             ("units", "1"),
-            ("comment", profile_idx_comment),
+            ("comment", _profile_idx_comment),
             ("sources", "time depth"),
             ("method", "esdglider.utils.findProfiles (run on the raw dataset)"),
             ("method_configuration", json.dumps(kwargs))
