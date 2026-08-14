@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a qartod module, for generating qartod flags using the `ioos_qc` package for the science dataset.
 - Added dynamic QARTOD threshold calculation utilities to the `qartod` module and added create_qc_summary_table() for generating profile-level deployment QC summary tables.
 - Added combine_datasets() to the `utils` for combining profile NetCDF files into a deployment dataset.
-- Added deployment QC plotting utilities in `plots`, including stacked QC flag summary plots and variable-specific QC flag time-series plots.
+- Added deployment QC plotting utilities in `plots`, including stacked QC flag summary plots and variable-specific QC flag time-series plots. Added this functionality to `esd_all_plots`.
 
 ### Imagery
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:

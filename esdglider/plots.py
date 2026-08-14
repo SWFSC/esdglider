@@ -39,6 +39,7 @@ timesection_path = "timeSections-sci"
 timesection_gt_path = "timeSections-sci-gt"
 timeseries_eng_path = "timeSeries-eng"
 timeseries_sci_path = "timeSeries-sci"
+qc_path = "QC-sci"
 ts_path = "TS-sci"
 surfacemap_sci_path = "maps-sci"
 
@@ -271,6 +272,7 @@ def esd_all_plots(
     _log.info("Loading datasets")
     ds_eng = xr.load_dataset(ds_paths["outname_tseng"])
     ds_sci = xr.load_dataset(ds_paths["outname_tssci"])
+    # ds_sci_qc = xr.load_dataset(ds_paths["outname_tssciqc"])
     ds_gr5m = xr.load_dataset(ds_paths["outname_gr5m"])
     ds_raw = xr.load_dataset(ds_paths["outname_tsraw"])
 
@@ -283,7 +285,19 @@ def esd_all_plots(
     scatter_plot(ds_sci, "sci", base_path)
     ll_good = ~(np.isnan(ds_raw.longitude) | np.isnan(ds_raw.latitude))
     ds_raw = ds_raw.where(ll_good, drop=True)
-    scatter_plot(ds_raw, "raw", base_path)
+    scatter_plot(ds_raw, "raw", base_path)    
+
+    # QC PLOTS
+    if base_path is not None:
+        plot_qc_path = os.path.join(base_path, qc_path)
+        _ = plot_qc_summary(
+            ds_sci,
+            plot_file=os.path.join(
+                plot_qc_path, 
+                f"{ds_sci.attrs['deployment_name']}_qc_summary.png"
+            ),
+        )
+        plot_qc_timeseries(ds_sci,output_dir=plot_qc_path)
 
     # Sci/eng loops
     sci_gridded_loop(ds_gr5m, base_path, max_workers=max_workers)
@@ -297,6 +311,7 @@ def esd_all_plots(
     eng_tvt_loop(ds_raw, base_path, max_workers=max_workers)
     # sci_ts_loop(ds_sci, base_path, max_workers=max_workers)
 
+    # Surface map logic
     if bar_file is not None:
         _log.info(f"Loading bar file from {bar_file}")
         bar = xr.load_dataset(bar_file).rename(
@@ -1930,6 +1945,9 @@ def plot_qc_summary(
         "v",
     }
 
+    deployment_name = ds_qc.attrs.get("deployment_name", "unknown")
+    _log.info(f"Making QC summary plot for dataset {ds_qc.attrs['deployment_name']}")
+
     # IDENTIFY VARIABLES FOR SUMMARY
     qc_variables = []
     for var in ds_qc.data_vars:
@@ -2112,7 +2130,9 @@ def plot_qc_timeseries(
 
     deployment_name : str, optional
         Deployment identifier to include in each figure title.
-        If omitted, only the variable name is displayed.
+        If omitted, the function will try to get the deployment name from 
+        the dataset attribute deployment_name. 
+        If that attribute does not exist, only the variable name is displayed.
 
     Returns
     -------
@@ -2153,6 +2173,8 @@ def plot_qc_timeseries(
         if data_var not in ds_qc:
             continue
 
+        _log.info(f"Making QC timeseries plot for variable {qc_var}")
+
         # EXTRACT THE TIME, DEPTH, AND QC FLAGS
         time = ds_qc["time"].values
         depth = ds_qc["depth"].values
@@ -2187,7 +2209,11 @@ def plot_qc_timeseries(
 
         # BUILD FIGURE TITLE
         if deployment_name is None:
-            title = f"{data_var} QARTOD QC Flags"
+            if "deployment_name" in ds_qc.attrs:
+                deployment_name = ds_qc.attrs["deployment_name"]
+                title = f"{deployment_name}\n" f"{data_var} QARTOD QC Flags"
+            else:
+                title = f"{data_var} QARTOD QC Flags"
         else:
             title = f"{deployment_name}\n" f"{data_var} QARTOD QC Flags"
 

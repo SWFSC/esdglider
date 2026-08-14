@@ -40,6 +40,6 @@ dependencies:
 # Update env
 #   conda deactivate && conda env update -f esdglider/environment.yml --prune
 # Within active conda env, run to install esdglider as editable:
-#   conda activate esdglider && pip install -e esdglider
+#   conda activate esdglider && pip install -e esdglider --config-settings editable_mode=compat
 # Within active conda env, run the following to for install
 #   pip install --force-reinstall --no-deps git+https://github.com/smwoodman/pyglider.git@main

@@ -131,9 +131,12 @@ import pandas as pd
 import yaml
 import ioos_qc
 import json
+
 from ioos_qc.config import Config
 from ioos_qc.streams import XarrayStream
 from ioos_qc.results import collect_results
+
+from esdglider import paths
 
 # =========================================================
 # LOGGER
@@ -238,6 +241,7 @@ def find_time_variables(ds):
         "heading",
         "pitch",
         "roll",
+        "distance_over_ground", 
     }
     # EVALUATE ALL DATA VARIABLES
     for var in ds.data_vars:
@@ -1155,6 +1159,7 @@ def create_qc_variables(
                     config_dict,
                     var_name,
                 ),
+                "average_method": 'QC_protocol',
             },
         )
 
@@ -1467,7 +1472,7 @@ def create_qc_summary_table(ds_qc):
 def run_qartod_qc(
     input_file,
     output_file,
-    config_file,
+    config_file=None,
     overwrite_qc=True,
 ):
     """
@@ -1514,7 +1519,8 @@ def run_qartod_qc(
 
     Returns
     -------
-    None
+    output_file path : str
+        Path to the QC-enhanced NetCDF file
 
     Notes
     -----
@@ -1562,6 +1568,9 @@ def run_qartod_qc(
     containing DAC-compliant aggregate QARTOD quality
     control variables.
     """
+
+    if config_file is None:
+        config_file = paths.get_path_qartod_config()
 
     # LOAD INPUT DATASET
     ds = xr.load_dataset(input_file)

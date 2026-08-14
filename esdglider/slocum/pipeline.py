@@ -17,7 +17,7 @@ import xarray as xr
 import yaml
 import dbdreader
 
-from esdglider import utils # type: ignore
+from esdglider import qartod, utils 
 import esdglider.profiles as prof
 from esdglider.plots import scatter_drop_plot
 from esdglider.paths import get_path_yaml_deployment_vars, get_path_flbbcd_calibrations
@@ -53,6 +53,7 @@ def generate_timeseries(
     write_eng: bool = True,
     write_sci: bool = True,
     raw_to_sci: bool = False,
+    run_qc: bool = False,
     file_info: str | None = None,
     binary_search: str | None = None,
     maxgap: int | None = None,
@@ -79,6 +80,9 @@ def generate_timeseries(
         Whether to use pyglider's binary_to_timeseries to generate the 
         science timeseries (False, default), 
         or interpolate the science timeseries from the raw timeseries (True)
+    run_qc : bool, optional
+        Whether to run qartod check on science timeseries, by default False.
+        Only relevant if write_sci is True.
     file_info : str | None, optional
         Information about the processing file, by default None.
         Will be included in the history attribute of the output netCDF files.
@@ -337,6 +341,17 @@ def generate_timeseries(
         )        
         del tssci
 
+        if run_qc:
+            _log.debug("Creating qc variables for science netCDF files")
+            qartod.run_qartod_qc(
+                input_file=outname_tssci,
+                output_file=outname_tssci,
+                overwrite_qc=True
+            )
+            _log.info("Completed QARTOD QC workflow for science timeseries")
+
+
+
     if write_eng or write_sci:
         _log.info("final eng/sci timeseries checks")
         tseng = xr.load_dataset(outname_tseng)
@@ -571,7 +586,7 @@ def postproc_ts_l1(
     if prof_args is None:
         prof_args = {}
     # This is required because we need profile_direction for sci/eng
-    ds = prof.get_fill_profiles(ds, "time", "depth", **prof_args)
+    ds = prof.get_fill_profiles(ds, "time", "depth", prof_args)
 
     # If provided, then update the profile indices by joining raw profiles
     if profile_summary_path is not None:
