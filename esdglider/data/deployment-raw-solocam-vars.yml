@@ -2,9 +2,9 @@ netcdf_variables:
 
   # Solocam info, for reports
   camera_free_disk_space_gb:
-      source: sci_solocam_free_disk_space
-      units:  nodim
+    source: sci_solocam_free_disk_space
+    units:  nodim
 
   camera_num_images:
-      source: sci_solocam_image_files
-      units:  nodim
+    source: sci_solocam_image_files
+    units:  nodim

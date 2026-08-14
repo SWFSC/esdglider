@@ -28,7 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Data corrections
 - Added several functions and a data file for checking and correcting ecopuck data:
-    - 'data/flbbcd-calibrations.yml' contains flbbcd calibration values, transcribed from calbration sheets
+    - data file `deployment-raw-flbbcd-vars.yml`, to add flbbcd signal values to the raw netCDF file. (#49) 
+    - data filfe 'flbbcd-calibrations.yml', which contains flbbcd calibration values, transcribed from calbration sheets
     - `check_flbbcd_autoexec` checks the flbbcd calibration values from the calibration yml against the values from the binary files (i.e., from the autoexec). 
     - `calc_flbbcd` calculates correct output values the signal and calibration values, for chlorophyll, cdom, and backscatter_700
     - `correct_flbbcd_raw_sci` recalculates the flbbcd output values, and updates the raw and science timeseries

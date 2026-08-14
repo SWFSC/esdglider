@@ -141,21 +141,11 @@ netcdf_variables:
     standard_name: longitude
     units:        degree_east
 
-  # FLBBCD signal values, for corrections
-  chlorophyll_signal:
-    source: sci_flbbcd_chlor_sig
-    units:  nodim
-
-  cdom_signal:
-    source: sci_flbbcd_cdom_sig
-    units:  nodim
-
-  backscatter_700_signal:
-    source: sci_flbbcd_bb_sig
-    units:  nodim
-
     # NOTE: solocam vars are in data/deployment-raw-solocam-vars.yml, 
     # so they can be included only for deployments with solocam
+
+    # NOTE: ecopuck vars are in data/deployment-raw-flbbcd-vars.yml, 
+    # so they can be included only for deployments with ecopuck
 
 # # Potentially useful parameters in the future
 # c_alt_time

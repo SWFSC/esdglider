@@ -13,16 +13,18 @@ import xarray as xr
 # ==============================================================================
 # CONFIGURATION - Paths and Tolerance Settings
 # ==============================================================================
-deployment_name = "calanus-20241019"
+# gcsfuse --implicit-dirs amlr-gliders-deployments-dev mnt-gcs/amlr-gliders-deployments-dev/
+
+# deployment_name = "calanus-20241019"
+deployment_name = "amlr08-20220513"
 OLD_BASE_DIR = (
     Path("/home/user/mnt-gcs/amlr-gliders-deployments-dev")
-    / "ECOSWIM" 
-    / "2024" / deployment_name
+    / "SANDIEGO" / "2022" / deployment_name
 )
 NEW_BASE_DIR = (
     # Path("/home/user/mnt-gcs/swfscesd-glider-deployments-data-out")
     Path(f"/home/user/tests/{deployment_name}")
-    / "2024" / deployment_name
+    / "2022" / deployment_name
 )
 
 # List of dataset keys/identifiers to evaluate
