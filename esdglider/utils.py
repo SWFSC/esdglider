@@ -4,6 +4,7 @@ import os
 import shutil
 from datetime import datetime, timezone, date
 from pathlib import Path
+from pyglider import ncprocess
 
 import ast
 import gsw
@@ -13,6 +14,7 @@ import pytz
 import statistics
 import xarray as xr
 import yaml
+import netCDF4
 
 _log = logging.getLogger(__name__)
 
@@ -1082,3 +1084,185 @@ def combine_datasets(nc_dir):
     )
 
     return deployment_ds
+
+
+def update_ngdac_profile_attributes(
+    profile_file,
+    deployment,
+    trajectory,
+):
+    """
+    Apply ESD-specific metadata to a pyglider NGDAC profile.
+
+    Updates the profile NetCDF file in place using netCDF4. Only
+    metadata and instrument variables that differ from pyglider's
+    default behavior are modified.
+
+    Parameters
+    ----------
+    profile_file : str or Path
+        Profile NetCDF file created by pyglider.
+
+    deployment : dict
+        Deployment configuration loaded from the deployment YAML.
+
+    trajectory : str
+        Deployment trajectory ID from the science timeseries NetCDF.
+
+    Returns
+    -------
+    None
+    """
+
+    # LOAD DEPLOYMENT METADATA
+    meta = deployment["metadata"]
+    instrument_meta = deployment["glider_devices"]
+
+    # OPEN PROFILE NETCDF FOR IN-PLACE MODIFICATION
+    with netCDF4.Dataset(profile_file, "r+") as nc:
+
+        # TRAJECTORY
+        trajectory_var = nc.variables["trajectory"]
+
+        # ESD USES THE DEPLOYMENT ID FROM THE SCIENCE TIMESERIES
+        trajectory_chars = np.full(
+            trajectory_var.shape,
+            b"\x00",
+            dtype="S1",
+        )
+        trajectory_chars[:len(trajectory)] = np.array(
+            list(trajectory),
+            dtype="S1",
+        )
+        trajectory_var[:] = trajectory_chars
+
+        trajectory_var.setncattr(
+            "cf_role",
+            "trajectory_id",
+        )
+        trajectory_var.setncattr(
+            "comment",
+            "A trajectory is a single deployment of a glider "
+            "and may span multiple data files.",
+        )
+        trajectory_var.setncattr(
+            "long_name",
+            "Trajectory/Deployment Name",
+        )
+        
+        # PLATFORM
+        platform = nc.variables["platform"]
+        platform.setncattr(
+            "id",
+            meta["glider_name"],
+        )
+        # LIST ALL INSTRUMENTS DEFINED IN glider_devices
+        instrument_str = ",".join(
+            instrument_meta.keys()
+        )
+        platform.setncattr(
+            "instrument",
+            instrument_str,
+        )
+        platform.setncattr(
+            "long_name",
+            (
+                f"{meta['glider_model']} "
+                f"{meta['glider_name']}"
+            ),
+        )
+
+        # INSTRUMENTS
+        for name, attrs in instrument_meta.items():
+            # pyglider ALREADY CREATES instrument_ctd
+            # CREATE ADDITIONAL ESD INSTRUMENT VARIABLES
+            if name in nc.variables:
+                instrument = nc.variables[name]
+            else:
+                fill_value = attrs.get(
+                    "_FillValue",
+                    -1,
+                )
+                instrument = nc.createVariable(
+                    name,
+                    "i4",
+                    (),
+                    fill_value=fill_value,
+                )
+                instrument[...] = np.int32(1)
+
+            # APPLY INSTRUMENT METADATA FROM glider_devices
+            for attr_name, attr_value in attrs.items():
+                # _FillValue MUST BE SPECIFIED WHEN THE VARIABLE
+                # IS CREATED & CANNOT BE CHANGED AFTERWARD
+                if attr_name == "_FillValue":
+                    continue
+                instrument.setncattr(
+                    attr_name,
+                    attr_value,
+                )
+                
+                
+def create_ngdac_profiles(
+    inname,
+    outdir,
+    deploymentyaml,
+    force=False,
+):
+    """
+    Create NGDAC profile NetCDF files from a science timeseries NetCDF.
+
+    Individual profile NetCDF files are created using pyglider's
+    ``extract_timeseries_profiles`` function. The resulting profiles
+    are then updated in place with ESD-specific NGDAC metadata.
+
+    The input science NetCDF is expected to have already undergone
+    QARTOD quality control.
+
+    Parameters
+    ----------
+    inname : str or Path
+        Science timeseries NetCDF file to break into profiles.
+
+    outdir : str or Path
+        Directory where profile NetCDF files are written.
+
+    deploymentyaml : str or Path
+        Deployment YAML file used to create the timeseries NetCDF.
+
+    force : bool, default False
+        Force overwriting existing profile NetCDF files.
+
+    Returns
+    -------
+    None
+    """
+
+    # READ DEPLOYMENT CONFIGURATION
+    with open(deploymentyaml) as fin:
+        deployment = yaml.safe_load(fin)
+
+    # GET DEPLOYMENT TRAJECTORY ID FROM SCIENCE NETCDF
+    with xr.open_dataset(inname) as ds:
+        trajectory = ds.attrs["id"]
+
+    # CREATE INDIVIDUAL PROFILE NETCDF FILES USING pyglider
+    ncprocess.extract_timeseries_profiles(
+        str(inname),
+        str(outdir),
+        [str(deploymentyaml)],
+        force=force,
+    )
+
+    # FIND THE PROFILE FILES CREATED BY pyglider
+    profile_files = sorted(
+        Path(outdir).glob("*.nc")
+    )
+
+    # APPLY ESD-SEPCIFIC METADATA DIRECTLY TO EACH NETCDF FILE
+    for profile_file in profile_files:
+        update_ngdac_profile_attributes(
+            profile_file,
+            deployment,
+            trajectory,
+        )

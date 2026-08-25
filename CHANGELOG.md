@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added combine_datasets() to the `utils` for combining profile NetCDF files into a deployment dataset.
 - Added deployment QC plotting utilities in `plots`, including stacked QC flag summary plots and variable-specific QC flag time-series plots. Added this functionality to `esd_all_plots`.
 - Changed the ESD pipeline flow and variable naming to be more consistent. (#50)
+- Added `update_ngdac_profile_attributes()` and `create_ngdac_profiles()` in `utils` to use pyglider's `extract_timeseries_profiles()` to write profile netcdf files and update metadata for ESD and NGDAC standards.
 
 ### Imagery
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
