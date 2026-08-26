@@ -154,7 +154,7 @@ def drop_bogus(
         if var not in list(ds.keys()):
             _log.debug(
                 "%s not present in ds - skipping drop_values check",
-                num_orig - len(ds.time),
+                var,
             )
             continue
         num_orig = len(ds[var])

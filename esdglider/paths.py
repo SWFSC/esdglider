@@ -9,7 +9,7 @@ _log = logging.getLogger(__name__)
 
 def _check_dir_exists(dir_path, description):
     if not os.path.isdir(dir_path):
-        _log.warning(f"The {description} ('{dir_path}') does not exist")
+        _log.warning(f"The {description} path ('{dir_path}') does not exist")
 
 def get_path_flbbcd_calibrations() -> str:
     """
