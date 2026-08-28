@@ -112,6 +112,7 @@ def generate_timeseries(
     deploymentyaml = glider_paths["deploymentyaml"]
     rawdir = glider_paths["rawdir"]
     tsdir = glider_paths["tsdir"]
+    ancdir = glider_paths["ancillarydir"]
 
     deployment = pgutils._get_deployment(deploymentyaml)
 
@@ -169,6 +170,7 @@ def generate_timeseries(
         utils.remove_file(outname_gr1m)
         utils.remove_file(outname_gr5m)
         utils.makedirs_pass(rawdir)
+        utils.makedirs_pass(ancdir)
 
         _log.info("Generating raw nc")
         raw_yaml_list = [
