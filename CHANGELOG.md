@@ -52,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added a `check-nc-old-new.py` script for comparing sets of old and new processed glider deployment files and plots. Useful to make sure code cleanup don't affect output files. 
 - Changed multiple functions so optional arguments, for `esdglider.profiles.findProfiles`, are passed into functions as a dictionary with the named arguments, rather than kwargs.
 - Added valid_min and valid_max values for several variables to the `data/netcdf-variables-sci.yml` file.
-- Changed `generate_timeseries` so that neither the engineering or science timeseries contain the variable 'profile_direction'. This is consistent with other publicly served datasets.
+- Changed `generate_timeseries` so that the engineering timeseries does not contain the variable 'profile_direction'. The science timeseries currently still needs to have this variable, as it is required by pyglider's gridding function.
 
 ## [0.4.0] - 2026-04-17
 
@@ -73,6 +73,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed `binary_to_raw_timeseries` to only keep distance_over_ground values where latitude and longitude are not nan, to be consistent with depth_ctd
 - Changed the name of the function `glider.raw_to_sci_timeseries` to `glider.raw_to_sci_timeseries`, to be more consistent with `esdglider` and `pyglider`
 - Added a 'generate fleet status' python script, for updating the various tabs on the Fleet Status Google sheet with summaries from the database. 
+- Changed `paths` so the profile summary CSV is saved to the 'ancillary' folder
 - Updating config website yaml
 
 

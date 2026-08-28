@@ -112,9 +112,11 @@ def get_path_glider_data_out(
     griddir = procl3dir
     profdir = os.path.join(procl1dir, "ngdac", mode)
 
+    ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+    path_prof_summ = os.path.join(ancillarydir, f"{deployment_name}-{mode}-profiles.csv")
+
     # Create common file names
     path_raw = os.path.join(rawdir, f"{deployment_name}-{mode}-raw.nc")
-    path_prof_summ = os.path.join(rawdir, f"{deployment_name}-{mode}-profiles.csv")
     path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
     path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
     path_sci_qc = os.path.join(tsdir, f"{deployment_name}-{mode}-sci-qc.nc")
@@ -129,6 +131,7 @@ def get_path_glider_data_out(
         "griddir": griddir,
         "profdir": profdir,
         "plotdir": plotdir,
+        "ancillarydir": ancillarydir,
         "procl0dir": procl0dir,
         "procl1dir": procl1dir,
         "procl2dir": procl2dir,
@@ -221,7 +224,7 @@ def get_path_glider(
         # "rawyaml": get_path_yaml("raw"),
         # "engyaml": get_path_yaml("eng"),
         "binarydir": os.path.join(glider_data_in_path, "binary", mode), 
-        "outdir": glider_data_out_path, 
+        "outdir": glider_data_out_path,
     } 
 
     return out | glider_paths_data_out

@@ -29,16 +29,17 @@ for i in mounts:
 deployment_name = "amlr08-20220513"
 # deployment_name = "stenella-20250414"
 year = "2022"
+project="SANDIEGO"
 
 # NOTE: OLD DIR expects old dir structure (.../data/processed-L1/...)
 OLD_BASE_DIR = (
     home / "mnt-gcs" / "amlr-gliders-deployments-dev" 
-    / "SANDIEGO" 
+    / project
     / year / deployment_name
 )
 NEW_BASE_DIR = (
-    # home / ("mnt-gcs/swfscesd-glider-deployments-data-out")
-    home / f"tests/{deployment_name}"
+    home / ("mnt-gcs/swfscesd-glider-deployments-data-out")
+    # home / f"tests/{deployment_name}"
     / year / deployment_name
 )
 
@@ -81,12 +82,14 @@ def get_old_path(dataset_id: str) -> Path:
 
 def get_new_path(dataset_id: str) -> Path | None:
     """Returns absolute path to NEW file given a dataset identifier."""
-    if "raw" in dataset_id or ".csv" in dataset_id:
+    if "raw" in dataset_id:
         path_out = NEW_BASE_DIR / "processed-L0" / dataset_id
     elif "eng" in dataset_id or "sci" in dataset_id:
         path_out = NEW_BASE_DIR / "processed-L1" / dataset_id
     elif "grid" in dataset_id:
         path_out = NEW_BASE_DIR / "processed-L3" / dataset_id
+    elif ".csv" in dataset_id:
+        path_out = NEW_BASE_DIR / "ancillary-products" / dataset_id
     else:
         print("dataset_id syntax not recognized")
         path_out = None
