@@ -285,19 +285,7 @@ def esd_all_plots(
     scatter_plot(ds_sci, "sci", base_path)
     ll_good = ~(np.isnan(ds_raw.longitude) | np.isnan(ds_raw.latitude))
     ds_raw = ds_raw.where(ll_good, drop=True)
-    scatter_plot(ds_raw, "raw", base_path)    
-
-    # QC PLOTS
-    if base_path is not None:
-        plot_qc_path = os.path.join(base_path, qc_path)
-        _ = plot_qc_summary(
-            ds_sci,
-            plot_file=os.path.join(
-                plot_qc_path, 
-                f"{ds_sci.attrs['deployment_name']}_qc_summary.png"
-            ),
-        )
-        plot_qc_timeseries(ds_sci,output_dir=plot_qc_path)
+    scatter_plot(ds_raw, "raw", base_path)
 
     # Sci/eng loops
     sci_gridded_loop(ds_gr5m, base_path, max_workers=max_workers)
@@ -310,6 +298,18 @@ def esd_all_plots(
     eng_timeseries_loop(ds_eng, base_path, max_workers=max_workers)
     eng_tvt_loop(ds_raw, base_path, max_workers=max_workers)
     # sci_ts_loop(ds_sci, base_path, max_workers=max_workers)
+
+    # QC PLOTS
+    if base_path is not None:
+        plot_qc_path = os.path.join(base_path, qc_path)
+        _ = plot_qc_summary(
+            ds_sci,
+            plot_file=os.path.join(
+                plot_qc_path, 
+                f"{ds_sci.attrs['deployment_name']}_qc_summary.png"
+            ),
+        )
+        plot_qc_timeseries(ds_sci,output_dir=plot_qc_path)
 
     # Surface map logic
     if bar_file is not None:
@@ -801,7 +801,7 @@ def sci_surface_map_loop(
     _log.info("Completed surface maps")
 
 
-def save_plot(fig: matplotlib.figure.Figure, fname: str):
+def save_plot(fig: matplotlib.figure.Figure, fname: str | Path):
     """
     Wrapper function to save the matplotlib 'figure' object to 'fname'.
     Create directory to 'fname' if necessary.
@@ -817,6 +817,7 @@ def save_plot(fig: matplotlib.figure.Figure, fname: str):
     -------
     Nothing
     """
+    fname = str(fname)
     file_dir = os.path.dirname(fname)
     if not os.path.isdir(file_dir):
         os.makedirs(file_dir)
@@ -1281,8 +1282,12 @@ def eng_plots_to_make(ds: xr.Dataset):
     Dictionary used by eng_tvt_plot to make plots
     """
 
-    da_c_depth = ds["target_depth"].dropna(dim="time")
-    da_m_depth = ds["depth_measured"].interp(time=da_c_depth.time)
+    da_c_tdepth = ds["target_depth"].dropna(dim="time")
+    da_c_mdepth = ds["depth_measured"].interp(time=da_c_tdepth.time)
+
+    da_ctd_depth = ds["depth_ctd"].dropna(dim="time")
+    da_ctd_mdepth = ds["depth_measured"].interp(time=da_ctd_depth.time)
+    da_ctd_diff = da_ctd_depth - da_ctd_mdepth
 
     plots_to_make = {
         "oilVol": {
@@ -1298,17 +1303,20 @@ def eng_plots_to_make(ds: xr.Dataset):
             "cb": None,
         },
         "diveDepth": {
-            "X": da_c_depth,
-            "Y": [da_m_depth],
+            "X": da_c_tdepth,
+            "Y": [da_c_mdepth],
             "C": ["C0"],
             "cb": None,
         },
-        # "inflections": {
-        #     "X": ds["total_num_inflections"],
-        #     "Y": [ds["total_amphr"]],
-        #     "C": ["C0"],
-        #     "cb": None,
-        # },
+        "diveDepthComp": {
+            "X": da_ctd_depth,
+            "Y": [da_ctd_mdepth],
+            "C": [da_ctd_diff],
+            "cb": "depth diff (ctd minus measured)",
+            # "cb": "diff(depth_ctd, depth_measured)",
+            # "C": ["C0"],
+            # "cb": None,
+        },
         "diveAmpHr": {
             "X": ds["depth_measured"],
             "Y": [ds["amphr"]],
@@ -1333,7 +1341,7 @@ def eng_plots_to_make(ds: xr.Dataset):
             "X": ds["time"],
             "Y": [ds["vacuum"]],
             "C": [ds["depth_measured"]],
-            "cb": "depth",
+            "cb": "depth_measured",
         },
     }
 
@@ -1355,7 +1363,6 @@ def eng_tvt_plot(
     ----------
     ds : xarray dataset
         Timeseries glider raw dataset.
-        This is intended to be produced by slocum.binary_to_nc
     eng_dict : dictionary
         Dictionary produced by eng_plots_to_make()
         Used by this function to get
@@ -1408,6 +1415,10 @@ def eng_tvt_plot(
 
     if eng_dict[key]["X"].name == "time":
         fig.autofmt_xdate()
+
+    ax.set_title(
+        f"Deployment {deployment}", size=title_size
+    )
 
     if base_path is not None:
         fname = os.path.join(
@@ -1618,6 +1629,9 @@ def sci_timesection_gt_plot(
         f"Making sci timesection plot for variable {var}, using glidertools",
     )
     deployment = ds.deployment_name
+    title_str = f"Deployment {deployment} - time section"
+    if robust:
+        title_str += " - [0.5, 99.5] percentiles"
 
     dat = ds.where(ds["profile_index"] % 1 == 0, drop=True)
     x = dat["profile_index"]
@@ -1627,11 +1641,9 @@ def sci_timesection_gt_plot(
     ax = gt.plot(
         x, y, adj_var(dat, var), cmap=sci_vars[var], ax=ax, robust=robust
     )
-    ax.set_xlabel("Profile", size=label_size)
-    ax.set_ylabel("Depth [m]", size=label_size)
-    ax.set_title(
-        f"Deployment {deployment} - time section", size=title_size
-    )
+    ax.set_xlabel("Profile", size=label_size) # type: ignore
+    ax.set_ylabel("Depth [m]", size=label_size) # type: ignore
+    ax.set_title(title_str, size=title_size) # type: ignore
 
     # Sometimes glidertools won't plot label, so guarantee it
     ax.cb.set_label(adj_var_label(ds, var), size=label_size)  # type: ignore

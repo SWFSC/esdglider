@@ -428,7 +428,7 @@ def generate_timeseries(
         _log.info("Not writing timeseries nc")
 
     # --------------------------------------------
-    if write_raw or write_sci:
+    if write_sci:
         _log.info("Checking flbbcd autoexec values, and cdom status")
         check_flbbcd_autoexec(
             glider_paths["binarydir"], 
@@ -960,9 +960,12 @@ def generate_gridded(
 
     else:
         _log.info("Not writing gridded nc")
-        keys_to_extract = [f"outname_gr{i}m" for i in bin_size]
-        outnames = {k: glider_paths[k] for k in keys_to_extract}
-
+        keys_to_return = [f"outname_gr{i}m" for i in bin_size]
+        keys_to_extract = [f"gr{i}path" for i in bin_size]
+        outnames = {}
+        for kr, ke in zip(keys_to_return, keys_to_extract):
+            outnames |= {kr: glider_paths[ke]}
+        
     return outnames
 
 
@@ -1381,7 +1384,7 @@ def complete_profile_correction(
         tseng: xr.Dataset | None, 
         tssci: xr.Dataset | None, 
         glider_paths: dict, 
-        use_m_depth: bool,
+        # use_m_depth: bool = False,
         # prof_depth_var: str | None = None,
         # prof_index_attrs: dict,   
         # prof_args: dict | None = None
@@ -1397,8 +1400,9 @@ def complete_profile_correction(
     and eng/sci datasets to disk.
 
     The profile index attributes are extracted from the raw timeseries, 
-    with the phrase ", from raw dataset" added tot he end of the 'sources' 
-    attribute.
+    including the depth variable used for the profiles. 
+    These attributes are added the the eng/sci datasets, with the phrase 
+    ", from raw dataset" added to the end of the 'sources' attribute.
 
     If either tseng or tssci do not need to be updated, 
     they can be passed as `None` and will be ignored.
@@ -1414,22 +1418,30 @@ def complete_profile_correction(
         Science timeseries dataset (or None if not available)
     glider_paths : dict
         Dictionary containing glider-related paths.
-    use_m_depth : bool, optional
-        Flag indicating whether to use measured depth (`True`) or CTD depth (`False`) for profile calculations.
-    prof_index_attrs : dict
-        Attributes for the profile index variable, used when adjusting profiles.
 
     Returns
     -------
     None
     """
 
-    # Finish profiles
-    if use_m_depth:
-        prof_depth_var = "depth_measured"
-    else:
-        prof_depth_var = "depth_ctd"
+    _log.info(
+        "Completing profile correction by writing new profile summary, "
+        + "applying profiles to eng/sci datasets (as applicable), "
+        + "and saving three timeseries datasets (as applicable)"
+    )
 
+    # Extract info from raw dataset attributes
+    prof_index_attrs = tsraw["profile_index"].attrs
+
+    source_split = prof_index_attrs["sources"].split()
+    prof_depth_var = next((i for i in source_split if 'depth' in i), None)
+    if prof_depth_var is None:
+        _log.error("No depth variable found in profile index sources")
+        raise ValueError("No depth variable found in profile index sources")
+        
+    prof_index_attrs["sources"] += ", from raw dataset"
+
+    # Finish profiles
     prof_summ = prof.calc_profile_summary(tsraw, prof_depth_var)
     prof_summ.to_csv(glider_paths["profsummpath"], index=False)
     prof.check_profiles(prof_summ)
@@ -1443,9 +1455,6 @@ def complete_profile_correction(
     _log.info("Wrote raw timeseries to %s", glider_paths["tsrawpath"])
 
     # Apply new profiles to sci and eng, and save
-    prof_index_attrs = tsraw["profile_index"].attrs
-    prof_index_attrs["sources"] += ", from raw dataset"
-
     if tseng is not None:
         tseng = prof.join_profiles(tseng, prof_summ, prof_index_attrs)
         tseng.to_netcdf(
