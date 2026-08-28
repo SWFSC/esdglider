@@ -3,24 +3,23 @@ Slocum pipeline functions, for ESD-specific processing of slocum glider files
 """
 
 import logging
+import math
 import os
 from importlib import metadata
-import tempfile
-import math
 
+import dbdreader
 import numpy as np
 import pandas as pd
-import pyglider.ncprocess as pgncprocess # type: ignore
-import pyglider.slocum as pgslocum # type: ignore
-import pyglider.utils as pgutils # type: ignore
+import pyglider.ncprocess as pgncprocess  # type: ignore
+import pyglider.slocum as pgslocum  # type: ignore
+import pyglider.utils as pgutils  # type: ignore
 import xarray as xr
 import yaml
-import dbdreader
 
-from esdglider import qartod, utils 
 import esdglider.profiles as prof
+from esdglider import qartod, utils
+from esdglider.paths import get_path_flbbcd_calibrations, get_path_yaml_deployment_vars
 from esdglider.plots import scatter_drop_plot
-from esdglider.paths import get_path_yaml_deployment_vars, get_path_flbbcd_calibrations
 from esdglider.slocum import core
 from esdglider.slocum.core import time_encoding
 
@@ -53,12 +52,11 @@ def generate_timeseries(
     write_raw: bool = True,
     write_eng: bool = True,
     write_sci: bool = True,
-    # raw_to_sci: bool = False,
+    sci_use_m_depth: bool = False,
     run_qc: bool = False,
     file_info: str | None = None,
     binary_search: str | None = None,
     maxgap: int | None = None,
-    use_m_depth: bool = False,
     # prof_depth_var: str = "depth",
     prof_args: dict | None = None,
 ) -> dict:
@@ -79,10 +77,17 @@ def generate_timeseries(
         Whether to write engineering timeseries files, by default True.
     write_sci : bool, optional
         Whether to write science timeseries files, by default True.
-    raw_to_sci : bool, optional
-        Whether to use pyglider's binary_to_timeseries to generate the 
-        science timeseries (False, default), 
+    sci_use_m_depth : bool, optional
+        Whether the science timeseries should use the glider measured depth 
+        (i.e., "depth_measured" from source "m_depth") as its depth value (True), 
+        or use the CTD-calculated depth (i.e., "depth_ctd" from source "pressure";
+        False, default). 
+        In practice, this also specifies whether to use pyglider's 
+        binary_to_timeseries to generate the science timeseries (False), 
         or interpolate the science timeseries from the raw timeseries (True)
+        Note that this variable does not affect 
+        which depth variable is used to calculate profiles. 
+        For esdglider, this is always "depth_measured" (from m_depth)
     run_qc : bool, optional
         Whether to run qartod check on science timeseries, by default False.
         Only relevant if write_sci is True.
@@ -95,11 +100,6 @@ def generate_timeseries(
     maxgap : int | None, optional
         The maximum allowed gap (in seconds) for interpolation. 
         If None (default), will use the module's maxgap_esd value.
-    use_m_depth : bool, optional
-        Whether to use the glider measured depth (i.e., "depth_measured" 
-        from source "m_depth") for profile calculations.
-        If False (default), will use the depth calculated from 
-        the CTD pressure (i.e., 'depth_ctd').
     prof_args : dict | None, optional
         named optional arguments, passed to esdglider.profiles.findProfiles
 
@@ -132,12 +132,12 @@ def generate_timeseries(
     if prof_args is None:
         prof_args = {}
 
-    if use_m_depth:
-        prof_depth_var = "depth_measured"
-        other_depth_var = "depth_ctd"
-    else:
-        prof_depth_var = "depth_ctd"
-        other_depth_var = "depth_measured"
+    # if use_m_depth:
+    prof_depth_var = "depth_measured"
+    other_depth_var = "depth_ctd"
+    # else:
+    #     prof_depth_var = "depth_ctd"
+    #     other_depth_var = "depth_measured"
 
     # # Dictionary with info needed by post-processing functions
     # postproc_info = {
@@ -330,7 +330,7 @@ def generate_timeseries(
         utils.remove_file(outname_gr5m)
         utils.makedirs_pass(tsdir)
 
-        if use_m_depth: 
+        if sci_use_m_depth: 
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
             outname_tssci = core.raw_to_sci_timeseries(
                 outname_tsraw,
@@ -361,17 +361,17 @@ def generate_timeseries(
             )
             drop_vars = ["pressure"]
 
-        _log.info(f"Post-processing science timeseries: {outname_tssci}")
+        _log.info("Post-processing science timeseries: %s", outname_tssci)
         tssci = xr.load_dataset(outname_tssci)
         tssci = postproc_tsl1_sci(
             tssci, 
             mode, 
             maxgap, 
+            sci_use_m_depth=sci_use_m_depth,
             # deployment_start=deployment_start,
             # deployment_end=deployment_end,
             file_info=file_info,
             drop_vars=drop_vars, 
-            use_m_depth=use_m_depth,
             prof_summ=prof_summ,
             prof_index_attrs=prof_index_attrs,
             # prof_summ_path=glider_paths["profsummpath"],
@@ -789,12 +789,12 @@ def postproc_tsl1_sci(
         ds: xr.Dataset, 
         mode: str,
         maxgap: int, 
+        sci_use_m_depth: bool,
         *,
         # deployment_start: str | None = None,
         # deployment_end: str | None = None,
         file_info: str | None = None,
         drop_vars: list | None = None,
-        use_m_depth: bool = False,
         prof_summ: pd.DataFrame | None = None,
         prof_index_attrs: dict | None = None,
     ) -> xr.Dataset:
@@ -815,7 +815,7 @@ def postproc_tsl1_sci(
     drop_vars : list | None, optional
         List of variables for which to drop the whole timestamp 
         if they contain NaN values, by default None
-    use_m_depth : bool, optional
+    sci_use_m_depth : bool, optional
         If True, then tries to rename the variable 'depth_measured'
         to 'depth'. Passed directly from generate_timeseries
     prof_summ : pd.DataFrame | None, optional
@@ -838,7 +838,7 @@ def postproc_tsl1_sci(
 
     # If using measured depth, rename it to 'depth' for consistency
     try:
-        if use_m_depth:
+        if sci_use_m_depth:
             ds = ds.rename({"depth_measured": "depth"})
     except KeyError:
         _log.warning(
@@ -846,8 +846,8 @@ def postproc_tsl1_sci(
             + "This function will likely fail."
         )
 
-    ds = prof.get_fill_profiles(ds, "time", "depth")
-    ds = ds.drop_vars("profile_index")
+    # ds = prof.get_fill_profiles(ds, "time", "depth")
+    # ds = ds.drop_vars("profile_index")
 
     # General updates
     # Drop rows in science where pressure is nan, because:
