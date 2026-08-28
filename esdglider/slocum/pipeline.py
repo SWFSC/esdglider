@@ -846,8 +846,8 @@ def postproc_tsl1_sci(
             + "This function will likely fail."
         )
 
-    # ds = prof.get_fill_profiles(ds, "time", "depth")
-    # ds = ds.drop_vars("profile_index")
+    ds = prof.get_fill_profiles(ds, "time", "depth")
+    ds = ds.drop_vars("profile_index")
 
     # General updates
     # Drop rows in science where pressure is nan, because:
