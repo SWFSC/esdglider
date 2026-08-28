@@ -37,93 +37,105 @@ netcdf_variables:
     valid_min:    -180.0
     coordinate_reference_frame:  urn:ogc:crs:EPSG::4326
 
-  # Can't be 'depth', because pyglider creates depth var using pressure
-  # Renamed in esdglider post-processing code
-  depth_measured:
-    source:  m_depth
-    long_name:    glider measured depth
-    standard_name: m_depth
+  depth_measured: #to differentiate from 'depth_ctd'
+    source: m_depth
+    long_name: m_depth
     observation_type: measured
-    units:        m
+    standard_name: depth
+    units: m
 
   heading:
-    source:  m_heading
-    long_name:    glider heading angle
+    source: m_heading
+    long_name: m_heading
     standard_name: platform_orientation
-    units:        rad
+    units: rad
 
   pitch:
-    source:  m_pitch
-    long_name:    glider pitch angle
+    source: m_pitch
+    long_name: m_pitch
     standard_name: platform_pitch_angle
-    units:        rad
+    units: rad
 
   roll:
-    source:  m_roll
-    long_name:    glider roll angle
+    source: m_roll
+    long_name: m_roll
     standard_name: platform_roll_angle
-    units:        rad
+    units: rad
 
   total_num_inflections:
+    long_name: m_tot_num_inflections
     source: m_tot_num_inflections
-    long_name:    glider total number inflections
-    units:        nodim
+    units: nodim
 
   altitude:
+    long_name: m_altitude
     source: m_altitude
     units: m
 
   battery_voltage:
+    long_name: m_battery
     source: m_battery
     units: V
 
-  battpos:
+  battery_position:
+    long_name: m_battpos
     source: m_battpos
     units: inches
 
   amphr:
+    long_name: m_coulomb_amphr
     source: m_coulomb_amphr
     units: Ahr
 
   total_amphr:
+    long_name: m_coulomb_amphr_total
     source: m_coulomb_amphr_total
     units: Ahr
 
-  measured_oil_volume:
+  oil_volume_measured:
+    long_name: m_de_oil_vol
     source: m_de_oil_vol
     units: mL
 
+  oil_volume_commanded:
+    long_name: c_de_oil_vol
+    source: c_de_oil_vol
+    units: mL
+
   leak_detect:
+    long_name: m_leakdetect_voltage
     source: m_leakdetect_voltage
     units: V
 
   leak_detect_forward:
+    long_name: m_leakdetect_voltage_forward
     source: m_leakdetect_voltage_forward
     units: V
 
   leak_detect_science:
+    long_name: m_leakdetect_voltage_science
     source: m_leakdetect_voltage_science
     units: V
 
   gps_latitude:
     comment: GPS latitude
+    long_name: m_gps_lat
     source: m_gps_lat
     units: degrees_north
 
   gps_longitude:
     comment: GPS longitude
+    long_name: m_gps_lon
     source: m_gps_lon
     units: degrees_east
 
   vacuum:
+    long_name: m_vacuum
     source: m_vacuum
     units: inHg
 
-  commanded_oil_volume:
-    source: c_de_oil_vol
-    units: mL
-
   target_depth:
+    long_name: c_dive_target_depth
     source: c_dive_target_depth
     units: m
 
@@ -146,6 +158,7 @@ netcdf_variables:
 
     # NOTE: ecopuck vars are in data/deployment-raw-flbbcd-vars.yml, 
     # so they can be included only for deployments with ecopuck
+
 
 # # Potentially useful parameters in the future
 # c_alt_time

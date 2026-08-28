@@ -135,22 +135,25 @@ par:
   observation_type: "measured"
   instrument:   "instrument_par"
 
-# Engineering variables commonly needed, for instance for acoustics
+# Engineering variables
 heading:
   source:  m_heading
   long_name:    glider heading angle
   standard_name: platform_orientation
+  observation_type: "measured"
   units:        rad
 
 pitch:
   source:  m_pitch
   long_name:    glider pitch angle
+  observation_type: "measured"
   standard_name: platform_pitch_angle
   units:        rad
 
 roll:
   source:  m_roll
   long_name:    glider roll angle
+  observation_type: "measured"
   standard_name: platform_roll_angle
   units:        rad
 

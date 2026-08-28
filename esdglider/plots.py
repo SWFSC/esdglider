@@ -181,8 +181,8 @@ eng_vars = [
     "pitch",
     "roll",
     "total_num_inflections",
-    "commanded_oil_volume",
-    "measured_oil_volume",
+    "oil_volume_commanded",
+    "oil_volume_measured",
     "total_amphr",
     "amphr",
     "battery_voltage",
@@ -190,7 +190,7 @@ eng_vars = [
     "leak_detect",
     "leak_detect_forward",
     "leak_detect_science",
-    "battpos",
+    "battery_position",
     "target_depth",
     "altitude",
     "distance_over_ground",
@@ -225,14 +225,14 @@ QC_FLAG_NAMES = {
 
 def esd_all_plots(
     ds_paths: dict,
-    crs=None,
-    ds_sci_depth_var: str = "depth",
+    sci_depth_var: str = "depth",
     base_path: str | None = None,
+    crs: str | None = None,
     bar_file: str | None = None,
     max_workers: int | None = 1,
 ):
     """
-    Wrapper to run all of the plotting loop functions
+    Wrapper to run all of the ESD plotting loop functions
 
     Parameters
     ----------
@@ -242,16 +242,16 @@ def esd_all_plots(
         - 'outname_tssci': path to the science timeseries dataset
         - 'outname_gr5m': path to the 5m gridded dataset
         - 'outname_tsraw': path to the raw timeseries dataset
-    crs : a class from cartopy.crs or None (default None)
-        An instantiated cartopy projection, such as cartopy.crs.PlateCarree()
-        or cartopy.crs.Mercator().
-        If None, surface maps are not created
-    ds_sci_depth_var : str
+    sci_depth_var : str
         Name of the depth variable in the science dataset.
         See 'sci_timeseries_loop' for more details
     base_path : str or None (default None)
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of glider.get_path_glider
+    crs : a class from cartopy.crs or None (default None)
+        An instantiated cartopy projection, such as cartopy.crs.PlateCarree()
+        or cartopy.crs.Mercator().
+        If None, surface maps are not created
     bar_file : str or None (default None)
         Path to the ETOPO nc file to use for contour lines.
         If None (default), then contour lines will not be drawn
@@ -303,7 +303,7 @@ def esd_all_plots(
     sci_gridded_loop(ds_gr5m, base_path, max_workers=max_workers)
     sci_timeseries_loop(
         ds_sci,
-        depth_var=ds_sci_depth_var,
+        depth_var=sci_depth_var,
         base_path=base_path,
         max_workers=max_workers,
     )
@@ -331,7 +331,7 @@ def esd_all_plots(
             max_workers=max_workers,
         )
     else:
-        _log.info("No crs provided, and thus skipping surface maps")
+        _log.info("crs is None - skipping surface maps")
 
 
 def sci_gridded_loop_helper(
@@ -530,8 +530,7 @@ def sci_timeseries_loop(
         Timeseries science dataset
     depth_var : str
         The name of the depth variable to use in the plots.
-        Default is depth; other common option will be 'depth_measured', if
-        the CTD was turned off during a deployment
+        Default is depth
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of glider.get_path_glider
@@ -1279,7 +1278,6 @@ def eng_plots_to_make(ds: xr.Dataset):
     ----------
     ds : xarray dataset
         Timeseries glider raw dataset.
-        This is intended to be produced by slocum.binary_to_nc
 
     Returns
     -------
@@ -1291,8 +1289,8 @@ def eng_plots_to_make(ds: xr.Dataset):
 
     plots_to_make = {
         "oilVol": {
-            "X": ds["commanded_oil_volume"],
-            "Y": [ds["measured_oil_volume"]],
+            "X": ds["oil_volume_commanded"],
+            "Y": [ds["oil_volume_measured"]],
             "C": ["C0"],
             "cb": None,
         },
@@ -1512,9 +1510,7 @@ def sci_timeseries_plot(
     var : str
         The name of the variable to plot
     depth_var : str
-        The name of the depth variable to use in the plots.
-        Default is depth; other common option will be 'depth_measured', if
-        the CTD was turned off during a deployment
+        The name of the depth variable to use in the plots
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of glider.get_path_glider
@@ -1598,8 +1594,6 @@ def sci_timesection_gt_plot(
         The name of the variable to plot
     depth_var : str
         The name of the depth variable to use in the plots.
-        Default is depth; other common option will be 'depth_measured', if
-        the CTD was turned off during a deployment
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of glider.get_path_glider

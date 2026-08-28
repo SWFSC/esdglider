@@ -11,9 +11,9 @@ import numpy as np
 import xarray as xr
 import yaml
 
-from esdglider import utils # type: ignore
+from esdglider import utils
 import esdglider.profiles as prof
-import pyglider.utils as pgutils # type: ignore
+import pyglider.utils as pgutils
 
 try:
     import dbdreader
@@ -236,7 +236,7 @@ def binary_to_raw_timeseries(
     search="*.[D|E]BD",
     include_source=False,
     fnamesuffix="",
-    depth_var="depth_measured",
+    prof_depth_var : str | None ="depth_measured",
     prof_args: dict | None = None,
 ):
     """
@@ -253,8 +253,10 @@ def binary_to_raw_timeseries(
     variables (from sci_m_present_time). These times are merged,
     and these values are the time index of the output file.
 
-    No values are interpolated.
-    Times before than the yaml file's 'deployment_min_dt' are still dropped.
+    No values are interpolated. If the metadata contains a 'deployment_min_dt' 
+    entry, timestamps before this minimum deployment time are dropped. If the 
+    dataset contains (i.e., the yaml specifies) a variable named 'pressure', 
+    then the depth from the CTD will be calculated and retained as 'depth_ctd'.
 
     Parameters
     ----------
@@ -262,10 +264,11 @@ def binary_to_raw_timeseries(
     include_source : bool
         Boolean indicating if the source file should be included in the raw ds.
         Passed to dbdreader.MULTIDBD.get
-    depth_var : str
+    prof_depth_var : str | None
         Name of the depth variable to use for profile detection in findProfiles.
-        Must be either 'depth_measured' (default, for m_depth) 
-        or 'depth' (for CTD-calculated depth).
+        Must be either 'depth_measured' (for m_depth, default) 
+        or 'depth_ctd' (for CTD-calculated depth).
+        If None, then profiles will not be calcualted
     prof_args : dict, optional
         named optional arguments, for esdglider.profiles.findProfiles
 
@@ -280,6 +283,10 @@ def binary_to_raw_timeseries(
 
     if prof_args is None:
         prof_args = {}
+
+    if not prof_depth_var in ("depth_measured", "depth_ctd"):
+        _log.error("Invalid prof_depth_var: %s", prof_depth_var)
+        raise ValueError("prof_depth_var must be either 'depth_measured' or 'depth_ctd'")
 
     # Read and parse deployment yaml(s)
     deployment = pgutils._get_deployment(deploymentyaml)
@@ -424,9 +431,12 @@ def binary_to_raw_timeseries(
     # screen out-of-range times; these won't convert:
     ds["time"] = ds.time.where((ds.time > 0) & (ds.time < 6.4e9), np.nan)
     ds["time"] = (ds.time * 1e9).astype("datetime64[ns]")
-    if "deployment_min_dt" in deployment["metadata"].keys():
+    # drop bogus times
+    if "deployment_min_dt" in deployment["metadata"]:
         min_dt_str = deployment["metadata"]["deployment_min_dt"]
-        ds = utils.drop_bogus_times(ds, min_dt=min_dt_str, max_drop=True)
+    else:
+        min_dt_str = "1970-01-01"
+    ds = utils.drop_bogus_times(ds, min_dt=min_dt_str, max_drop=True)
     
     # ds = ds.where(ds.time >= np.datetime64(min_dt_str), drop=True)
     ds["time"].attrs = attr
@@ -435,33 +445,37 @@ def binary_to_raw_timeseries(
     ds = ds.dropna("time", how="all")
     _log.info("The raw timeseries has %s data points", ds.time.shape[0])
 
-    # Depth calculation #, and name management
-    # ds = ds.rename({"depth_measured": "depth"})
+    # Calculate depth (ctd); only keep values where pressure is not nan
+    ds = pgutils.get_glider_depth(ds)
+    ds["depth"] = ds["depth"].where(~np.isnan(ds["pressure"]))
+    ds = ds.rename_vars({'depth': 'depth_ctd'})
 
-    # Calculate depth_ctd, profiles and distance_over_ground
-    ds = pgutils.get_glider_depth(ds).rename({"depth": "depth_ctd"})
-    ds = prof.get_fill_profiles(ds, "time", depth_var, prof_args)
+    # Calcualte profiles with chosen variable
+    if prof_depth_var is not None:
+        _log.info("Calculating profiles using variable: %s", prof_depth_var)
+        ds = prof.get_fill_profiles(ds, "time", prof_depth_var, prof_args)
+
+    # Calculate DOG; only keep values where lat/lon is not nan
     ds = pgutils.get_distance_over_ground(ds)
-
-    # Only keep depth_ctd values where pressure is not nan
-    ds["depth_ctd"] = ds["depth_ctd"].where(~np.isnan(ds["pressure"]))
-
-    # Only keep distance_over_ground values where lat/lon is not nan
     ll_good = ~np.isnan(ds.latitude.values + ds.longitude.values)
     ds["distance_over_ground"] = ds["distance_over_ground"].where(ll_good)
 
-    # For consistency with pyglider
+    # Add metadata
     device_data = deployment['glider_devices']
     ds = pgutils.fill_metadata(ds, deployment['metadata'], device_data)
 
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
     _log.info("writing %s", outname)
-    pgutils._save_dataset(
-        ds,
-        outname,
-        deployment,
-        encoding={'time': time_encoding},
-    )
+    ds.to_netcdf(
+        outname, 
+        encoding={'time': time_encoding}
+    ) 
+    # pgutils._save_dataset(
+    #     ds,
+    #     outname,
+    #     deployment,
+    #     encoding={'time': time_encoding},
+    # )
 
     return outname
 
@@ -501,18 +515,10 @@ def raw_to_sci_timeseries(
     ncvar = deployment["netcdf_variables"]
     [ncvar[i]["source"] for i in ncvar]
 
+    # Define variables to keep, and the science variables
     vars_tokeep = [i for i in ncvar.keys() if (i in ds.keys() and i != "time")]
-    vars_tokeep[2:2] = [
-        "depth_measured",
-        "depth_ctd",
-        "profile_index",
-        "profile_direction",
-    ]
-    vars_sci = [i for i in ncvar if "sci" in ncvar[i]["source"] and i != "time"] + [
-        "depth_ctd",
-    ]
+    vars_sci = [i for i in ncvar if "sci" in ncvar[i]["source"] and i != "time"]
 
-    # Use deployment yaml(s) to specify the variables to keep and interpolate
     ds = ds[vars_tokeep].dropna(dim="time", how="all")
 
     # For the science variables: interpolate and run find_gaps

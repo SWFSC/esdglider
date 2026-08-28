@@ -14,6 +14,15 @@ _profile_idx_comment = (
     + "Parameters listed as attributes"
 )
 
+prof_optionsList = {
+    "length": 10,
+    "period": 0,
+    "inversion": 3,
+    "interrupt": 180,
+    "stall": 3,
+    "shake": 20,
+}
+
 
 def findProfiles(stamp: np.ndarray, depth: np.ndarray, **kwargs):
     """
@@ -59,16 +68,10 @@ def findProfiles(stamp: np.ndarray, depth: np.ndarray, **kwargs):
         stamp = (stamp - stamp[0]).astype("timedelta64[s]").astype(float)
 
     # Set default parameter values (did not set type np.timedelta64(0, 'ns') )
-    optionsList = {
-        "length": 10,
-        "period": 0,
-        "inversion": 3,
-        "interrupt": 180,
-        "stall": 3,
-        "shake": 20,
-    }
-    # Filter for relevant kwards, in case any others got passed in
+
+    # Filter for relevant kwargs, in case any others got passed in
     # Added because optionsList is now returned
+    optionsList = prof_optionsList.copy()
     kwargs = {key: value for key, value in kwargs.items() if key in optionsList}
     optionsList.update(kwargs)
     _log.info(
@@ -149,14 +152,22 @@ def findProfiles(stamp: np.ndarray, depth: np.ndarray, **kwargs):
     return profileIndex, profileDirection, optionsList
 
 
-def get_fill_profiles(ds, time_var, depth_var, prof_args = None) -> xr.Dataset:
+def get_fill_profiles(
+        ds: xr.Dataset, 
+        time_var: str, 
+        depth_var: str, 
+        prof_args: dict | None = None
+    ) -> xr.Dataset:
     """
     Calculate profile index and direction values,
     and fill both the values and attributes into ds
 
     ds : `xarray.Dataset`
     time_var, depth_var: Variable names of time and depth in ds
-        Values from these variables passed directly to utils.findProfiles
+        Values from these variables passed directly to findProfiles function
+    prof_args : dict | None
+        Optional named arguments for findProfiles function
+        If None, default values are used
 
     returns Dataset
     """
@@ -173,7 +184,7 @@ def get_fill_profiles(ds, time_var, depth_var, prof_args = None) -> xr.Dataset:
     )
 
 
-    attrs = collections.OrderedDict(
+    idx_attrs = collections.OrderedDict(
         [
             ("long_name", "profile index"),
             ("units", "1"),
@@ -183,9 +194,9 @@ def get_fill_profiles(ds, time_var, depth_var, prof_args = None) -> xr.Dataset:
             ("method_configuration", json.dumps(prof_opt))
         ], 
     )
-    ds["profile_index"] = (time_var, prof_idx, attrs)
+    ds["profile_index"] = (time_var, prof_idx, idx_attrs)
 
-    attrs = collections.OrderedDict(
+    dir_attrs = collections.OrderedDict(
         [
             ("long_name", "glider vertical speed direction"),
             ("units", "1"),
@@ -194,27 +205,37 @@ def get_fill_profiles(ds, time_var, depth_var, prof_args = None) -> xr.Dataset:
             ("method", "esdglider.utils.findProfiles"),
         ],
     )
-    ds["profile_direction"] = (time_var, prof_dir, attrs)
+    ds["profile_direction"] = (time_var, prof_dir, dir_attrs)
 
     _log.debug(f"There are {np.max(ds.profile_index.values)} profiles")
 
     return ds
 
 
-def join_profiles(ds, df, prof_args) -> xr.Dataset:
+def join_profiles(
+        ds: xr.Dataset, 
+        df: pd.DataFrame,  
+        # prof_depth_var: str,
+        # prof_args: dict | None = None, 
+        prof_index_attrs: dict,
+    ) -> xr.Dataset:
     """
-    'Join' profile indexes to a dataset by time,
+    'Join' profile indexes to a dataset by time windows,
     using a summary dataframe with profile start and end times
 
     Parameters
     ----------
     ds : xarray.Dataset
-        Timeseries dataset, onto which to join the profile indices
+        Timeseries dataset, onto which to join the profiles from `df`
     df : pandas.DataFrame
-        Profile summary dataframe; output of calc_profile_summary()
-        Contains the true profile indices
+        Profile summary dataframe; output of `calc_profile_summary()`
+        Defines the desired profiles
+    prof_depth_var : str
+        Variable name of depth used to calculate profile vars
     prof_args : dict
         findProfile arguments, included here for metadata
+    prof_index_attrs : dict
+        Attributes for the profile_index variable.
 
     Returns
     -------
@@ -222,6 +243,10 @@ def join_profiles(ds, df, prof_args) -> xr.Dataset:
         Dataset ds, with new profile_index column
     """
 
+    # if prof_args is None or prof_args == {}:
+    #     prof_args = prof_optionsList.copy()
+
+    # Determine profile windows
     time_values = ds["time"].values
     idx_values = np.full(time_values.shape, np.nan, dtype=np.float64)
     for _, row in df.iterrows():
@@ -233,29 +258,30 @@ def join_profiles(ds, df, prof_args) -> xr.Dataset:
     if "profile_index" in ds:
         abs_idx_diff = abs(ds.profile_index.values - idx_values).max()
         if abs_idx_diff > 1:
-            _log.info(
-                "The absolute value of the old minus new index values is %s",
+            _log.warning(
+                "The absolute value of the old minus new index values is %d",
                 abs_idx_diff,
             )
 
     if any(np.isnan(idx_values)):
         _log.warning(
-            "There are %s nan profile index values",
+            "There are %d nan profile index values",
             np.count_nonzero(np.isnan(idx_values)),
         )
 
-    # Attributes and add to dataset
-    attrs = collections.OrderedDict(
-        [
-            ("long_name", "profile index"),
-            ("units", "1"),
-            ("comment", _profile_idx_comment),
-            ("sources", "time depth"),
-            ("method", "esdglider.utils.findProfiles (run on the raw dataset)"),
-            ("method_configuration", json.dumps(prof_args))
-        ], 
-    )
-    ds["profile_index"] = ("time", idx_values, attrs)
+    # Add attributes to dataset
+    # if prof_index_attrs is None:
+    #     prof_index_attrs = collections.OrderedDict(
+    #         [
+    #             ("long_name", "profile index"),
+    #             ("units", "1"),
+    #             ("comment", _profile_idx_comment),
+    #             ("sources", f"time {prof_depth_var}"),
+    #             ("method", "esdglider.utils.findProfiles"),
+    #             ("method_configuration", json.dumps(prof_args))
+    #         ], 
+    #     )
+    ds["profile_index"] = ("time", idx_values, prof_index_attrs)
 
     return ds
 
@@ -284,7 +310,7 @@ def _profile_agg(group, tas_depth=5):
         profile_direction = group["profile_direction"].mode().iloc[0]
 
     # Get start and end depths - drop in case any depths are nan
-    depth_nona = group["depth"].dropna().values
+    depth_nona = group["depth_p"].dropna().values
     if depth_nona.shape[0] == 0:
         start_depth = np.nan
         end_depth = np.nan
@@ -316,7 +342,7 @@ def _profile_agg(group, tas_depth=5):
         max_lon = lon_nona.max()
 
     # Time at surface
-    surface_pts = group["time"][group["depth"] <= tas_depth]
+    surface_pts = group["time"][group["depth_p"] <= tas_depth]
     if surface_pts.shape[0] == 0:
         tas = 0
     else:
@@ -418,10 +444,10 @@ def calc_profile_summary(ds: xr.Dataset, depth_var: str) -> pd.DataFrame:
     """
     # Minimum columns needed by aggregation function
     _log.info("Calculating profile summary using var %s", depth_var)
-    ds = ds.rename({depth_var: "depth"})
+    ds = ds.rename({depth_var: "depth_p"})
     grouped_columns = [
         "time",
-        "depth",
+        "depth_p",
         "profile_index",
         "distance_over_ground",
         "profile_direction",

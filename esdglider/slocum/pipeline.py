@@ -21,7 +21,8 @@ from esdglider import qartod, utils
 import esdglider.profiles as prof
 from esdglider.plots import scatter_drop_plot
 from esdglider.paths import get_path_yaml_deployment_vars, get_path_flbbcd_calibrations
-from esdglider.slocum.core import binary_to_raw_timeseries, raw_to_sci_timeseries, time_encoding
+from esdglider.slocum import core
+from esdglider.slocum.core import time_encoding
 
 _log = logging.getLogger(__name__)
 
@@ -52,11 +53,13 @@ def generate_timeseries(
     write_raw: bool = True,
     write_eng: bool = True,
     write_sci: bool = True,
-    raw_to_sci: bool = False,
+    # raw_to_sci: bool = False,
     run_qc: bool = False,
     file_info: str | None = None,
     binary_search: str | None = None,
     maxgap: int | None = None,
+    use_m_depth: bool = False,
+    # prof_depth_var: str = "depth",
     prof_args: dict | None = None,
 ) -> dict:
     """
@@ -92,8 +95,13 @@ def generate_timeseries(
     maxgap : int | None, optional
         The maximum allowed gap (in seconds) for interpolation. 
         If None (default), will use the module's maxgap_esd value.
+    use_m_depth : bool, optional
+        Whether to use the glider measured depth (i.e., "depth_measured" 
+        from source "m_depth") for profile calculations.
+        If False (default), will use the depth calculated from 
+        the CTD pressure (i.e., 'depth_ctd').
     prof_args : dict | None, optional
-        named optional arguments, for esdglider.profiles.findProfiles
+        named optional arguments, passed to esdglider.profiles.findProfiles
 
     Returns
     -------
@@ -123,6 +131,13 @@ def generate_timeseries(
 
     if prof_args is None:
         prof_args = {}
+
+    if use_m_depth:
+        prof_depth_var = "depth_measured"
+        other_depth_var = "depth_ctd"
+    else:
+        prof_depth_var = "depth_ctd"
+        other_depth_var = "depth_measured"
 
     # # Dictionary with info needed by post-processing functions
     # postproc_info = {
@@ -166,7 +181,7 @@ def generate_timeseries(
             raw_yaml_list.append(get_path_yaml_deployment_vars("raw-solocam"))
         _log.debug("Raw YAML list: %s", raw_yaml_list)
 
-        outname_tsraw = binary_to_raw_timeseries(
+        outname_tsraw = core.binary_to_raw_timeseries(
             glider_paths["binarydir"],
             glider_paths["cacdir"],
             rawdir,
@@ -174,68 +189,92 @@ def generate_timeseries(
             search=binary_search,
             include_source=True,
             fnamesuffix=f"-{mode}-raw",
+            prof_depth_var=prof_depth_var,
             prof_args=prof_args,
         )
 
         # Run postprocessing
         _log.info(f"Post-processing raw timeseries: {outname_tsraw}")
         tsraw = xr.load_dataset(outname_tsraw)
+
+        tsraw = tsraw.reset_coords(["latitude", "longitude"]) # for ease
+
         new_start = [
-            "depth_measured",
-            "depth_ctd",
             "profile_index",
             "profile_direction",
+            "depth_measured",
+            "depth_ctd",
         ]
         tsraw = utils.data_var_reorder(tsraw, new_start)
+
         tsraw = postproc_attrs(
             tsraw, 
             mode, 
             file_info=file_info,
         )
-        pgutils._save_dataset(
-            tsraw,
+        tsraw.to_netcdf(
             outname_tsraw, 
-            deployment, 
-            mode='w',
-            encoding={'time': time_encoding},
-        )
+            mode="w", 
+            encoding={'time': time_encoding}
+        ) 
+        
+        # pgutils._save_dataset(
+        #     tsraw,
+        #     outname_tsraw, 
+        #     deployment, 
+        #     mode='w',
+        #     encoding={'time': time_encoding},
+        # )
 
-        # Save profile summary
+        # Save profile summary, get profile index attributes
         prof_summ_path = glider_paths["profsummpath"]
         _log.info("Writing profile summary CSV to %s", prof_summ_path)
-        prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
+        prof_summ = prof.calc_profile_summary(tsraw, prof_depth_var)
         prof_summ.to_csv(prof_summ_path, index=False)
         num_dives = np.count_nonzero(prof_summ.profile_direction.values == 1)
         _log.info("Deployment %s performed %s dives", deployment_name, num_dives)
+
+        prof_index_attrs = tsraw["profile_index"].attrs
 
         # # Write deployment_start and deployment_end to postproc_info
         # deployment_start = tsraw.attrs["deployment_start"]
         # deployment_end = tsraw.attrs["deployment_end"]
 
-        # Brief profile and depth sanity checks
+        # Profile and depth sanity checks
         _log.info("raw timeseries checks")
+        _log.info("Running profile checks on profile depth var, '%s'", prof_depth_var)
         prof.check_profiles(prof_summ)
+
+        _log.info("Running profile checks on other depth var, '%s'", other_depth_var)
+        prof_summ2 = prof.calc_profile_summary(tsraw, other_depth_var)
+        prof.check_profiles(prof_summ2)
+
         utils.check_depth(tsraw["depth_measured"], tsraw["depth_ctd"])
 
-
     else:
-        _log.info("Not writing raw nc")
+        _log.info("Not writing raw nc. Looking for pre-existing files")
+        # Get profile summary
+        prof_summ_path = glider_paths["profsummpath"]
+        try: 
+            prof_summ = pd.read_csv(
+                glider_paths["profsummpath"],
+                parse_dates=["start_time", "end_time"],
+            )
+        except FileNotFoundError:
+            _log.error("Profile summary CSV file not found: %s", prof_summ_path)
+            raise FileNotFoundError(f"File not found: {prof_summ_path}")
+
+        # Get profile index attributes
         try:
             with xr.open_dataset(outname_tsraw) as tsraw:
                 _log.debug("Opened existing raw nc file: %s", outname_tsraw)
-                # # tsraw = xr.load_dataset(outname_tsraw)
+                prof_index_attrs = tsraw["profile_index"].attrs
+                # tsraw = xr.load_dataset(outname_tsraw)
                 # deployment_start = tsraw.attrs["deployment_start"]
                 # deployment_end = tsraw.attrs["deployment_end"]
         except FileNotFoundError:
-            _log.debug("Not writing raw nc file, and file could not be found")
-            if write_sci or write_eng:
-                _log.error(
-                    "The raw nc file (%s) does not exist, "
-                    + "and thus sci and eng timeseries cannot be generated.", 
-                    outname_tsraw
-                )
-                return {}
-
+            _log.error("The raw nc file not found: %s", outname_tsraw)
+            raise FileNotFoundError(f"File not found: {outname_tsraw}")
     # --------------------------------------------
     # Eng Timeseries
 
@@ -260,15 +299,18 @@ def generate_timeseries(
 
         _log.info(f"Post-processing engineering timeseries: {outname_tseng}")
         tseng = xr.load_dataset(outname_tseng)
-        tseng = postproc_ts_eng(
+        tseng = postproc_tsl1_eng(
             tseng, 
             mode, 
             maxgap, 
             # deployment_start=deployment_start,
             # deployment_end=deployment_end,
-            profile_summary_path=glider_paths["profsummpath"],
             file_info=file_info,
-            prof_args=prof_args
+            prof_summ=prof_summ,
+            # prof_summ_path=glider_paths["profsummpath"],
+            prof_index_attrs=prof_index_attrs,
+            # prof_depth_var=prof_depth_var,
+            # prof_args=prof_args
         )
         pgutils._save_dataset(
             tseng,
@@ -288,7 +330,18 @@ def generate_timeseries(
         utils.remove_file(outname_gr5m)
         utils.makedirs_pass(tsdir)
 
-        if not raw_to_sci: 
+        if use_m_depth: 
+            _log.info("Generating science timeseries, via raw_to_sci_timeseries")
+            outname_tssci = core.raw_to_sci_timeseries(
+                outname_tsraw,
+                tsdir,
+                deploymentyaml,
+                fnamesuffix=f"-{mode}-sci",
+                maxgap=maxgap_esd,
+            )
+            drop_vars = None
+
+        else:            
             time_base_var = "sci_water_pressure"
             _log.info(
                 "Generating science timeseries, "
@@ -308,29 +361,22 @@ def generate_timeseries(
             )
             drop_vars = ["pressure"]
 
-        else:
-            _log.info("Generating science timeseries, via raw_to_sci_timeseries")
-            outname_tssci = raw_to_sci_timeseries(
-                outname_tsraw,
-                tsdir,
-                deploymentyaml,
-                fnamesuffix=f"-{mode}-sci",
-                maxgap=maxgap_esd,
-            )
-            drop_vars = None
-
         _log.info(f"Post-processing science timeseries: {outname_tssci}")
         tssci = xr.load_dataset(outname_tssci)
-        tssci = postproc_ts_sci(
+        tssci = postproc_tsl1_sci(
             tssci, 
             mode, 
             maxgap, 
             # deployment_start=deployment_start,
             # deployment_end=deployment_end,
-            profile_summary_path=glider_paths["profsummpath"],
             file_info=file_info,
             drop_vars=drop_vars, 
-            prof_args=prof_args
+            use_m_depth=use_m_depth,
+            prof_summ=prof_summ,
+            prof_index_attrs=prof_index_attrs,
+            # prof_summ_path=glider_paths["profsummpath"],
+            # prof_depth_var=prof_depth_var,
+            # prof_args=prof_args
         )
         pgutils._save_dataset(
             tssci,
@@ -377,9 +423,6 @@ def generate_timeseries(
             )
         else:
             _log.info("The eng and sci timeseries have the same functional profiles")
-
-        # Depth check, across the eng/sci datasets
-        utils.check_depth(tseng["depth"], tssci["depth"])
 
     else:
         _log.info("Not writing timeseries nc")
@@ -434,8 +477,9 @@ def postproc_attrs(
         ds, with updated attributes
     """
 
-    # Rerun pyglider metadata functions, now that drop_bogus has been run
-    # metadata and device info have already been added
+    # Rerun pyglider metadata functions, now that drop_bogus has been run,
+    # for the sake of times
+    # metadata and device info have already been added, so not needed here
     ds = pgutils.fill_metadata(ds, {}, {})
 
     # # When used within pipelines, this code makes sure the values
@@ -461,7 +505,7 @@ def postproc_attrs(
                 time_str,
             )
     else:
-        _log.warning(
+        _log.info(
             "There is no deployment_min_dt attribute in the dataset. "
             + "Using the first time value for the ID."
         )
@@ -469,7 +513,7 @@ def postproc_attrs(
         
     ds.attrs["id"] = f"{ds.attrs['glider_name']}-{min_dt_str}"
 
-    # Other ESD updates, or fixes, of pyglider attributes
+    # Other ESD-specific updates
     # ds.attrs["id"] = utils.get_file_id_esd(ds)
     ds.attrs["title"] = ds.attrs["id"]
     ds.attrs["license"] = (
@@ -497,22 +541,26 @@ def postproc_attrs(
     return ds
 
 
-def postproc_ts_l1(
+def postproc_tsl1(
     ds: xr.Dataset,
     mode: str,
     maxgap: int, 
     *, 
     # deployment_start: str | None = None,
     # deployment_end: str | None = None,
-    profile_summary_path: str | None = None,
     file_info: str | None = None,
     drop_vars: list | None = None,
-    prof_args: dict | None = None,
+    prof_summ: pd.DataFrame | None = None,
+    prof_index_attrs: dict | None = None,
 ) -> xr.Dataset:
     """
-    Post-processing steps shared by both the science and engineering timeseries
+    Post-processing steps shared by both the L1 timeseris: 
+    science and engineering
 
-    Returns the ds Dataset with updated values and attributes
+    Returns the Dataset ds with updated values and attributes
+
+    If prof_summ or prof_index_attrs is None, then profiles will not be joined
+
 
     Parameters
     ----------    
@@ -522,15 +570,15 @@ def postproc_ts_l1(
         Deployment mode, either 'rt' or 'delayed'
     maxgap : int
         The maximum allowed gap (in seconds) for interpolation.
-    profile_summary_path : str | None, optional
-        Path to the profile summary CSV file, by default None.
     file_info : str | None, optional
         Information about the processing file, by default None.
     drop_vars : list | None, optional
         List of variables for which to drop the whole timestamp 
-        if they contain NaN values, by default None.
-    prof_args : dict | None, optional
-        Additional keyword arguments passed to profile functions
+        if they contain NaN values, by default None
+    prof_summ : pd.DataFrame | None, optional
+        Profile summary DataFrame, by default None
+    prof_index_attrs : dict | None, optional
+        Profile index attributes, by default None
 
     Returns
     -------
@@ -571,39 +619,69 @@ def postproc_ts_l1(
                 _log.debug(f"depth values: {ds.depth.values[var_nan]}")
                 if any(ds.depth.values[var_nan] >= 5):
                     _log.warning(
-                        f"Some nan {var} values that will be "
+                        "Some nan %s values that will be "
                         + "dropped have a depth >=5",
+                        var
                     )
                 ds = ds.where(~np.isnan(ds[var]), drop=True)
-                if (num_orig - len(ds.time)) > 0:
-                    _log.info(f"Dropped {num_orig - len(ds.time)} nan {var} values")
+                num_dropped_values = num_orig - len(ds.time)
+                if num_dropped_values > 0:
+                    _log.info("Dropped %d nan %s values", num_dropped_values, var)
 
     # VALUES: RECALCULATE
     # After dropping bogus timestamps, recalculate distance over ground
     ds = pgutils.get_distance_over_ground(ds)
 
     # PROFILES
-    if prof_args is None:
-        prof_args = {}
-    # This is required because we need profile_direction for sci/eng
-    ds = prof.get_fill_profiles(ds, "time", "depth", prof_args)
+    # Update the profile indices from the profile summary CSV file
+    # The ds already has profile_direction
+    # if prof_summ_path is not None:
+    #     if prof_depth_var is None: # or prof_depth_var not in ds:
+    #         _log.error("Invalid prof_depth_var value: %s", prof_depth_var)
+    #         raise ValueError(
+    #             "if prof_summ_path is provided, prof_depth_var must not be None"
+    #         )
+        
+    #     # Join profiles generated using raw timeseries
+    #     _log.info(
+    #         "Reading profile summary CSV, "
+    #         + "and joining profiles from raw dataset by timestamps"
+    #     )
+    #     prof_summ = pd.read_csv(
+    #         prof_summ_path,
+    #         parse_dates=["start_time", "end_time"],
+    #     )
+    #     ds = prof.join_profiles(ds, prof_summ, prof_depth_var, prof_args)
+    #     # Checks done in respective postproc functions
 
-    # If provided, then update the profile indices by joining raw profiles
-    if profile_summary_path is not None:
+    if prof_summ is not None and prof_index_attrs is not None:
+        # if prof_depth_var is None: # or prof_depth_var not in ds:
+        #     _log.error("Invalid prof_depth_var value: %s", prof_depth_var)
+        #     raise ValueError(
+        #         "if prof_summ_path is provided, prof_depth_var must not be None"
+        #     )
+        
+        # prof_index_attrs = collections.OrderedDict(
+        #     [
+        #         ("long_name", "profile index"),
+        #         ("units", "1"),
+        #         ("comment", _profile_idx_comment),
+        #         ("sources", f"raw dataset, time {prof_depth_var}"),
+        #         ("method", "esdglider.utils.findProfiles"),
+        #         ("method_configuration", json.dumps(prof_args))
+        #     ], 
+        # )
+
         # Join profiles generated using raw timeseries
-        prof_summ = pd.read_csv(
-            profile_summary_path,
-            parse_dates=["start_time", "end_time"],
-        )
-        ds = prof.join_profiles(ds, prof_summ, prof_args)
-        depth_var = "depth"
-    else:
-        # Assuming the raw dataset
-        depth_var = "depth_measured"
+        _log.info("Join profiles, from raw timeseries, by time windows")
+        prof_index_attrs["sources"] += ", from raw dataset"
+        ds = prof.join_profiles(ds, prof_summ, prof_index_attrs)
 
-    # Check profiles
-    prof_summ = prof.calc_profile_summary(ds, depth_var)
-    prof.check_profiles(prof_summ)
+        # prof_summ_ts = prof.calc_profile_summary(ds, "depth")
+        # prof.check_profiles(prof_summ_ts)
+        
+    else:
+        _log.debug("Profile info not provided - skipping profiles")
 
     # ATTRIBUTES
     ds = postproc_attrs(
@@ -624,21 +702,19 @@ def postproc_ts_l1(
     return ds
 
 
-def postproc_ts_eng(
+def postproc_tsl1_eng(
     ds: xr.Dataset,
     mode: str, 
     maxgap: int, 
     *, 
     # deployment_start: str | None = None,
     # deployment_end: str | None = None,
-    profile_summary_path: str | None = None,
     file_info: str | None = None,
-    prof_args: dict | None = None,
+    prof_summ: pd.DataFrame | None = None,
+    prof_index_attrs: dict | None = None,
 ) -> xr.Dataset:
     """
     Engineering timeseries-specific post-processing, including:
-        - Removing CTD vars
-        - Calculating profiles using depth_measured
         - Updating attributes
 
     Parameters
@@ -649,12 +725,12 @@ def postproc_ts_eng(
         Deployment mode, either 'rt' or 'delayed'
     maxgap : int
         The maximum allowed gap (in seconds) for interpolation.
-    profile_summary_path : str | None, optional
-        Path to the profile summary CSV file, by default None.
     file_info : str | None, optional
-        Information about the processing file, by default None.
-    prof_args : dict | None, optional
-        Additional keyword arguments passed to profile functions
+        Information about the processing file, by default None
+    prof_summ : pd.DataFrame | None, optional
+        Profile summary DataFrame, by default None
+    prof_index_attrs : dict | None, optional
+        Profile index attributes, by default None
 
     Returns
     -------
@@ -662,31 +738,41 @@ def postproc_ts_eng(
         post-processed engineering timeseries dataset
     """
 
-    _log.debug(f"begin eng postproc: ds has {len(ds.time)} values")
+    _log.debug("begin eng postproc: ds has %d values", len(ds.time))
 
-    # With depth (CTD) gone, rename depth_measured
-    if "depth_measured" in ds:
+    # Rename to depth
+    try:
         ds = ds.rename({"depth_measured": "depth"})
+    except ValueError:
+        _log.error("depth_measured not found in engineering dataset")
+        raise ValueError("depth_measured not found in engineering dataset")
+
+    # # Get profile_direction from m_depth
+    # ds = prof.get_fill_profiles(ds, "time", "depth_measured", prof_args)
+    # ds = ds.drop_vars("profile_index")
 
     # General updates
-    ds = postproc_ts_l1(
+    ds = postproc_tsl1(
         ds=ds, 
         mode=mode, 
         maxgap=maxgap, 
         # deployment_start=deployment_start,
         # deployment_end=deployment_end,
-        profile_summary_path=profile_summary_path,
         file_info=file_info,
-        prof_args=prof_args
+        prof_summ=prof_summ,
+        prof_index_attrs=prof_index_attrs,
     )
 
-    # Reorder data variables
-    # new_start = ["latitude", "longitude", "depth", "profile_index"]
-    new_start = ["depth", "profile_index", "profile_direction"]
-    ds = utils.data_var_reorder(ds, new_start)
+    # # Check profiles, always using depth_measured
+    # prof_summ_ts = prof.calc_profile_summary(ds, "depth_measured")
+    # prof.check_profiles(prof_summ_ts)
+
+    # # Reorder data variables
+    # new_start = ["profile_index", "profile_direction", "depth_measured"]
+    # ds = utils.data_var_reorder(ds, new_start)
 
     # Update eng-specific attributes
-    eng_comment = "Engineering-only timeseries. "
+    eng_comment = "Engineering-only timeseries"
     ds.attrs["comment"] = utils.append_string(ds.attrs["comment"], eng_comment)
     # if not ds.attrs["comment"].strip():
     #     ds.attrs["comment"] = eng_comment
@@ -694,27 +780,27 @@ def postproc_ts_eng(
     #     ds.attrs["comment"] += ". " + eng_comment
     # ds.attrs["processing_level"] += " All values have been interpolated via linear fill"
 
-    _log.debug(f"end eng postproc: ds has {len(ds.time)} values")
+    _log.debug("end eng postproc: ds has %d values", len(ds.time))
 
     return ds
 
 
-def postproc_ts_sci(
+def postproc_tsl1_sci(
         ds: xr.Dataset, 
         mode: str,
         maxgap: int, 
         *,
         # deployment_start: str | None = None,
         # deployment_end: str | None = None,
-        profile_summary_path: str | None = None,
         file_info: str | None = None,
         drop_vars: list | None = None,
-        prof_args: dict | None = None,
+        use_m_depth: bool = False,
+        prof_summ: pd.DataFrame | None = None,
+        prof_index_attrs: dict | None = None,
     ) -> xr.Dataset:
     """
     Science timeseries-specific post-processing, including:
         - remove bogus times. Eg, 1970, or before deployment start date
-        - Calculating profiles using depth (derived from ctd's pressure)
 
     Parameters
     ----------
@@ -724,15 +810,18 @@ def postproc_ts_sci(
         Deployment mode, either 'rt' or 'delayed'
     maxgap : int
         The maximum allowed gap (in seconds) for interpolation.
-    profile_summary_path : str | None, optional
-        Path to the profile summary CSV file, by default None.
     file_info : str | None, optional
         Information about the processing file, by default None.
     drop_vars : list | None, optional
         List of variables for which to drop the whole timestamp 
-        if they contain NaN values, by default None.
-    prof_args : dict | None, optional
-        Additional keyword arguments passed to profile functions
+        if they contain NaN values, by default None
+    use_m_depth : bool, optional
+        If True, then tries to rename the variable 'depth_measured'
+        to 'depth'. Passed directly from generate_timeseries
+    prof_summ : pd.DataFrame | None, optional
+        Profile summary DataFrame, by default None
+    prof_index_attrs : dict | None, optional
+        Profile index attributes, by default None
 
     Returns
     -------
@@ -741,11 +830,24 @@ def postproc_ts_sci(
     """
 
     # ds = xr.load_dataset(ds_file)
-    _log.debug("begin sci postproc: ds has %s values", len(ds.time))
+    _log.debug("begin sci postproc: ds has %d values", len(ds.time))
 
-    # In case ds is coming from raw_to_timeseries
-    if "depth_ctd" in ds:
-        ds = ds.rename({"depth_ctd": "depth"})
+    # # Get profile_direction from specified depth field
+    # if prof_depth_var is None:
+    #     raise ValueError("prof_depth_var must be specified for profile processing")
+
+    # If using measured depth, rename it to 'depth' for consistency
+    try:
+        if use_m_depth:
+            ds = ds.rename({"depth_measured": "depth"})
+    except KeyError:
+        _log.warning(
+            "depth_measured not found in dataset, cannot rename to depth. "
+            + "This function will likely fail."
+        )
+
+    ds = prof.get_fill_profiles(ds, "time", "depth")
+    ds = ds.drop_vars("profile_index")
 
     # General updates
     # Drop rows in science where pressure is nan, because:
@@ -753,42 +855,39 @@ def postproc_ts_sci(
     #   2) pyglider does a 'zero screen'
     #   3) nan pressure values all appear to be at the surface,
     #       and often have weird associated values
-    ds = postproc_ts_l1(
+    ds = postproc_tsl1(
         ds=ds,
         mode=mode,
         maxgap=maxgap,
         # deployment_start=deployment_start,
         # deployment_end=deployment_end,
-        profile_summary_path=profile_summary_path,
         file_info=file_info,
         drop_vars=drop_vars,
-        prof_args=prof_args
-    )
+        prof_summ=prof_summ,
+        prof_index_attrs=prof_index_attrs,
+        # prof_summ_path=prof_summ_path,
+        # prof_depth_var=prof_depth_var,
+        # prof_args=prof_args
+    )    
 
-    # # Science-specific attribute updates
-    # ds.attrs["processing_level"] = (
-    #     "Values have been interpolated via linear fill, "
-    #     + f"with a maxgap of {maxgap} seconds. "
-    #     + "Minimal data screening. "
-    # )
+    # # Check profiles, using the specified variable
+    # prof_summ_ts = prof.calc_profile_summary(ds, prof_depth_var)
+    # prof.check_profiles(prof_summ_ts)
 
-    # Reorder data variables
-    new_start = [
-        # "latitude",
-        # "longitude",
-        # "depth",
-        "profile_index",
-        "profile_direction",
-        "conductivity",
-        "temperature",
-        "pressure",
-        "salinity",
-        "density",
-        "potential_temperature",
-        "potential_density",
-    ]
-    new_start[2:2] = sorted([i for i in ds if "depth" in i])  # type: ignore
-    ds = utils.data_var_reorder(ds, new_start)
+    # # Reorder data variables. lat/lon/depth are now coordinates
+    # new_start = [
+    #     "profile_index",
+    #     "profile_direction",
+    #     "conductivity",
+    #     "temperature",
+    #     "pressure",
+    #     "salinity",
+    #     "density",
+    #     "potential_density",
+    #     "potential_temperature",
+    # ]
+    # # new_start[2:2] = sorted([i for i in ds if "depth" in i]) 
+    # ds = utils.data_var_reorder(ds, new_start)
 
     _log.debug("end sci postproc: ds has %s values", len(ds.time))
 
@@ -798,8 +897,8 @@ def postproc_ts_sci(
 def generate_gridded(
     glider_paths: dict,
     write_gridded: bool = True,
-    use_measured_depth: bool = False,
-    raw_to_sci: bool = False,
+    # use_m_depth: bool = False,
+    # raw_to_sci: bool = False,
 ) -> dict:
     """
     Generate gridded netCDF files for the slocum glider deployment.
@@ -810,19 +909,19 @@ def generate_gridded(
         A dictionary containing paths relevant to the glider deployment.
     write_gridded : bool, optional
         Whether to write gridded netCDF files, by default True.
-    use_measured_depth : bool, optional
+    use_m_depth : bool, optional
         If True, grid using the glider's measured depth ('depth_measured')
         instead of the CTD-calculated 'depth'. Default is False.
     raw_to_sci : bool, optional
-        Deprecated fallback alias for `use_measured_depth`.
+        Deprecated fallback alias for `use_m_depth`.
     
     Returns
     -------
     dict
         A dictionary containing the paths to the gridded netCDF files.
     """
-    if raw_to_sci:
-        use_measured_depth = True
+    # if raw_to_sci:
+    #     use_m_depth = True
     
     outname_tssci = glider_paths["tsscipath"]
     if bin_size != [1, 5]:
@@ -836,27 +935,27 @@ def generate_gridded(
             raise FileNotFoundError(f"Could not find {outname_tssci}")
         utils.rmtree(glider_paths["griddir"])
 
-        if use_measured_depth:
-            _log.info("Gridding science data using glider measured depth (depth_measured)")
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_file = os.path.join(temp_dir, os.path.basename(outname_tssci))
-                _log.debug("Creating temporary science dataset with measured depth as depth: %s", temp_file)
+        # if use_m_depth:
+        #     _log.info("Gridding science data using glider measured depth (depth_measured)")
+        #     with tempfile.TemporaryDirectory() as temp_dir:
+        #         temp_file = os.path.join(temp_dir, os.path.basename(outname_tssci))
+        #         _log.debug("Creating temporary science dataset with measured depth as depth: %s", temp_file)
                 
-                with xr.open_dataset(outname_tssci) as ds_sci:
-                    ds_sci_tmp = (
-                        ds_sci.drop_vars(["depth"])
-                        .rename({"depth_measured": "depth"})
-                    )
-                    # Add a comment that the bins were created using depth_measured
-                    tmp_comment = "Glider data was gridded using the glider measured depth (m_depth)"
-                    ds_sci_tmp.attrs["comment"] = utils.append_string(
-                        ds_sci_tmp.attrs.get("comment", ""), tmp_comment)
-                    ds_sci_tmp.to_netcdf(temp_file, encoding={'time': time_encoding})
+        #         with xr.open_dataset(outname_tssci) as ds_sci:
+        #             ds_sci_tmp = (
+        #                 ds_sci.drop_vars(["depth"])
+        #                 .rename({"depth_measured": "depth"})
+        #             )
+        #             # Add a comment that the bins were created using depth_measured
+        #             tmp_comment = "Glider data was gridded using the glider measured depth (depth_measured)"
+        #             ds_sci_tmp.attrs["comment"] = utils.append_string(
+        #                 ds_sci_tmp.attrs.get("comment", ""), tmp_comment)
+        #             ds_sci_tmp.to_netcdf(temp_file, encoding={'time': time_encoding})
                 
-                outnames = _run_pyglider_gridding(temp_file, glider_paths)
-        else:
-            _log.info("Gridding science data using CTD-calculated depth")
-            outnames = _run_pyglider_gridding(outname_tssci, glider_paths)
+        #         outnames = _run_pyglider_gridding(temp_file, glider_paths)
+        # else:
+        _log.info("Gridding science data using CTD-calculated depth")
+        outnames = _run_pyglider_gridding(outname_tssci, glider_paths)
         _log.debug("gridded outnames %s", "; ".join(outnames))
 
     else:
@@ -910,9 +1009,11 @@ def drop_ts_ranges(
     ds : xr.Dataset,
     drop_list : list[tuple[str, str]],
     dstype : str,
+    *, 
     plotdir: str | None = None,
-    profsummdir: str | None = None,
     outname: str | None = None,
+    profsummdir: str | None = None,
+    # prof_depth_var : dict | None = None,
     prof_args : dict | None = None,
 ) -> xr.Dataset:
     """
@@ -946,11 +1047,11 @@ def drop_ts_ranges(
     plotdir : str | None (default None)
         Path to plot directory; passed to plots.scatter_drop_plot
         If None, then no plots are saved
+    outname : str | None (default None)
+        If not None, then ds is written to this path
     profsummdir : str | None (default None)
         Path to profile summary CSV. Ignored if dstype is raw.
         If not None and dstype is eng or sci, will join profiles
-    outname : str | None (default None)
-        If not None, then ds is written to this path
     prof_args : dict | None, optional
         named optional arguments, for esdglider.profiles.findProfiles
 
@@ -960,9 +1061,12 @@ def drop_ts_ranges(
         Input ds, with points within specified time ranges dropped.
         Also saves 'dropped' scatter plots to plotdir, if specified.
     """
+    
+    if prof_args is None or prof_args == {}:
+        prof_args = prof.prof_optionsList.copy()
 
     _log.info(
-        "There are %s points in the original %s dataset",
+        "There are %d points in the original %s dataset",
         len(ds.time),
         dstype,
     )
@@ -1269,6 +1373,7 @@ def complete_profile_correction(
         tseng: xr.Dataset, 
         tssci: xr.Dataset, 
         glider_paths: dict, 
+        prof_depth_var: str,
         prof_args: dict | None = None
     ):
     """
@@ -1291,6 +1396,8 @@ def complete_profile_correction(
         Science timeseries dataset
     glider_paths : dict
         Dictionary containing glider-related paths.
+    prof_depth_var : str
+        Name of the depth variable used to calculate profiles
     prof_args : dict, optional
         Additional keyword arguments passed to profile functions.
 
@@ -1303,7 +1410,7 @@ def complete_profile_correction(
         prof_args = {}
 
     # Finish raw dataset work
-    prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
+    prof_summ = prof.calc_profile_summary(tsraw, prof_depth_var)
     prof_summ.to_csv(glider_paths["profsummpath"], index=False)
     prof.check_profiles(prof_summ)
     tsraw.to_netcdf(
@@ -1313,14 +1420,14 @@ def complete_profile_correction(
     _log.info("Wrote new profile summary to %s", glider_paths["profsummpath"])
 
     # Apply new profiles to sci and eng
-    tseng = prof.join_profiles(tseng, prof_summ, prof_args)
+    tseng = prof.join_profiles(tseng, prof_summ, prof_depth_var, prof_args)
     tseng.to_netcdf(
         glider_paths["tsengpath"], 
         encoding={'time': time_encoding}
     )
     _log.info("Wrote eng timeseries with new profiles to %s", glider_paths["tsengpath"])
 
-    tssci = prof.join_profiles(tssci, prof_summ, prof_args)
+    tssci = prof.join_profiles(tssci, prof_summ, prof_depth_var, prof_args)
     tssci.to_netcdf(
         glider_paths["tsscipath"], 
         encoding={'time': time_encoding}
