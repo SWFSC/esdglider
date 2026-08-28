@@ -197,7 +197,7 @@ def generate_timeseries(
         _log.info(f"Post-processing raw timeseries: {outname_tsraw}")
         tsraw = xr.load_dataset(outname_tsraw)
 
-        tsraw = tsraw.reset_coords(["latitude", "longitude"]) # for ease
+        tsraw = tsraw.reset_coords(["latitude", "longitude"])
 
         new_start = [
             "profile_index",
@@ -1005,126 +1005,6 @@ def _run_pyglider_gridding(inname, glider_paths) -> dict:
     return outnames
 
 
-def drop_ts_ranges(
-    ds : xr.Dataset,
-    drop_list : list[tuple[str, str]],
-    dstype : str,
-    *, 
-    plotdir: str | None = None,
-    outname: str | None = None,
-    profsummdir: str | None = None,
-    # prof_depth_var : dict | None = None,
-    prof_args : dict | None = None,
-) -> xr.Dataset:
-    """
-    Drop dataset points that are within given time ranges,
-    and perform relevant post-processing.
-
-    This function is used within processing scripts, if a certain time range
-    has been decided to exclude during review
-
-    Post-processing includes:
-    1) Plotting the points that were dropped, if plotdir is not None
-    2) Rerunning pgutils.get_distance_over_ground
-    3a) Writing new profiles and calculating new profile summary,
-        if dstype is "raw", or
-    3b) Reading in profile summary from profsummdir, and using summary
-        to 'join' profile info to ds using utils.join_profiles
-    4) Running utils.check_profiles
-    5) Writing to netcdf file, if outnname is not None
-
-    Parameters
-    ----------
-    ds : xarray Dataset
-        Timeseries dataset
-    drop_list : list of string tuples
-        A list of string tuples of time ranges to drop from ds.
-        These strings will be processed by np.datetime64()
-        If dropping a single time, use this value for both values of the tuple
-    dstype : str
-        String indicating if ds is a raw, eng, or sci timeseries;
-        passed to plots.scatter_drop_plot
-    plotdir : str | None (default None)
-        Path to plot directory; passed to plots.scatter_drop_plot
-        If None, then no plots are saved
-    outname : str | None (default None)
-        If not None, then ds is written to this path
-    profsummdir : str | None (default None)
-        Path to profile summary CSV. Ignored if dstype is raw.
-        If not None and dstype is eng or sci, will join profiles
-    prof_args : dict | None, optional
-        named optional arguments, for esdglider.profiles.findProfiles
-
-    Returns
-    -------
-    xarray Dataset
-        Input ds, with points within specified time ranges dropped.
-        Also saves 'dropped' scatter plots to plotdir, if specified.
-    """
-    
-    if prof_args is None or prof_args == {}:
-        prof_args = prof.prof_optionsList.copy()
-
-    _log.info(
-        "There are %d points in the original %s dataset",
-        len(ds.time),
-        dstype,
-    )
-
-    # Create the mask framework
-    todrop = np.full(len(ds.time), False)
-
-    # For each tuple in drop_list, update todrop array
-    for i in drop_list:
-        i_todrop = (ds.time.values >= np.datetime64(i[0])) & (
-            ds.time.values <= np.datetime64(i[1])
-        )
-        todrop = todrop | i_todrop
-        num_todrop = np.count_nonzero(i_todrop)
-        _log.info(f"Dropping {num_todrop} points between {i[0]} and {i[1]}")
-
-    # Make plot
-    if plotdir is not None:
-        scatter_drop_plot(ds, todrop, dstype, plotdir)
-
-    # Drop time(s)
-    todrop_mask = xr.DataArray(todrop, dims="time", coords={"time": ds.time})
-    ds = ds.where(~todrop_mask, drop=True)
-    _log.info(f"There are now {len(ds.time)} points in the dataset")
-
-    # Distance over ground, if relevant
-    if "distance_over_ground" in ds:
-        _log.info("Calculating new distance over ground")
-        ds = pgutils.get_distance_over_ground(ds)
-
-    # Profiles
-    if dstype == "raw" and profsummdir is not None:
-        _log.info("Calculating new profiles for raw dataset")
-        tsraw = prof.get_fill_profiles(ds, "time", "depth_measured", prof_args)
-        prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
-        prof_summ.to_csv(profsummdir, index=False)
-        prof.check_profiles(prof_summ)
-    elif profsummdir is not None:
-        _log.info("Join-calculating new profiles for eng/sci dataset")
-        prof_summ_raw = pd.read_csv(profsummdir, parse_dates=["start_time", "end_time"])
-        prof.join_profiles(ds, prof_summ_raw, prof_args)
-        prof.check_profiles(prof.calc_profile_summary(ds, "depth"))
-    else:
-        _log.info("No profile work")
-
-    # Write to netcdf
-    if outname is not None:
-        _log.info(f"Writing dataset to {outname}")
-        ds.to_netcdf(
-            outname,
-            mode='w',
-            encoding={'time': time_encoding},
-        )
-
-    return ds
-
-
-
 def check_flbbcd_autoexec(
         binarydir, 
         cacdir, 
@@ -1368,13 +1248,143 @@ def correct_cdom_raw_sci(glider_paths: dict):
     return outname_tsraw, outname_tssci
 
 
+def drop_ts_ranges(
+    ds : xr.Dataset,
+    drop_list : list[tuple[str, str]],
+    dstype : str,
+    *, 
+    plotdir: str | None = None,    
+    # prof_summ: pd.DataFrame | None = None,
+    # prof_index_attrs: dict | None = None,
+    # outname: str | None = None,
+    # profsummdir: str | None = None,
+    # # prof_depth_var : dict | None = None,
+    # prof_args : dict | None = None,
+) -> xr.Dataset:
+    """
+    Drop dataset points that are within given time ranges,
+    and perform relevant post-processing.
+
+    This function is used within processing scripts, if a certain time range
+    has been decided to exclude during review
+
+    Post-processing includes:
+    1) Plotting the points that were dropped, if plotdir is not None
+    2) Rerunning pgutils.get_distance_over_ground
+    3a) Writing new profiles and calculating new profile summary,
+        if dstype is "raw", or
+    3b) Reading in profile summary from profsummdir, and using summary
+        to 'join' profile info to ds using utils.join_profiles
+    4) Running utils.check_profiles
+    5) Writing to netcdf file, if outnname is not None
+
+    Parameters
+    ----------
+    ds : xarray Dataset
+        Timeseries dataset
+    drop_list : list of string tuples
+        A list of string tuples of time ranges to drop from ds.
+        These strings will be processed by np.datetime64()
+        If dropping a single time, use this value for both values of the tuple
+    dstype : str
+        String indicating if ds is a raw, eng, or sci timeseries;
+        passed to plots.scatter_drop_plot
+    plotdir : str | None (default None)
+        Path to plot directory; passed to plots.scatter_drop_plot
+        If None, then no plots are saved
+
+
+    outname : str | None (default None)
+        If not None, then ds is written to this path
+    profsummdir : str | None (default None)
+        Path to profile summary CSV. Ignored if dstype is raw.
+        If not None and dstype is eng or sci, will join profiles
+    prof_args : dict | None, optional
+        named optional arguments, for esdglider.profiles.findProfiles
+
+    Returns
+    -------
+    xarray Dataset
+        Input ds, with points within specified time ranges dropped.
+        Also saves 'dropped' scatter plots to plotdir, if specified.
+    """
+    
+    # if prof_args is None or prof_args == {}:
+    #     prof_args = prof.prof_optionsList.copy()
+
+    _log.info(
+        "There are %d points in the original %s dataset",
+        len(ds.time),
+        dstype,
+    )
+
+    # Create the mask framework
+    todrop = np.full(len(ds.time), False)
+
+    # For each tuple in drop_list, update todrop array
+    for i in drop_list:
+        i_todrop = (ds.time.values >= np.datetime64(i[0])) & (
+            ds.time.values <= np.datetime64(i[1])
+        )
+        todrop = todrop | i_todrop
+        num_todrop = np.count_nonzero(i_todrop)
+        _log.info(f"Dropping {num_todrop} points between {i[0]} and {i[1]}")
+
+    # Make plot
+    if plotdir is not None:
+        scatter_drop_plot(ds, todrop, dstype, plotdir)
+
+    # Drop time(s)
+    todrop_mask = xr.DataArray(todrop, dims="time", coords={"time": ds.time})
+    ds = ds.where(~todrop_mask, drop=True)
+    _log.info(f"There are now {len(ds.time)} points in the dataset")
+
+    # Distance over ground, if relevant
+    if "distance_over_ground" in ds:
+        _log.info("Calculating new distance over ground")
+        ds = pgutils.get_distance_over_ground(ds)
+
+    # # Profiles
+    # if prof_summ is not None and prof_index_attrs is not None:
+    #     _log.info("Join profiles, from raw timeseries, by time windows")
+    #     prof_index_attrs["sources"] += ", from raw dataset"
+    #     ds = prof.join_profiles(ds, prof_summ, prof_index_attrs)
+
+    # if dstype == "raw" and profsummdir is not None:
+    #     _log.info("Calculating new profiles for raw dataset")
+    #     tsraw = prof.get_fill_profiles(ds, "time", "depth_measured", prof_args)
+    #     prof_summ = prof.calc_profile_summary(tsraw, "depth_measured")
+    #     prof_summ.to_csv(profsummdir, index=False)
+    #     prof.check_profiles(prof_summ)
+    # elif profsummdir is not None:
+    #     _log.info("Join-calculating new profiles for eng/sci dataset")
+    #     prof_summ_raw = pd.read_csv(profsummdir, parse_dates=["start_time", "end_time"])
+    #     prof.join_profiles(ds, prof_summ_raw, prof_args)
+    #     prof.check_profiles(prof.calc_profile_summary(ds, "depth"))
+    # else:
+    #     _log.info("No profile work")
+
+    # # Write to netcdf
+    # if outname is not None:
+    #     _log.info(f"Writing dataset to {outname}")
+    #     ds.to_netcdf(
+    #         outname,
+    #         mode='w',
+    #         encoding={'time': time_encoding},
+    #     )
+
+    return ds
+
+
 def complete_profile_correction(
         tsraw: xr.Dataset, 
-        tseng: xr.Dataset, 
-        tssci: xr.Dataset, 
+        tseng: xr.Dataset | None, 
+        tssci: xr.Dataset | None, 
         glider_paths: dict, 
-        prof_depth_var: str,
-        prof_args: dict | None = None
+        use_m_depth: bool,
+        # prof_depth_var: str | None = None,
+        # prof_index_attrs: dict,   
+        # prof_args: dict | None = None
     ):
     """
     Sometimes, the profile indices need to be adjusted by hand. For instance:
@@ -1386,50 +1396,68 @@ def complete_profile_correction(
     This function performs these steps, and writes the profile summary CSV 
     and eng/sci datasets to disk.
 
+    The profile index attributes are extracted from the raw timeseries, 
+    with the phrase ", from raw dataset" added tot he end of the 'sources' 
+    attribute.
+
+    If either tseng or tssci do not need to be updated, 
+    they can be passed as `None` and will be ignored.
+
+
     Parameters
     ----------
     tsraw : xarray.Dataset
         Raw timeseries dataset
-    tseng : xarray.Dataset
-        Engineering timeseries dataset
-    tssci : xarray.Dataset
-        Science timeseries dataset
+    tseng : xarray.Dataset | None
+        Engineering timeseries dataset (or None if not available)
+    tssci : xarray.Dataset | None
+        Science timeseries dataset (or None if not available)
     glider_paths : dict
         Dictionary containing glider-related paths.
-    prof_depth_var : str
-        Name of the depth variable used to calculate profiles
-    prof_args : dict, optional
-        Additional keyword arguments passed to profile functions.
+    use_m_depth : bool, optional
+        Flag indicating whether to use measured depth (`True`) or CTD depth (`False`) for profile calculations.
+    prof_index_attrs : dict
+        Attributes for the profile index variable, used when adjusting profiles.
 
     Returns
     -------
     None
     """
 
-    if prof_args is None:
-        prof_args = {}
+    # Finish profiles
+    if use_m_depth:
+        prof_depth_var = "depth_measured"
+    else:
+        prof_depth_var = "depth_ctd"
 
-    # Finish raw dataset work
     prof_summ = prof.calc_profile_summary(tsraw, prof_depth_var)
     prof_summ.to_csv(glider_paths["profsummpath"], index=False)
     prof.check_profiles(prof_summ)
+    _log.info("Wrote new profile summary to %s", glider_paths["profsummpath"])
+
+    # Save raw dataset
     tsraw.to_netcdf(
         glider_paths["tsrawpath"], 
         encoding={'time': time_encoding}
     )
-    _log.info("Wrote new profile summary to %s", glider_paths["profsummpath"])
+    _log.info("Wrote raw timeseries to %s", glider_paths["tsrawpath"])
 
-    # Apply new profiles to sci and eng
-    tseng = prof.join_profiles(tseng, prof_summ, prof_depth_var, prof_args)
-    tseng.to_netcdf(
-        glider_paths["tsengpath"], 
-        encoding={'time': time_encoding}
-    )
-    _log.info("Wrote eng timeseries with new profiles to %s", glider_paths["tsengpath"])
+    # Apply new profiles to sci and eng, and save
+    prof_index_attrs = tsraw["profile_index"].attrs
+    prof_index_attrs["sources"] += ", from raw dataset"
 
-    tssci = prof.join_profiles(tssci, prof_summ, prof_depth_var, prof_args)
-    tssci.to_netcdf(
-        glider_paths["tsscipath"], 
-        encoding={'time': time_encoding}
-    )
-    _log.info("Wrote science timeseries with new profiles to %s", glider_paths["tsscipath"])
+    if tseng is not None:
+        tseng = prof.join_profiles(tseng, prof_summ, prof_index_attrs)
+        tseng.to_netcdf(
+            glider_paths["tsengpath"], 
+            encoding={'time': time_encoding}
+        )
+        _log.info("Wrote eng timeseries with new profiles to %s", glider_paths["tsengpath"])
+
+    if tssci is not None:
+        tssci = prof.join_profiles(tssci, prof_summ, prof_index_attrs)
+        tssci.to_netcdf(
+            glider_paths["tsscipath"], 
+            encoding={'time': time_encoding}
+        )
+        _log.info("Wrote science timeseries with new profiles to %s", glider_paths["tsscipath"])
