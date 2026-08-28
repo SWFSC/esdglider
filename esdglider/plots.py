@@ -995,7 +995,6 @@ def sci_timesection_plot(
     _log.info(f"Making timesection plot for variable {var}")
     deployment = ds.deployment_name
     # glider = utils.split_deployment(deployment)[0]
-    project = ds.project
     ds = ds.dropna(dim="depth", how="all")
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
@@ -1007,7 +1006,7 @@ def sci_timesection_plot(
     ax.invert_yaxis()
 
     ax.set_title(
-        f"Deployment {deployment} for project {project}\n std={std:0.2f} mean={mean:0.2f}",
+        f"Deployment {deployment} - time section\n std={std:0.2f} mean={mean:0.2f}",
         size=14,
     )  # use set_title so that title is centered over the plot
     ax.set_xlabel("Time", size=label_size)
@@ -1070,7 +1069,6 @@ def sci_spatialsection_plot(
 
     _log.info(f"Making spatialsection plot for variable {var}")
     deployment = ds.deployment_name
-    project = ds.project
     ds = ds.dropna(dim="depth", how="all")
 
     fig, axs = plt.subplots(1, 2, figsize=(11, 8.5), sharey=True)
@@ -1126,7 +1124,7 @@ def sci_spatialsection_plot(
     # axs[1].set_ylabel(f"Depth [m]", size=14)
 
     fig.suptitle(
-        f"Deployment {deployment} for project {project}\n std={std:0.2f} mean={mean:0.2f}",
+        f"Deployment {deployment} - spatial section\n std={std:0.2f} mean={mean:0.2f}",
         size=title_size,
     )
 
@@ -1200,7 +1198,6 @@ def sci_spatialgrid_plot(
         hspace=0.05,
     )
     deployment = ds.deployment_name
-    project = ds.project
     ds = ds.dropna(dim="depth", how="all")
 
     fig = plt.figure(figsize=(11, 8.5))
@@ -1251,7 +1248,7 @@ def sci_spatialgrid_plot(
         size=label_size,
     )
     fig.suptitle(
-        f"Deployment {deployment} for project {project}", size=title_size
+        f"Deployment {deployment} - spatial grid", size=title_size
     )
 
     if base_path is not None:
@@ -1459,7 +1456,6 @@ def eng_timeseries_plot(
 
     _log.info(f"Making eng timeseries plot for variable {var}")
     deployment = ds.deployment_name
-    project = ds.project
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
 
@@ -1467,7 +1463,7 @@ def eng_timeseries_plot(
     ax.set_ylabel(adj_var_label(ds, var), size=label_size)
     # ax.invert_yaxis()
     ax.set_title(
-        f"Deployment {deployment} for project {project}", size=title_size
+        f"Deployment {deployment} - timeseries", size=title_size
     )
 
     ax.scatter(ds.time, ds[var], s=3)
@@ -1531,7 +1527,6 @@ def sci_timeseries_plot(
 
     _log.info(f"Making sci timeseries plot for variable {var}")
     deployment = ds.deployment_name
-    project = ds.project
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
 
@@ -1539,7 +1534,7 @@ def sci_timeseries_plot(
     ax.set_ylabel("Depth [m]", size=label_size)
     ax.invert_yaxis()
     ax.set_title(
-        f"Deployment {deployment} for project {project}", size=title_size
+        f"Deployment {deployment} - timeseries", size=title_size
     )
 
     p = ax.scatter(
@@ -1623,7 +1618,6 @@ def sci_timesection_gt_plot(
         f"Making sci timesection plot for variable {var}, using glidertools",
     )
     deployment = ds.deployment_name
-    project = ds.project
 
     dat = ds.where(ds["profile_index"] % 1 == 0, drop=True)
     x = dat["profile_index"]
@@ -1636,7 +1630,7 @@ def sci_timesection_gt_plot(
     ax.set_xlabel("Profile", size=label_size)
     ax.set_ylabel("Depth [m]", size=label_size)
     ax.set_title(
-        f"Deployment {deployment} for project {project}", size=title_size
+        f"Deployment {deployment} - time section", size=title_size
     )
 
     # Sometimes glidertools won't plot label, so guarantee it
