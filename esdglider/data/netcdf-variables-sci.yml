@@ -92,6 +92,8 @@ chlorophyll:
   units:         ug L-1
   observation_type: measured
   instrument:   "instrument_flbbcd"
+  valid_min:    0.
+  valid_max:    50.
 
 cdom:
   source:  sci_flbbcd_cdom_units
@@ -117,6 +119,8 @@ oxygen_concentration:
   units:         umol l-1
   observation_type: "measured"
   instrument:   "instrument_oxygen"
+  valid_min:    0.
+  valid_max:    500.
 
 oxygen_saturation:
   source:  sci_oxy4_saturation
@@ -125,6 +129,8 @@ oxygen_saturation:
   units:         percent
   observation_type: "measured"
   instrument:   "instrument_oxygen"
+  valid_min:    0.
+  valid_max:    120.
 
 # PAR
 par:
