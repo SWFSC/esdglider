@@ -5,22 +5,20 @@ Slocum pipeline functions, for ESD-specific processing of slocum glider files
 import logging
 import math
 import os
-from importlib import metadata
 import tempfile
+from importlib import metadata
 
 import dbdreader
 import numpy as np
 import pandas as pd
-import pyglider.ncprocess as pgncprocess  # type: ignore
-import pyglider.slocum as pgslocum  # type: ignore
-import pyglider.utils as pgutils  # type: ignore
+import pyglider.ncprocess as pgncprocess
+import pyglider.slocum as pgslocum
+import pyglider.utils as pgutils
 import xarray as xr
 import yaml
 
 import esdglider.profiles as prof
-from esdglider import qartod, utils
-from esdglider.paths import get_path_flbbcd_calibrations, get_path_yaml_deployment_vars
-from esdglider.plots import scatter_drop_plot
+from esdglider import paths, plots, qartod, utils
 from esdglider.slocum import core
 from esdglider.slocum.core import time_encoding
 
@@ -58,7 +56,6 @@ def generate_timeseries(
     file_info: str | None = None,
     binary_search: str | None = None,
     maxgap: int | None = None,
-    # prof_depth_var: str = "depth",
     prof_args: dict | None = None,
 ) -> dict:
     """
@@ -141,17 +138,6 @@ def generate_timeseries(
     #     prof_depth_var = "depth_ctd"
     #     other_depth_var = "depth_measured"
 
-    # # Dictionary with info needed by post-processing functions
-    # postproc_info = {
-    #     "deploymentyaml": deploymentyaml, 
-    #     "mode": mode, 
-    #     "file_info": file_info,
-    #     "metadata_dict": {"deployment_name": deployment_name},
-    #     "device_dict": {},
-    #     "profile_summary_path": glider_paths["profsummpath"],
-    #     "maxgap": maxgap_esd,
-    # }
-
     # Check which dbdreader backend is being used
     if write_raw or write_eng or write_sci:
         utils.check_dbdreader_c_extension()
@@ -179,17 +165,17 @@ def generate_timeseries(
         # Create raw Netcdf yaml list
         raw_netcdf_yaml_list = [
             deploymentyaml, 
-            get_path_yaml_deployment_vars("eng"), 
-            get_path_yaml_deployment_vars("raw")
+            paths.get_path_yaml_deployment_vars("eng"), 
+            paths.get_path_yaml_deployment_vars("raw")
         ]
         
         i_solocam = ["instrument_shadowgraph", "instrument_glidercam"]
         if any(i in deployment["glider_devices"] for i in i_solocam):
-            raw_netcdf_yaml_list.append(get_path_yaml_deployment_vars("raw-solocam"))
+            raw_netcdf_yaml_list.append(paths.get_path_yaml_deployment_vars("raw-solocam"))
 
         i_flbbcd = ["instrument_flbbcd"]
         if any(i in deployment["glider_devices"] for i in i_flbbcd):
-            raw_netcdf_yaml_list.append(get_path_yaml_deployment_vars("raw-flbbcd"))
+            raw_netcdf_yaml_list.append(paths.get_path_yaml_deployment_vars("raw-flbbcd"))
         _log.debug("Raw YAML list: %s", raw_netcdf_yaml_list)
 
         deployment_raw = pgutils._get_deployment(deploymentyaml)
@@ -235,15 +221,7 @@ def generate_timeseries(
             outname_tsraw, 
             mode="w", 
             encoding={'time': time_encoding}
-        ) 
-        
-        # pgutils._save_dataset(
-        #     tsraw,
-        #     outname_tsraw, 
-        #     deployment, 
-        #     mode='w',
-        #     encoding={'time': time_encoding},
-        # )
+        )
 
         # Save profile summary, get profile index attributes
         _log.info("Writing profile summary CSV to %s", prof_summ_path)
@@ -253,10 +231,6 @@ def generate_timeseries(
         _log.info("Deployment %s performed %s dives", deployment_name, num_dives)
 
         prof_index_attrs = tsraw["profile_index"].attrs
-
-        # # Write deployment_start and deployment_end to postproc_info
-        # deployment_start = tsraw.attrs["deployment_start"]
-        # deployment_end = tsraw.attrs["deployment_end"]
 
         # Profile and depth sanity checks
         _log.info("raw timeseries checks")
@@ -287,9 +261,6 @@ def generate_timeseries(
             with xr.open_dataset(outname_tsraw) as tsraw:
                 _log.debug("Opened existing raw nc file: %s", outname_tsraw)
                 prof_index_attrs = tsraw["profile_index"].attrs
-                # tsraw = xr.load_dataset(outname_tsraw)
-                # deployment_start = tsraw.attrs["deployment_start"]
-                # deployment_end = tsraw.attrs["deployment_end"]
         except FileNotFoundError:
             _log.error("The raw nc file not found: %s", outname_tsraw)
             raise FileNotFoundError(f"File not found: {outname_tsraw}")
@@ -307,7 +278,7 @@ def generate_timeseries(
             glider_paths["binarydir"],
             glider_paths["cacdir"],
             tsdir,
-            [deploymentyaml, get_path_yaml_deployment_vars("eng")],
+            [deploymentyaml, paths.get_path_yaml_deployment_vars("eng")],
             search=binary_search,
             fnamesuffix=f"-{mode}-eng",
             time_base="m_depth",
@@ -386,15 +357,10 @@ def generate_timeseries(
             mode, 
             maxgap, 
             sci_use_m_depth=sci_use_m_depth,
-            # deployment_start=deployment_start,
-            # deployment_end=deployment_end,
             file_info=file_info,
             drop_vars=drop_vars, 
             prof_summ=prof_summ,
             prof_index_attrs=prof_index_attrs,
-            # prof_summ_path=glider_paths["profsummpath"],
-            # prof_depth_var=prof_depth_var,
-            # prof_args=prof_args
         )
         pgutils._save_dataset(
             tssci,
@@ -472,8 +438,6 @@ def postproc_attrs(
         ds: xr.Dataset, 
         mode: str, 
         *, 
-        # deployment_start: str | None = None,
-        # deployment_end: str | None = None,
         file_info: str | None = None,
     ) -> xr.Dataset:
     """
@@ -539,11 +503,7 @@ def postproc_attrs(
         + "Data provided as is with no expressed or implied assurance "
         + "of quality assurance or quality control"
     )
-    # ds.attrs["processing_level"] = (
-    #     "Minimal data screening. "
-    #     + "Data provided as is, with no expressed or implied assurance "
-    #     + "of quality assurance or quality control."
-    # )
+    
     if file_info is None:
         file_info = "netCDF files created using"
     ds.attrs["history"] = f"{utils.datetime_now_utc()}: {file_info}: " + "; ".join(
@@ -652,63 +612,15 @@ def postproc_tsl1(
 
     # PROFILES
     # Update the profile indices from the profile summary CSV file
-    # The ds already has profile_direction
-    # if prof_summ_path is not None:
-    #     if prof_depth_var is None: # or prof_depth_var not in ds:
-    #         _log.error("Invalid prof_depth_var value: %s", prof_depth_var)
-    #         raise ValueError(
-    #             "if prof_summ_path is provided, prof_depth_var must not be None"
-    #         )
-        
-    #     # Join profiles generated using raw timeseries
-    #     _log.info(
-    #         "Reading profile summary CSV, "
-    #         + "and joining profiles from raw dataset by timestamps"
-    #     )
-    #     prof_summ = pd.read_csv(
-    #         prof_summ_path,
-    #         parse_dates=["start_time", "end_time"],
-    #     )
-    #     ds = prof.join_profiles(ds, prof_summ, prof_depth_var, prof_args)
-    #     # Checks done in respective postproc functions
-
     if prof_summ is not None and prof_index_attrs is not None:
-        # if prof_depth_var is None: # or prof_depth_var not in ds:
-        #     _log.error("Invalid prof_depth_var value: %s", prof_depth_var)
-        #     raise ValueError(
-        #         "if prof_summ_path is provided, prof_depth_var must not be None"
-        #     )
-        
-        # prof_index_attrs = collections.OrderedDict(
-        #     [
-        #         ("long_name", "profile index"),
-        #         ("units", "1"),
-        #         ("comment", _profile_idx_comment),
-        #         ("sources", f"raw dataset, time {prof_depth_var}"),
-        #         ("method", "esdglider.utils.findProfiles"),
-        #         ("method_configuration", json.dumps(prof_args))
-        #     ], 
-        # )
-
-        # Join profiles generated using raw timeseries
         _log.info("Join profiles, from raw timeseries, by time windows")
         prof_index_attrs["sources"] += ", from raw dataset"
-        ds = prof.join_profiles(ds, prof_summ, prof_index_attrs)
-
-        # prof_summ_ts = prof.calc_profile_summary(ds, "depth")
-        # prof.check_profiles(prof_summ_ts)
-        
+        ds = prof.join_profiles(ds, prof_summ, prof_index_attrs)        
     else:
         _log.debug("Profile info not provided - skipping profiles")
 
     # ATTRIBUTES
-    ds = postproc_attrs(
-        ds, 
-        mode, 
-        # deployment_start=deployment_start, 
-        # deployment_end=deployment_end, 
-        file_info=file_info, 
-    )
+    ds = postproc_attrs(ds, mode, file_info=file_info)
 
     # Update attribute specific to eng and sci timeseries
     ds.attrs["processing_level"] = (
@@ -774,29 +686,14 @@ def postproc_tsl1_eng(
         ds=ds, 
         mode=mode, 
         maxgap=maxgap, 
-        # deployment_start=deployment_start,
-        # deployment_end=deployment_end,
         file_info=file_info,
         prof_summ=prof_summ,
         prof_index_attrs=prof_index_attrs,
     )
 
-    # # Check profiles, always using depth_measured
-    # prof_summ_ts = prof.calc_profile_summary(ds, "depth_measured")
-    # prof.check_profiles(prof_summ_ts)
-
-    # # Reorder data variables
-    # new_start = ["profile_index", "profile_direction", "depth_measured"]
-    # ds = utils.data_var_reorder(ds, new_start)
-
     # Update eng-specific attributes
     eng_comment = "Engineering-only timeseries"
     ds.attrs["comment"] = utils.append_string(ds.attrs["comment"], eng_comment)
-    # if not ds.attrs["comment"].strip():
-    #     ds.attrs["comment"] = eng_comment
-    # else:
-    #     ds.attrs["comment"] += ". " + eng_comment
-    # ds.attrs["processing_level"] += " All values have been interpolated via linear fill"
 
     _log.debug("end eng postproc: ds has %d values", len(ds.time))
 
@@ -809,8 +706,6 @@ def postproc_tsl1_sci(
         maxgap: int, 
         sci_use_m_depth: bool,
         *,
-        # deployment_start: str | None = None,
-        # deployment_end: str | None = None,
         file_info: str | None = None,
         drop_vars: list | None = None,
         prof_summ: pd.DataFrame | None = None,
@@ -877,35 +772,11 @@ def postproc_tsl1_sci(
         ds=ds,
         mode=mode,
         maxgap=maxgap,
-        # deployment_start=deployment_start,
-        # deployment_end=deployment_end,
         file_info=file_info,
         drop_vars=drop_vars,
         prof_summ=prof_summ,
         prof_index_attrs=prof_index_attrs,
-        # prof_summ_path=prof_summ_path,
-        # prof_depth_var=prof_depth_var,
-        # prof_args=prof_args
-    )    
-
-    # # Check profiles, using the specified variable
-    # prof_summ_ts = prof.calc_profile_summary(ds, prof_depth_var)
-    # prof.check_profiles(prof_summ_ts)
-
-    # # Reorder data variables. lat/lon/depth are now coordinates
-    # new_start = [
-    #     "profile_index",
-    #     "profile_direction",
-    #     "conductivity",
-    #     "temperature",
-    #     "pressure",
-    #     "salinity",
-    #     "density",
-    #     "potential_density",
-    #     "potential_temperature",
-    # ]
-    # # new_start[2:2] = sorted([i for i in ds if "depth" in i]) 
-    # ds = utils.data_var_reorder(ds, new_start)
+    )
 
     _log.debug("end sci postproc: ds has %s values", len(ds.time))
 
@@ -938,8 +809,6 @@ def generate_gridded(
     dict
         A dictionary containing the paths to the gridded netCDF files.
     """
-    # if raw_to_sci:
-    #     use_m_depth = True
     
     outname_tssci = glider_paths["tsscipath"]
     if bin_size != [1, 5]:
@@ -1011,7 +880,6 @@ def _run_pyglider_gridding(inname, glider_paths) -> dict:
     """
 
     outnames = {}
-    # _log.debug("Excluded vars: %s", ", ".join(gridded_exclude_vars))
 
     for i in bin_size:
         _log.info("Generating %sm gridded data", i)
@@ -1070,7 +938,7 @@ def check_flbbcd_autoexec(
         flbbcd_cal_date = device_data["instrument_flbbcd"].get("calibration_date", None)
 
         # Load in esdglider calibration values
-        with open(get_path_flbbcd_calibrations(), "r") as fin:
+        with open(paths.get_path_flbbcd_calibrations(), "r") as fin:
             flbbcd_cals = yaml.safe_load(fin)
         
             try:
@@ -1176,7 +1044,7 @@ def correct_flbbcd_raw_sci(
 
     # Get calibration values
     if chlor_cal is None or cdom_cal is None or bb_cal is None:
-        with open(get_path_flbbcd_calibrations(), "r") as fin:
+        with open(paths.get_path_flbbcd_calibrations(), "r") as fin:
             flbbcd_cals = yaml.safe_load(fin)
 
             sn, cdate = utils.get_instrument_sn_date(ds_raw, "instrument_flbbcd")
@@ -1331,9 +1199,6 @@ def drop_ts_ranges(
         Input ds, with points within specified time ranges dropped.
         Also saves 'dropped' scatter plots to plotdir, if specified.
     """
-    
-    # if prof_args is None or prof_args == {}:
-    #     prof_args = prof.prof_optionsList.copy()
 
     _log.info(
         "There are %d points in the original %s dataset",
@@ -1355,7 +1220,7 @@ def drop_ts_ranges(
 
     # Make plot
     if plotdir is not None:
-        scatter_drop_plot(ds, todrop, dstype, plotdir)
+        plots.scatter_drop_plot(ds, todrop, dstype, plotdir)
 
     # Drop time(s)
     todrop_mask = xr.DataArray(todrop, dims="time", coords={"time": ds.time})
