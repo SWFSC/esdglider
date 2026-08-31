@@ -47,9 +47,9 @@ def get_path_yaml_deployment_vars(yaml_type: str) -> str:
     str
         the path of the specified yaml
     """
-    if yaml_type not in ["raw", "eng", "raw-solocam"]:
+    if yaml_type not in ["raw", "eng", "raw-solocam", "raw-flbbcd"]:
         _log.error("yaml_type %s", yaml_type)
-        raise ValueError("yaml_type must be either 'raw', 'eng', or 'raw-solocam'")
+        raise ValueError("yaml_type must be either 'raw', 'eng', 'raw-solocam', or 'raw-flbbcd'")
 
     ref = resources.files("esdglider.data") / f"deployment-{yaml_type}-vars.yml"
     with resources.as_file(ref) as path:

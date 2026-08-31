@@ -6,6 +6,7 @@ import logging
 import math
 import os
 from importlib import metadata
+import tempfile
 
 import dbdreader
 import numpy as np
@@ -157,11 +158,12 @@ def generate_timeseries(
 
     # --------------------------------------------
     # Raw
-    outname_tsraw = glider_paths["tsrawpath"]
-    outname_tseng = glider_paths["tsengpath"]
-    outname_tssci = glider_paths["tsscipath"]
-    outname_gr1m  = glider_paths["gr1path"]
-    outname_gr5m  = glider_paths["gr5path"]
+    outname_tsraw  = glider_paths["tsrawpath"]
+    outname_tseng  = glider_paths["tsengpath"]
+    outname_tssci  = glider_paths["tsscipath"]
+    outname_gr1m   = glider_paths["gr1path"]
+    outname_gr5m   = glider_paths["gr5path"]
+    prof_summ_path = glider_paths["profsummpath"]
 
     if write_raw:
         utils.remove_file(outname_tsraw)
@@ -169,31 +171,46 @@ def generate_timeseries(
         utils.remove_file(outname_tssci)
         utils.remove_file(outname_gr1m)
         utils.remove_file(outname_gr5m)
+        utils.remove_file(prof_summ_path)
         utils.makedirs_pass(rawdir)
         utils.makedirs_pass(ancdir)
 
         _log.info("Generating raw nc")
-        raw_yaml_list = [
+        # Create raw Netcdf yaml list
+        raw_netcdf_yaml_list = [
             deploymentyaml, 
             get_path_yaml_deployment_vars("eng"), 
             get_path_yaml_deployment_vars("raw")
         ]
+        
         i_solocam = ["instrument_shadowgraph", "instrument_glidercam"]
         if any(i in deployment["glider_devices"] for i in i_solocam):
-            raw_yaml_list.append(get_path_yaml_deployment_vars("raw-solocam"))
-        _log.debug("Raw YAML list: %s", raw_yaml_list)
+            raw_netcdf_yaml_list.append(get_path_yaml_deployment_vars("raw-solocam"))
 
-        outname_tsraw = core.binary_to_raw_timeseries(
-            glider_paths["binarydir"],
-            glider_paths["cacdir"],
-            rawdir,
-            raw_yaml_list,
-            search=binary_search,
-            include_source=True,
-            fnamesuffix=f"-{mode}-raw",
-            prof_depth_var=prof_depth_var,
-            prof_args=prof_args,
-        )
+        i_flbbcd = ["instrument_flbbcd"]
+        if any(i in deployment["glider_devices"] for i in i_flbbcd):
+            raw_netcdf_yaml_list.append(get_path_yaml_deployment_vars("raw-flbbcd"))
+        _log.debug("Raw YAML list: %s", raw_netcdf_yaml_list)
+
+        deployment_raw = pgutils._get_deployment(deploymentyaml)
+        deployment_raw["netcdf_variables"] = utils._get_deployment_netcdfvars(raw_netcdf_yaml_list)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_file = os.path.join(temp_dir, "temp.yml")
+            with open(temp_file, "w", encoding="utf-8") as f:
+                yaml.dump(deployment_raw, f, sort_keys=False, default_flow_style=False)
+
+            outname_tsraw = core.binary_to_raw_timeseries(
+                glider_paths["binarydir"],
+                glider_paths["cacdir"],
+                rawdir,
+                temp_file, 
+                search=binary_search,
+                include_source=True,
+                fnamesuffix=f"-{mode}-raw",
+                prof_depth_var=prof_depth_var,
+                prof_args=prof_args,
+            )
 
         # Run postprocessing
         _log.info(f"Post-processing raw timeseries: {outname_tsraw}")
@@ -229,7 +246,6 @@ def generate_timeseries(
         # )
 
         # Save profile summary, get profile index attributes
-        prof_summ_path = glider_paths["profsummpath"]
         _log.info("Writing profile summary CSV to %s", prof_summ_path)
         prof_summ = prof.calc_profile_summary(tsraw, prof_depth_var)
         prof_summ.to_csv(prof_summ_path, index=False)
@@ -1017,6 +1033,8 @@ def check_flbbcd_autoexec(
         search="*.[Dd|Ee][Bb][Dd]",
 ):
     """
+
+
     Parameters
     ----------
     binarydir : str

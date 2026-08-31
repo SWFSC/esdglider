@@ -8,12 +8,12 @@ import os
 
 import netCDF4
 import numpy as np
+import pyglider.utils as pgutils
 import xarray as xr
 import yaml
 
-from esdglider import utils
 import esdglider.profiles as prof
-import pyglider.utils as pgutils
+from esdglider import utils
 
 try:
     import dbdreader
@@ -292,7 +292,7 @@ def binary_to_raw_timeseries(
     deployment = pgutils._get_deployment(deploymentyaml)
 
     # Concatenate all netcdf variables from the deployment YAML files
-    ncvar = utils._get_deployment_netcdfvars(deploymentyaml)
+    ncvar = deployment['netcdf_variables']
     thenames = list(ncvar.keys())
     thenames.remove("time")
 
