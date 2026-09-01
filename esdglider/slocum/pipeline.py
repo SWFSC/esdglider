@@ -441,7 +441,14 @@ def postproc_attrs(
         file_info: str | None = None,
     ) -> xr.Dataset:
     """
-    Update attributes of xarray Dataset ds
+    Update attributes of xarray Dataset ds, including:
+        - running pyglider's utils.fill_metadata
+        - determining glider ID. The datetime is extracted from either 
+          'deployment_min_dt' attribute if it exists, 
+          or the first glider timestamp
+        - setting 'title' as equivalent to 'id'
+        - setting other ESD-specific attributes (e.g., license, file, history)
+
     Used for all of eng, sci, and raw timeseries
 
     Parameters
@@ -463,15 +470,6 @@ def postproc_attrs(
     # for the sake of times
     # metadata and device info have already been added, so not needed here
     ds = pgutils.fill_metadata(ds, {}, {})
-
-    # # When used within pipelines, this code makes sure the values
-    # # are only calculated from the raw dataset
-    # if deployment_start is not None:
-    #     ds.attrs["deployment_start"] = deployment_start
-    #     ds.attrs["deployment_end"] = deployment_end
-    # else:
-    #     ds.attrs["deployment_start"] = str(ds["time"].values[0].astype("datetime64[s]"))
-    #     ds.attrs["deployment_end"] = str(ds["time"].values[-1].astype("datetime64[s]"))
 
     # Determine the glider ID using min_dt, and check vs ID from time
     time_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M")
@@ -524,21 +522,27 @@ def postproc_tsl1(
     mode: str,
     maxgap: int, 
     *, 
-    # deployment_start: str | None = None,
-    # deployment_end: str | None = None,
     file_info: str | None = None,
     drop_vars: list | None = None,
     prof_summ: pd.DataFrame | None = None,
     prof_index_attrs: dict | None = None,
 ) -> xr.Dataset:
     """
-    Post-processing steps shared by both the L1 timeseris: 
-    science and engineering
+    Post-processing steps shared by both the L1 timeseries (sci and eng):
+        - dropping bogus times, meaning times:
+            - before 1970-01-01
+            - before the deployment start (if specified via attr 'deployment_min_dt')
+            - after the current time
+        - dropping bogus values (utils.drop_bogus)
+        - dropping data 'rows' where a variable specified in 'drop_vars'
+          contains NaN values
+        - updating dataset distance_over_ground
+        - updating the profile indices from the profile summary CSV file (if 
+          prof_summ or prof_index_attrs is None, then profiles will not be joined)
+        - running postproc_attrs
+        - updating 'processing_level' attribute
 
     Returns the Dataset ds with updated values and attributes
-
-    If prof_summ or prof_index_attrs is None, then profiles will not be joined
-
 
     Parameters
     ----------    
@@ -637,15 +641,15 @@ def postproc_tsl1_eng(
     mode: str, 
     maxgap: int, 
     *, 
-    # deployment_start: str | None = None,
-    # deployment_end: str | None = None,
     file_info: str | None = None,
     prof_summ: pd.DataFrame | None = None,
     prof_index_attrs: dict | None = None,
 ) -> xr.Dataset:
     """
     Engineering timeseries-specific post-processing, including:
-        - Updating attributes
+        - Renames depth_measured to depth
+        - Calls postproc_tsl1
+        - Updates dataset's comment attribute: adds text "Engineering-only timeseries"
 
     Parameters
     ----------
@@ -713,7 +717,9 @@ def postproc_tsl1_sci(
     ) -> xr.Dataset:
     """
     Science timeseries-specific post-processing, including:
-        - remove bogus times. Eg, 1970, or before deployment start date
+        - if sci_use_m_depth is True, try to rename depth_measured to depth
+        - calculate variable 'profile_direction' from variable 'depth'
+        - run postproc_tsl1
 
     Parameters
     ----------

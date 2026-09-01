@@ -97,9 +97,13 @@ def drop_bogus(
     max_drop: bool = False,
 ) -> xr.Dataset:
     """
-    Remove and/or drop bogus times and values.
-    Rows with bogus time or lat/lons are dropped.
-    For other bogus values, out of range values are changed to np.nan
+    Remove and/or drop bogus times and values. Specifically:
+        - dropping bogus times, meaning times:
+            - before the deployment start, if specified via min_dt. 
+              If not specified, then times before 1970-01-01
+            - after the current time (if max_drop is True)
+        - dropping rows with bogus lat/lon values (out of range or nan)
+        - changing out of range science variable values to np.nan
 
     ds: `xarray.Dataset`
         processed glider data
@@ -180,7 +184,7 @@ def get_file_id_esd(ds) -> str:
     """
 
     _log.debug(ds.time)
-    if not ds.time.dtype == "datetime64[ns]":
+    if ds.time.dtype != "datetime64[ns]":
         dt = ds.time.values[0].astype("timedelta64[s]") + np.datetime64("1970-01-01")
     else:
         dt = ds.time.values[0].astype("datetime64[s]")
@@ -277,25 +281,6 @@ def datetime_now_utc(format="%Y-%m-%dT%H:%M:%SZ"):
         controlled by 'format' input
     """
     return datetime.now(timezone.utc).strftime(format)
-
-
-def encode_times(ds):
-    """
-    Straight from:
-    https://github.com/voto-ocean-knowledge/votoutils/blob/main/votoutils/utilities/utilities.py
-    """
-    if "units" in ds.time.attrs.keys():
-        ds.time.attrs.pop("units")
-    if "calendar" in ds.time.attrs.keys():
-        ds.time.attrs.pop("calendar")
-    ds["time"].encoding["units"] = "seconds since 1970-01-01T00:00:00Z"
-    for var_name in list(ds):
-        if "time" in var_name.lower() and not var_name == "time":
-            for drop_attr in ["units", "calendar", "dtype"]:
-                if drop_attr in ds[var_name].attrs.keys():
-                    ds[var_name].attrs.pop(drop_attr)
-            ds[var_name].encoding["units"] = "seconds since 1970-01-01T00:00:00Z"
-    return ds
 
 
 def split_deployment(deployment_name):
@@ -903,7 +888,7 @@ def correct_cdom(ds: xr.Dataset) -> xr.Dataset:
                     + "to the data: CDOM adjusted = 5.62 * CDOM"
                 )
                 
-                ds['cdom'] = ds['cdom'] * 5.62
+                ds["cdom"] = ds["cdom"] * 5.62
                 ds["cdom"].attrs["comment"] = append_string(
                     ds["cdom"].attrs["comment"], cdom_raf_message)
                 instr_attrs["comment"] = append_string(
