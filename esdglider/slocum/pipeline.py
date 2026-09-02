@@ -132,7 +132,7 @@ def generate_timeseries(
         prof_args = {}
 
     # if use_m_depth:
-    prof_depth_var = "depth_measured"
+    prof_depth_var = "m_depth"
     other_depth_var = "depth_ctd"
     # else:
     #     prof_depth_var = "depth_ctd"
@@ -152,71 +152,85 @@ def generate_timeseries(
     prof_summ_path = glider_paths["profsummpath"]
 
     if write_raw:
-        utils.remove_file(outname_tsraw)
-        utils.remove_file(outname_tseng)
-        utils.remove_file(outname_tssci)
-        utils.remove_file(outname_gr1m)
-        utils.remove_file(outname_gr5m)
-        utils.remove_file(prof_summ_path)
+        # utils.remove_file(outname_tsraw)
+        # utils.remove_file(outname_tseng)
+        # utils.remove_file(outname_tssci)
+        # utils.remove_file(outname_gr1m)
+        # utils.remove_file(outname_gr5m)
+        # utils.remove_file(prof_summ_path)
+        utils.rmtree(glider_paths["outdir"]) #raw: remove all
         utils.makedirs_pass(rawdir)
         utils.makedirs_pass(ancdir)
 
         _log.info("Generating raw nc")
-        # Create raw Netcdf yaml list
-        raw_netcdf_yaml_list = [
+        raw_yaml_list = [
             deploymentyaml, 
-            paths.get_path_yaml_deployment_vars("eng"), 
             paths.get_path_yaml_deployment_vars("raw")
         ]
+        # # Create raw Netcdf yaml list
+        # raw_netcdf_yaml_list = [
+        #     deploymentyaml, 
+        #     paths.get_path_yaml_deployment_vars("eng"), 
+        #     paths.get_path_yaml_deployment_vars("raw")
+        # ]
         
-        i_solocam = ["instrument_shadowgraph", "instrument_glidercam"]
-        if any(i in deployment["glider_devices"] for i in i_solocam):
-            raw_netcdf_yaml_list.append(paths.get_path_yaml_deployment_vars("raw-solocam"))
+        # i_solocam = ["instrument_shadowgraph", "instrument_glidercam"]
+        # if any(i in deployment["glider_devices"] for i in i_solocam):
+        #     raw_netcdf_yaml_list.append(paths.get_path_yaml_deployment_vars("raw-solocam"))
 
-        i_flbbcd = ["instrument_flbbcd"]
-        if any(i in deployment["glider_devices"] for i in i_flbbcd):
-            raw_netcdf_yaml_list.append(paths.get_path_yaml_deployment_vars("raw-flbbcd"))
-        _log.debug("Raw YAML list: %s", raw_netcdf_yaml_list)
+        # i_flbbcd = ["instrument_flbbcd"]
+        # if any(i in deployment["glider_devices"] for i in i_flbbcd):
+        #     raw_netcdf_yaml_list.append(paths.get_path_yaml_deployment_vars("raw-flbbcd"))
+        # _log.debug("Raw YAML list: %s", raw_netcdf_yaml_list)
 
-        deployment_raw = pgutils._get_deployment(deploymentyaml)
-        deployment_raw["netcdf_variables"] = utils._get_deployment_netcdfvars(raw_netcdf_yaml_list)
+        # deployment_raw = pgutils._get_deployment(raw_yaml_list)
+        # deployment_raw["netcdf_variables"] = utils._get_deployment_netcdfvars(raw_netcdf_yaml_list)
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_file = os.path.join(temp_dir, "temp.yml")
-            with open(temp_file, "w", encoding="utf-8") as f:
-                yaml.dump(deployment_raw, f, sort_keys=False, default_flow_style=False)
+        # with tempfile.TemporaryDirectory() as temp_dir:
+        #     temp_file = os.path.join(temp_dir, "temp.yml")
+        #     with open(temp_file, "w", encoding="utf-8") as f:
+        #         yaml.dump(deployment_raw, f, sort_keys=False, default_flow_style=False)
 
-            outname_tsraw = core.binary_to_raw_timeseries(
-                glider_paths["binarydir"],
-                glider_paths["cacdir"],
-                rawdir,
-                temp_file, 
-                search=binary_search,
-                include_source=True,
-                fnamesuffix=f"-{mode}-raw",
-                prof_depth_var=prof_depth_var,
-                prof_args=prof_args,
-            )
+        outname_tsraw = core.binary_to_raw_timeseries(
+            glider_paths["binarydir"],
+            glider_paths["cacdir"],
+            rawdir,
+            raw_yaml_list, 
+            search=binary_search,
+            include_source=True,
+            fnamesuffix=f"-{mode}-raw",
+            prof_depth_var=prof_depth_var,
+            prof_args=prof_args,
+        )
 
         # Run postprocessing
         _log.info(f"Post-processing raw timeseries: {outname_tsraw}")
         tsraw = xr.load_dataset(outname_tsraw)
 
-        tsraw = tsraw.reset_coords(["latitude", "longitude"])
+        # tsraw = tsraw.reset_coords(["latitude", "longitude"])
 
-        new_start = [
-            "profile_index",
-            "profile_direction",
-            "depth_measured",
-            "depth_ctd",
-        ]
-        tsraw = utils.data_var_reorder(tsraw, new_start)
+        # new_start = [
+        #     "profile_index",
+        #     "profile_direction",
+        #     "depth_measured",
+        #     "depth_ctd",
+        # ]
+        # tsraw = utils.data_var_reorder(tsraw, new_start)
 
         tsraw = postproc_attrs(
             tsraw, 
             mode, 
             file_info=file_info,
         )
+        tsraw.attrs["comment"] = utils.append_string(
+            tsraw.attrs["comment"], 
+            (
+                "The variable names for this raw dataset are the glider "
+                + "sensor names. See the relevant masterdata file "
+                + "for sensor name details"
+            ), 
+        )
+
         tsraw.to_netcdf(
             outname_tsraw, 
             mode="w", 
@@ -241,7 +255,7 @@ def generate_timeseries(
         prof_summ2 = prof.calc_profile_summary(tsraw, other_depth_var)
         prof.check_profiles(prof_summ2)
 
-        utils.check_depth(tsraw["depth_measured"], tsraw["depth_ctd"])
+        utils.check_depth(tsraw["m_depth"], tsraw["depth_ctd"])
 
     else:
         _log.info("Not writing raw nc. Looking for pre-existing files")
@@ -315,8 +329,10 @@ def generate_timeseries(
     if write_sci:
         # Since gridded depend on ts, also delete gridded
         utils.remove_file(outname_tssci)
-        utils.remove_file(outname_gr1m)
-        utils.remove_file(outname_gr5m)
+        # utils.remove_file(outname_gr1m)
+        # utils.remove_file(outname_gr5m)
+        
+        utils.rmtree(glider_paths["griddir"]) #sci: remove gridded
         utils.makedirs_pass(tsdir)
 
         if sci_use_m_depth: 

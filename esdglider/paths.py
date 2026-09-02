@@ -139,7 +139,7 @@ def get_path_glider_data_out(
         "tsrawpath": path_raw,
         "tsscipath": path_sci,
         "tsengpath": path_eng,
-        "tssciqcpath": path_sci_qc,
+        # "tssciqcpath": path_sci_qc,
         "gr1path": path_gr1,
         "gr5path": path_gr5,
         "profsummpath": path_prof_summ,

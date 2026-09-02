@@ -236,8 +236,9 @@ def binary_to_raw_timeseries(
     search="*.[D|E]BD",
     include_source=False,
     fnamesuffix="",
-    prof_depth_var : str | None ="depth_measured",
+    prof_depth_var: str | None ="depth_measured",
     prof_args: dict | None = None,
+    pressure_var: str | None = "sci_water_pressure",
 ):
     """
     An adaptation of pyglider.slocum.binary_to_timeseries to 
@@ -284,9 +285,13 @@ def binary_to_raw_timeseries(
     if prof_args is None:
         prof_args = {}
 
-    if not prof_depth_var in ("depth_measured", "depth_ctd"):
-        _log.error("Invalid prof_depth_var: %s", prof_depth_var)
-        raise ValueError("prof_depth_var must be either 'depth_measured' or 'depth_ctd'")
+    if not prof_depth_var in ("m_depth", "depth_ctd"):
+        _log.warning(
+            "Unexpected prof_depth_var: %s. "
+            + "Expected either 'm_depth' or 'depth_ctd'", 
+            prof_depth_var
+        )
+        raise ValueError("prof_depth_var must be either 'm_depth' or 'depth_ctd'")
 
     # Read and parse deployment yaml(s)
     deployment = pgutils._get_deployment(deploymentyaml)
@@ -308,7 +313,8 @@ def binary_to_raw_timeseries(
     for nn, name in enumerate(thenames):
         sensorname = ncvar[name]["source"]
         sensors.append(sensorname)
-    _log.debug(f"sensors: {[i for i in sensors]}")
+    # _log.debug(f"sensors: {[i for i in sensors]}")
+    _log.debug(f"(name, sensor) pairs: {list(zip(thenames, sensors))}")
 
     # Check for uniqueness, because a duplicate causes an error when unioning
     if len(sensors) != len(set(sensors)):
@@ -320,26 +326,45 @@ def binary_to_raw_timeseries(
     dbd = dbdreader.MultiDBD(pattern=f"{indir}/{search}", cacheDir=cachedir)  # type: ignore
     sci_params = dbd.parameterNames["sci"]
     eng_params = dbd.parameterNames["eng"]
-    first_eng = np.where([i in eng_params for i in sensors])[0][0]
-    first_sci = np.where([i in sci_params for i in sensors])[0][0]
 
     # Check that all sensor names are in sci_params or eng_params
-    sensor_in_dbd = [i in (eng_params+sci_params) for i in sensors]
+    # sensor_in_dbd = [i in (eng_params+sci_params) for i in sensors]
+    valid_params = set(eng_params + sci_params)
+    sensor_in_dbd = [s in valid_params for s in sensors]
     if not all(sensor_in_dbd):
-        _log.error("Not all sensors are recognized by dbdreader as sci or eng")
-        sensors_not_in_dbd = [i for i, k in zip(sensors, sensor_in_dbd) if not k]
-        _log.error("offending sensors: %s", "; ".join(sensors_not_in_dbd))
-        raise ValueError("Not all sensors are recognized by dbdreader as sci or eng")
+        _log.info(
+            "Not all sensors are recognized by dbdreader as sci or eng. "
+            + "Removing offending sensors"
+        )
+        # Log the removed sensors before filtering
+        for sensor, name, keep in zip(sensors, thenames, sensor_in_dbd):
+            if not keep:
+                _log.info(
+                    "Sensor not in dbdreader. Ignoring %s (sensor %s)", 
+                    name, 
+                    sensor,
+                )
+
+        # Rebuild both lists keeping only entries where keep is True
+        sensors = [s for s, keep in zip(sensors, sensor_in_dbd) if keep]
+        thenames = [n for n, keep in zip(thenames, sensor_in_dbd) if keep]
+            
+        # _log.error("offending sensors: %s", "; ".join(sensors_not_in_dbd))
+        # raise ValueError("Not all sensors are recognized by dbdreader as sci or eng")
 
     # get the data, across all eng/sci timestamps
     # return_nans=True so data arrays are of exactly two lengths (eng/sci)
+    _log.debug(f"sensors, after filtering: {[i for i in sensors]}")
+    _log.debug(f"(name, sensor) pairs, after filtering: {list(zip(thenames, sensors))}")
     source_data = dbd.get(
         *sensors,
         return_nans=True,
         include_source=include_source,
     )
 
-    # If include_source is true, then parsing is a bit different
+    # If include_source is true, then parsing is a bit different    
+    first_eng = np.where([i in eng_params for i in sensors])[0][0]
+    first_sci = np.where([i in sci_params for i in sensors])[0][0]
     if include_source:
         data_list, s = zip(*source_data)
         _log.debug("Parsing source filenames")
@@ -367,7 +392,11 @@ def binary_to_raw_timeseries(
     sci_time = data_time[first_sci]
     time = np.union1d(eng_time, sci_time)
     _log.debug(
-        f"eng/sci/total time counts: {len(eng_time)}/{len(sci_time)}/{len(time)})",
+        # f"eng/sci/total time counts: {len(eng_time)}/{len(sci_time)}/{len(time)})",
+        "eng/sci/total time counts: %d/%d/%d)",
+        len(eng_time),
+        len(sci_time),
+        len(time),
     )
 
     # get the indices of the sci and eng timestamps in the unioned times
@@ -446,8 +475,8 @@ def binary_to_raw_timeseries(
     _log.info("The raw timeseries has %s data points", ds.time.shape[0])
 
     # Calculate depth (ctd); only keep values where pressure is not nan
-    ds = pgutils.get_glider_depth(ds)
-    ds["depth"] = ds["depth"].where(~np.isnan(ds["pressure"]))
+    ds = pgutils.get_glider_depth(ds, {"pressure": pressure_var})
+    ds["depth"] = ds["depth"].where(~np.isnan(ds[pressure_var]))
     ds = ds.rename_vars({'depth': 'depth_ctd'})
 
     # Calcualte profiles with chosen variable
@@ -461,21 +490,17 @@ def binary_to_raw_timeseries(
     ds["distance_over_ground"] = ds["distance_over_ground"].where(ll_good)
 
     # Add metadata
-    device_data = deployment['glider_devices']
-    ds = pgutils.fill_metadata(ds, deployment['metadata'], device_data)
+    ds = pgutils.fill_metadata(
+        ds, deployment['metadata'], deployment['glider_devices']
+    )
 
+    # Write to output, with simple time encoding save
     outname = outdir + "/" + ds.attrs["deployment_name"] + fnamesuffix + ".nc"
     _log.info("writing %s", outname)
     ds.to_netcdf(
         outname, 
         encoding={'time': time_encoding}
-    ) 
-    # pgutils._save_dataset(
-    #     ds,
-    #     outname,
-    #     deployment,
-    #     encoding={'time': time_encoding},
-    # )
+    )
 
     return outname
 
