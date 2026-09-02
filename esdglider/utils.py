@@ -2,9 +2,9 @@ import collections
 import logging
 import os
 import shutil
+import pyglider.ncprocess as pgncprocess
 from datetime import datetime, timezone, date
 from pathlib import Path
-from pyglider import ncprocess
 
 import ast
 import gsw
@@ -1247,7 +1247,7 @@ def create_ngdac_profiles(
         trajectory = ds.attrs["id"]
 
     # CREATE INDIVIDUAL PROFILE NETCDF FILES USING pyglider
-    ncprocess.extract_timeseries_profiles(
+    pgncprocess.extract_timeseries_profiles(
         str(inname),
         str(outdir),
         [str(deploymentyaml)],
