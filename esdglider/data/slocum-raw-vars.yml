@@ -85,6 +85,10 @@ netcdf_variables:
     long_name: m_coulomb_amphr_total
     source: m_coulomb_amphr_total
     units: Ahr
+  m_coulomb_current:
+    long_name: m_coulomb_current
+    source: m_coulomb_current
+    units: amp
   m_de_oil_vol:
     long_name: m_de_oil_vol
     source: m_de_oil_vol
@@ -115,38 +119,30 @@ netcdf_variables:
     long_name: m_vacuum
     source: m_vacuum
     units: inHg
-  m_coulomb_current:
-    long_name: m_coulomb_current
-    source: m_coulomb_current
-    units: unk
   m_depth_rate:
     long_name: m_depth_rate
     source: m_depth_rate
-    units: unk
+    units: m/s
   m_fin:
     long_name: m_fin
     source: m_fin
-    units: unk
-  m_pitch_value:
-    long_name: m_pitch_value
-    source: m_pitch_value
-    units: unk
+    units: rad
   m_speed:
     long_name: m_speed
     source: m_speed
-    units: unk
+    units: m/s
   m_speed_avg:
     long_name: m_speed_avg
     source: m_speed_avg
-    units: unk
+    units: m/s
   m_water_vx:
     long_name: m_water_vx
     source: m_water_vx
-    units: unk
+    units: m/s
   m_water_vy:
     long_name: m_water_vy
     source: m_water_vy
-    units: unk
+    units: m/s
 
   # Commanded
   c_dive_target_depth:
@@ -166,15 +162,15 @@ netcdf_variables:
   c_autoballast_state:
     long_name: c_autoballast_state
     source: c_autoballast_state
-    units: unk
+    units: enum
   c_bpump_value:
     long_name: c_bpump_value
     source: c_bpump_value
-    units: unk
+    units: cc
   c_climb_bpump:
     long_name: c_climb_bpump
     source: c_climb_bpump
-    units: unk
+    units: cc
   c_de_oil_vol:
     long_name: c_de_oil_vol
     source: c_de_oil_vol
@@ -182,37 +178,37 @@ netcdf_variables:
   c_dive_bpump:
     long_name: c_dive_bpump
     source: c_dive_bpump
-    units: unk
+    units: cc
   c_pitch:
     long_name: c_pitch
     source: c_pitch
-    units: unk
+    units: rad
   c_fin:
     long_name: c_fin
     source: c_fin
-    units: unk
+    units: rad
   c_use_bpump:
     long_name: c_use_bpump
     source: c_use_bpump
-    units: unk
+    units: enum
 
   # Other
   d_bpump_value:
     long_name: d_bpump_value
     source: d_bpump_value
-    units: unk
+    units: cc
   d_pitch_value:
     long_name: d_pitch_value
     source: d_pitch_value
-    units: unk
+    units: rad
   d_use_bpump:
     long_name: d_use_bpump
     source: d_use_bpump
-    units: unk
+    units: enum
   use_pitch:
     long_name: use_pitch
     source: use_pitch
-    units: unk
+    units: enum
 
 
   ### Science

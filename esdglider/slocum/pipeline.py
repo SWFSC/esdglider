@@ -165,7 +165,7 @@ def generate_timeseries(
         _log.info("Generating raw nc")
         raw_yaml_list = [
             deploymentyaml, 
-            paths.get_path_yaml_deployment_vars("raw")
+            paths.get_path_yaml_slocum_vars("raw")
         ]
         # # Create raw Netcdf yaml list
         # raw_netcdf_yaml_list = [
@@ -292,7 +292,7 @@ def generate_timeseries(
             glider_paths["binarydir"],
             glider_paths["cacdir"],
             tsdir,
-            [deploymentyaml, paths.get_path_yaml_deployment_vars("eng")],
+            [deploymentyaml, paths.get_path_yaml_slocum_vars("eng")],
             search=binary_search,
             fnamesuffix=f"-{mode}-eng",
             time_base="m_depth",

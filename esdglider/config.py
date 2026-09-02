@@ -146,7 +146,7 @@ def make_deployment_yaml(
     _log.debug("Reading template yaml files")
 
     metadata = _read_esdglider_yaml("metadata.yml")
-    netcdf_vars = _read_esdglider_yaml("netcdf-variables-sci.yml")
+    netcdf_vars = _read_esdglider_yaml("slocum-netcdf-variables-sci.yml")
     prof_vars = _read_esdglider_yaml("profile-variables.yml")
 
     _log.debug("database connection %s", con)
