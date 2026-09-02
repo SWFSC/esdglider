@@ -137,9 +137,11 @@ par:
   source:  sci_bsipar_par
   long_name: sci_bsipar_par
   standard_name: downwelling_photosynthetic_photon_spherical_irradiance_in_sea_water
-  units: uE/m^2sec
+  units: uE m-2 s-1
   observation_type: "measured"
   instrument:   "instrument_par"
+  valid_min:    0.
+  valid_max:    2000.
 
 # Engineering variables
 heading:

@@ -2,6 +2,7 @@
 Slocum pipeline functions, for ESD-specific processing of slocum glider files
 """
 
+import ast
 import logging
 import math
 import os
@@ -77,15 +78,15 @@ def generate_timeseries(
         Whether to write science timeseries files, by default True.
     sci_use_m_depth : bool, optional
         Whether the science timeseries should use the glider measured depth 
-        (i.e., "depth_measured" from source "m_depth") as its depth value (True), 
-        or use the CTD-calculated depth (i.e., "depth_ctd" from source "pressure";
+        (i.e., "m_depth") as its depth value (True), 
+        or use the CTD-calculated depth (i.e., "depth_ctd", calculated from "pressure";
         False, default). 
         In practice, this also specifies whether to use pyglider's 
         binary_to_timeseries to generate the science timeseries (False), 
         or interpolate the science timeseries from the raw timeseries (True)
         Note that this variable does not affect 
         which depth variable is used to calculate profiles. 
-        For esdglider, this is always "depth_measured" (from m_depth)
+        For slocums in esdglider, this is always "m_depth"
     run_qc : bool, optional
         Whether to run qartod check on science timeseries, by default False.
         Only relevant if write_sci is True.
@@ -147,8 +148,8 @@ def generate_timeseries(
     outname_tsraw  = glider_paths["tsrawpath"]
     outname_tseng  = glider_paths["tsengpath"]
     outname_tssci  = glider_paths["tsscipath"]
-    outname_gr1m   = glider_paths["gr1path"]
-    outname_gr5m   = glider_paths["gr5path"]
+    # outname_gr1m   = glider_paths["gr1path"]
+    # outname_gr5m   = glider_paths["gr5path"]
     prof_summ_path = glider_paths["profsummpath"]
 
     if write_raw:
@@ -278,6 +279,11 @@ def generate_timeseries(
         except FileNotFoundError:
             _log.error("The raw nc file not found: %s", outname_tsraw)
             raise FileNotFoundError(f"File not found: {outname_tsraw}")
+
+    prof_index_attrs = tsraw["profile_index"].attrs
+    prof_index_attrs["sources"] += ", from raw dataset"
+
+
     # --------------------------------------------
     # Eng Timeseries
 
@@ -431,10 +437,11 @@ def generate_timeseries(
     if write_sci:
         _log.info("Checking flbbcd autoexec values, and cdom status")
         check_flbbcd_autoexec(
-            glider_paths["binarydir"], 
-            glider_paths["cacdir"], 
-            deploymentyaml,
-            search=binary_search,
+            xr.load_dataset(outname_tsraw)
+            # glider_paths["binarydir"], 
+            # glider_paths["cacdir"], 
+            # deploymentyaml,
+            # search=binary_search,
         )
 
         tssci = xr.load_dataset(outname_tssci)
@@ -634,7 +641,7 @@ def postproc_tsl1(
     # Update the profile indices from the profile summary CSV file
     if prof_summ is not None and prof_index_attrs is not None:
         _log.info("Join profiles, from raw timeseries, by time windows")
-        prof_index_attrs["sources"] += ", from raw dataset"
+        # prof_index_attrs["sources"] += ", from raw dataset"
         ds = prof.join_profiles(ds, prof_summ, prof_index_attrs)        
     else:
         _log.debug("Profile info not provided - skipping profiles")
@@ -692,13 +699,13 @@ def postproc_tsl1_eng(
 
     # Rename to depth
     try:
-        ds = ds.rename({"depth_measured": "depth"})
+        ds = ds.rename({"m_depth": "depth"})
     except ValueError:
-        _log.error("depth_measured not found in engineering dataset")
-        raise ValueError("depth_measured not found in engineering dataset")
+        _log.error("m_depth not found in engineering dataset")
+        raise ValueError("m_depth not found in engineering dataset")
 
     # # Get profile_direction from m_depth
-    # ds = prof.get_fill_profiles(ds, "time", "depth_measured", prof_args)
+    # ds = prof.get_fill_profiles(ds, "time", "m_depth", prof_args)
     # ds = ds.drop_vars("profile_index")
 
     # General updates
@@ -733,7 +740,7 @@ def postproc_tsl1_sci(
     ) -> xr.Dataset:
     """
     Science timeseries-specific post-processing, including:
-        - if sci_use_m_depth is True, try to rename depth_measured to depth
+        - if sci_use_m_depth is True, try to rename m_depth to depth
         - calculate variable 'profile_direction' from variable 'depth'
         - run postproc_tsl1
 
@@ -751,7 +758,7 @@ def postproc_tsl1_sci(
         List of variables for which to drop the whole timestamp 
         if they contain NaN values, by default None
     sci_use_m_depth : bool, optional
-        If True, then tries to rename the variable 'depth_measured'
+        If True, then tries to rename the variable 'm_depth'
         to 'depth'. Passed directly from generate_timeseries
     prof_summ : pd.DataFrame | None, optional
         Profile summary DataFrame, by default None
@@ -774,10 +781,10 @@ def postproc_tsl1_sci(
     # If using measured depth, rename it to 'depth' for consistency
     try:
         if sci_use_m_depth:
-            ds = ds.rename({"depth_measured": "depth"})
+            ds = ds.rename({"m_depth": "depth"})
     except KeyError:
         _log.warning(
-            "depth_measured not found in dataset, cannot rename to depth. "
+            "m_depth not found in dataset, cannot rename to depth. "
             + "This function will likely fail."
         )
 
@@ -820,11 +827,6 @@ def generate_gridded(
         A dictionary containing paths relevant to the glider deployment.
     write_gridded : bool, optional
         Whether to write gridded netCDF files, by default True.
-    use_m_depth : bool, optional
-        If True, grid using the glider's measured depth ('depth_measured')
-        instead of the CTD-calculated 'depth'. Default is False.
-    raw_to_sci : bool, optional
-        Deprecated fallback alias for `use_m_depth`.
     
     Returns
     -------
@@ -917,13 +919,14 @@ def _run_pyglider_gridding(inname, glider_paths) -> dict:
 
 
 def check_flbbcd_autoexec(
-        binarydir, 
-        cacdir, 
-        deploymentyaml,
-        search="*.[Dd|Ee][Bb][Dd]",
+    ds
+    # binarydir, 
+    # cacdir, 
+    # deploymentyaml,
+    # search="*.[Dd|Ee][Bb][Dd]",
 ):
     """
-
+    Check...
 
     Parameters
     ----------
@@ -942,8 +945,8 @@ def check_flbbcd_autoexec(
 
     _log.info("Checking device FLBBCD calibration values")
 
-    with open(deploymentyaml) as fin:
-        deployment = yaml.safe_load(fin)
+    # with open(deploymentyaml) as fin:
+    #     deployment = yaml.safe_load(fin)
 
     flbbcd_cal_names = [
         "u_flbbcd_chlor_cwo", 
@@ -954,11 +957,17 @@ def check_flbbcd_autoexec(
         "u_flbbcd_cdom_sf", 
     ]
 
-    device_data = deployment['glider_devices']
-    if "instrument_flbbcd" in device_data:
-        flbbcd_sn = device_data["instrument_flbbcd"].get("serial_number", None)
-        flbbcd_cal_date = device_data["instrument_flbbcd"].get("calibration_date", None)
+    # device_data = deployment['glider_devices']    
+    if "instrument_flbbcd" in ds.attrs:
+        flbbcd_attrs = ast.literal_eval(ds.attrs["instrument_flbbcd"])
+        flbbcd_sn = flbbcd_attrs.get("serial_number", None)
+        flbbcd_cal_date = flbbcd_attrs.get("calibration_date", None)
+    # if "instrument_flbbcd" in device_data:
+    #     flbbcd_sn = device_data["instrument_flbbcd"].get("serial_number", None)
+    #     flbbcd_cal_date = device_data["instrument_flbbcd"].get("calibration_date", None)
 
+        # TODO: check that all of  are in ds
+        
         # Load in esdglider calibration values
         with open(paths.get_path_flbbcd_calibrations(), "r") as fin:
             flbbcd_cals = yaml.safe_load(fin)
@@ -972,16 +981,18 @@ def check_flbbcd_autoexec(
                 )
                 return 
 
-            # Extract values in binary, from the autoexec, and confirm one value per key
-            dbd = dbdreader.MultiDBD(pattern=f"{binarydir}/{search}", 
-                                     cacheDir=cacdir)            
+    #         # Extract values in binary, from the autoexec, and confirm one value per key
+    #         dbd = dbdreader.MultiDBD(pattern=f"{binarydir}/{search}", 
+    #                                  cacheDir=cacdir)            
  
-            sensor_data = dbd.get(*flbbcd_cal_names, return_nans=False)
-            cal_values = [np.unique(i[1]) for i in sensor_data]
+    #         sensor_data = dbd.get(*flbbcd_cal_names, return_nans=False)
+    #         cal_values = [np.unique(i[1]) for i in sensor_data]
+            cal_values = [np.unique(ds[i].values) for i in flbbcd_cal_names]
+            cal_values = [arr[~np.isnan(arr)] for arr in cal_values]
             if not all(len(item) == 1 for item in cal_values):
                 _log.warning("Inconsistent calibration values found in binary files. Ending check")
                 return 
-
+            
             cal_values = [i[0] for i in cal_values]
             sensor_cals = dict(zip(flbbcd_cal_names, cal_values))
             sensor_cals["u_flbbcd_bb_sf"] = sensor_cals["u_flbbcd_bb_sf"] * 1e-6
@@ -1096,12 +1107,16 @@ def correct_flbbcd_raw_sci(
     msg = "Interpolated from raw values, after correct calibration values applied."
     t = ds_sci_cor.time.values.astype(np.int64) / 1e9
 
-    for var in ["chlorophyll", "cdom", "backscatter_700"]:
-        if var in ds_raw_cor.data_vars and var in ds_sci_cor.data_vars:
+    # for var in ["chlorophyll", "cdom", "backscatter_700"]:
+    for source in ["sci_flbbcd_chlor_units", "sci_flbbcd_cdom_units", "sci_flbbcd_bb_units"]:
+        var_raw = utils.get_var_by_source(ds_raw_cor, source)
+        var_sci = utils.get_var_by_source(ds_sci_cor, source)
+        
+        if var_raw in ds_raw_cor.data_vars and var_sci in ds_sci_cor.data_vars:
             # Filter for non-nan raw values
-            val_raw_notna = ~np.isnan(ds_raw_cor[var].values)
+            val_raw_notna = ~np.isnan(ds_raw_cor[var_raw].values)
             _t = ds_raw_cor.time.values.astype(np.int64)[val_raw_notna] / 1e9
-            val = ds_raw_cor[var].values[val_raw_notna] 
+            val = ds_raw_cor[var_raw].values[val_raw_notna] 
             
             # Interpolate raw values to sci timestamps, and do screens
             val_interp = np.interp(t, _t, val, left=np.nan, right=np.nan)
@@ -1110,9 +1125,15 @@ def correct_flbbcd_raw_sci(
             val_interp = pgutils._zero_screen(val_interp)
 
             # Update ds object with values and attributes
-            ds_sci_cor[var].values = val_interp
-            ds_sci_cor[var].attrs["comment"] = utils.append_string(
-                ds_sci_cor[var].attrs["comment"], msg)
+            ds_sci_cor[var_sci].values = val_interp
+            ds_sci_cor[var_sci].attrs["comment"] = utils.append_string(
+                ds_sci_cor[var_sci].attrs["comment"], msg)
+        else:
+            _log.warning(
+                "Source %s not found in both raw and science datasets, "
+                + "skipping correction", 
+                source
+            )
 
     ds_sci_cor = utils.drop_bogus(ds_sci_cor)
 

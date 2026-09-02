@@ -122,7 +122,7 @@ netcdf_variables:
   m_depth_rate:
     long_name: m_depth_rate
     source: m_depth_rate
-    units: m/s
+    units: m s-1
   m_fin:
     long_name: m_fin
     source: m_fin
@@ -130,19 +130,19 @@ netcdf_variables:
   m_speed:
     long_name: m_speed
     source: m_speed
-    units: m/s
+    units: m s-1
   m_speed_avg:
     long_name: m_speed_avg
     source: m_speed_avg
-    units: m/s
+    units: m s-1
   m_water_vx:
     long_name: m_water_vx
     source: m_water_vx
-    units: m/s
+    units: m s-1
   m_water_vy:
     long_name: m_water_vy
     source: m_water_vy
-    units: m/s
+    units: m s-1
 
   # Commanded
   c_dive_target_depth:
@@ -212,6 +212,13 @@ netcdf_variables:
 
 
   ### Science
+  sci_m_present_time:
+    long_name: sci_m_present_time
+    source: sci_m_present_time
+    standard_name: time
+    time_origin: "01-JAN-1970 00:00:00"
+    units: seconds since 1970-01-01T00:00:00Z
+
   # Seabird CTD
   sci_ctd41cp_timestamp:
     long_name: sci_ctd41cp_timestamp
@@ -310,6 +317,30 @@ netcdf_variables:
     standard_name: volume_backwards_scattering_coefficient_of_radiative_flux_in_sea_water
     units: "m-1 sr-1"
     observation_type: calculated
+  u_flbbcd_chlor_cwo:
+    source: u_flbbcd_chlor_cwo
+    long_name: u_flbbcd_chlor_cwo
+    units: nodim
+  u_flbbcd_chlor_sf:
+    source: u_flbbcd_chlor_sf
+    long_name: u_flbbcd_chlor_sf
+    units: ug/l/nodim
+  u_flbbcd_bb_cwo:
+    source: u_flbbcd_bb_cwo
+    long_name: u_flbbcd_bb_cwo
+    units: nodim
+  u_flbbcd_bb_sf:
+    source: u_flbbcd_bb_sf
+    long_name: u_flbbcd_bb_sf
+    units: Mnodim
+  u_flbbcd_cdom_cwo:
+    source: u_flbbcd_cdom_cwo
+    long_name: u_flbbcd_cdom_cwo
+    units: nodim
+  u_flbbcd_cdom_sf:
+    source: u_flbbcd_cdom_sf
+    long_name: u_flbbcd_cdom_sf
+    units: ppb/nodim
 
   # PAR
   sci_bsipar_timestamp:
@@ -322,7 +353,7 @@ netcdf_variables:
     source:  sci_bsipar_par
     long_name: sci_bsipar_par
     standard_name: downwelling_photosynthetic_photon_spherical_irradiance_in_sea_water
-    units: uE/m^2sec
+    units: uE m-2 s-1
     observation_type: "measured"
 
   # Solocam

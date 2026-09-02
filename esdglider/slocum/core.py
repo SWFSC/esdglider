@@ -287,11 +287,10 @@ def binary_to_raw_timeseries(
 
     if not prof_depth_var in ("m_depth", "depth_ctd"):
         _log.warning(
-            "Unexpected prof_depth_var: %s. "
+            "Unexpected prof_depth_var '%s', rest of pipeline may break. "
             + "Expected either 'm_depth' or 'depth_ctd'", 
             prof_depth_var
         )
-        raise ValueError("prof_depth_var must be either 'm_depth' or 'depth_ctd'")
 
     # Read and parse deployment yaml(s)
     deployment = pgutils._get_deployment(deploymentyaml)
@@ -339,7 +338,7 @@ def binary_to_raw_timeseries(
         # Log the removed sensors before filtering
         for sensor, name, keep in zip(sensors, thenames, sensor_in_dbd):
             if not keep:
-                _log.info(
+                _log.debug(
                     "Sensor not in dbdreader. Ignoring %s (sensor %s)", 
                     name, 
                     sensor,
