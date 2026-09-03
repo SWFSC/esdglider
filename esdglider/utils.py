@@ -1088,21 +1088,21 @@ def combine_datasets(nc_dir):
 
 
 def update_ngdac_profile_attributes(
-    profile_file,
+    ds,
     deployment,
     trajectory,
 ):
     """
-    Apply ESD-specific metadata to a pyglider NGDAC profile.
+    Apply ESD-specific metadata updates to a pyglider NGDAC profile.
 
-    Updates the profile NetCDF file in place using netCDF4. Only
-    metadata and instrument variables that differ from pyglider's
-    default behavior are modified.
+    Updates the trajectory, platform, and instrument metadata and removes
+    instrument metadata stored as global attributes. Returns the updated
+    xarray Dataset without modifying the source NetCDF file in place.
 
     Parameters
     ----------
-    profile_file : str or Path
-        Profile NetCDF file created by pyglider.
+    ds : xarray.Dataset
+        Profile dataset created by pyglider.
 
     deployment : dict
         Deployment configuration loaded from the deployment YAML.
@@ -1112,96 +1112,75 @@ def update_ngdac_profile_attributes(
 
     Returns
     -------
-    None
+    xarray.Dataset
+        Updated profile dataset containing ESD-specific metadata.
     """
+
+    # COPY DATASET BEFORE MODIFYING
+    ds = ds.copy()
 
     # LOAD DEPLOYMENT METADATA
     meta = deployment["metadata"]
     instrument_meta = deployment["glider_devices"]
 
-    # OPEN PROFILE NETCDF FOR IN-PLACE MODIFICATION
-    with netCDF4.Dataset(profile_file, "r+") as nc:
+    # TRAJECTORY
+    # ESD USES THE DEPLOYMENT ID FROM THE SCIENCE TIMESERIES
+    ds["trajectory"] = xr.DataArray(
+        np.bytes_(trajectory)
+    )
 
-        # TRAJECTORY
-        trajectory_var = nc.variables["trajectory"]
-
-        # ESD USES THE DEPLOYMENT ID FROM THE SCIENCE TIMESERIES
-        trajectory_chars = np.full(
-            trajectory_var.shape,
-            b"\x00",
-            dtype="S1",
-        )
-        trajectory_chars[:len(trajectory)] = np.array(
-            list(trajectory),
-            dtype="S1",
-        )
-        trajectory_var[:] = trajectory_chars
-
-        trajectory_var.setncattr(
-            "cf_role",
-            "trajectory_id",
-        )
-        trajectory_var.setncattr(
-            "comment",
-            "A trajectory is a single deployment of a glider "
-            "and may span multiple data files.",
-        )
-        trajectory_var.setncattr(
-            "long_name",
-            "Trajectory/Deployment Name",
-        )
-        
-        # PLATFORM
-        platform = nc.variables["platform"]
-        platform.setncattr(
-            "id",
-            meta["glider_name"],
-        )
-        # LIST ALL INSTRUMENTS DEFINED IN glider_devices
-        instrument_str = ",".join(
-            instrument_meta.keys()
-        )
-        platform.setncattr(
-            "instrument",
-            instrument_str,
-        )
-        platform.setncattr(
-            "long_name",
-            (
-                f"{meta['glider_model']} "
-                f"{meta['glider_name']}"
+    ds["trajectory"].attrs.update(
+        {
+            "cf_role": "trajectory_id",
+            "comment": (
+                "A trajectory is a single deployment of a glider "
+                "and may span multiple data files."
             ),
-        )
+            "long_name": "Trajectory/Deployment Name",
+        }
+    )
 
-        # INSTRUMENTS
-        for name, attrs in instrument_meta.items():
-            # pyglider ALREADY CREATES instrument_ctd
-            # CREATE ADDITIONAL ESD INSTRUMENT VARIABLES
-            if name in nc.variables:
-                instrument = nc.variables[name]
-            else:
-                fill_value = attrs.get(
-                    "_FillValue",
-                    -1,
-                )
-                instrument = nc.createVariable(
-                    name,
-                    "i4",
-                    (),
-                    fill_value=fill_value,
-                )
-                instrument[...] = np.int32(1)
+    # PLATFORM
+    ds["platform"].attrs["id"] = meta["glider_name"]
 
-            # APPLY INSTRUMENT METADATA FROM glider_devices
-            for attr_name, attr_value in attrs.items():
-                # _FillValue MUST BE SPECIFIED WHEN THE VARIABLE
-                # IS CREATED & CANNOT BE CHANGED AFTERWARD
-                if attr_name == "_FillValue":
-                    continue
-                instrument.setncattr(
-                    attr_name,
-                    attr_value,
-                )
+    # LIST ALL INSTRUMENTS DEFINED IN glider_devices
+    instrument_str = ", ".join(
+        instrument_meta.keys()
+    )
+
+    ds["platform"].attrs["instrument"] = instrument_str
+
+    ds["platform"].attrs["long_name"] = (
+        f"{meta['glider_model']} "
+        f"{meta['glider_name']}"
+    )
+
+    # REMOVE INSTRUMENT GLOBAL ATTRIBUTES
+    # Instrument metadata are stored on instrument variables instead.
+    for attr_name in list(ds.attrs):
+        if attr_name.startswith("instrument_"):
+            del ds.attrs[attr_name]
+
+    # INSTRUMENTS
+    for name, attrs in instrument_meta.items():
+
+        # pyglider ALREADY CREATES instrument_ctd
+        # CREATE ADDITIONAL ESD INSTRUMENT VARIABLES
+        if name not in ds.variables:
+            ds[name] = xr.DataArray(
+                np.int32(1)
+            )
+
+        # APPLY INSTRUMENT METADATA FROM glider_devices
+        for attr_name, attr_value in attrs.items():
+
+            # _FillValue IS HANDLED THROUGH NETCDF ENCODING
+            if attr_name == "_FillValue":
+                continue
+
+            ds[name].attrs[attr_name] = attr_value
+
+    return ds
 
 
 def create_ngdac_profiles(
@@ -1213,14 +1192,12 @@ def create_ngdac_profiles(
     """
     Create NGDAC profile NetCDF files from a science timeseries NetCDF.
 
-    Individual profile NetCDF files are created using pyglider's
+    Individual profiles are created using pyglider's
     ``extract_timeseries_profiles`` function in a temporary directory.
-    The resulting profiles are updated with ESD-specific NGDAC metadata
-    and written to the output directory using the glider name and
-    profile timestamp for the filename.
-
-    The input science NetCDF is expected to have already undergone
-    QARTOD quality control.
+    Each profile is updated with ESD-specific NGDAC metadata and written
+    as a new NetCDF file using the glider name and profile timestamp.
+    The input science NetCDF is expected to have already undergone QARTOD
+    quality control.
 
     Parameters
     ----------
@@ -1278,28 +1255,34 @@ def create_ngdac_profiles(
         # PROCESS EACH PROFILE
         for profile_file in profile_files:
 
-            # APPLY ESD-SPECIFIC METADATA
-            update_ngdac_profile_attributes(
-                profile_file,
-                deployment,
-                trajectory,
-            )
-
             # GET PROFILE TIMESTAMP FROM pyglider FILENAME
             profile_timestamp = profile_file.stem.split("-", 1)[1]
 
             # CREATE FINAL ESD FILENAME
-            final_file = (
+            outname = (
                 outdir
                 / f"{glider_name}-{profile_timestamp}.nc"
             )
 
             # CHECK WHETHER FINAL FILE ALREADY EXISTS
-            if final_file.exists() and not force:
-                raise FileExistsError(
-                    f"{final_file} already exists. "
-                    "Use force=True to overwrite."
+            if outname.exists() and not force:
+                _log.warning(
+                    "%s already exists. Use force=True to overwrite.",
+                    outname,
                 )
 
-            # MOVE FINISHED PROFILE TO FINAL OUTPUT DIRECTORY
-            profile_file.replace(final_file)
+            # APPLY ESD-SPECIFIC METADATA
+            with xr.open_dataset(
+                profile_file,
+                decode_times=False,
+            ) as ds:
+                ds_new = update_ngdac_profile_attributes(
+                    ds,
+                    deployment,
+                    trajectory,
+                )
+
+                ds_new.to_netcdf(
+                    outname,
+                    mode="w",
+                )
