@@ -15,6 +15,7 @@ import statistics
 import xarray as xr
 import yaml
 import netCDF4
+import tempfile
 
 _log = logging.getLogger(__name__)
 
@@ -1201,8 +1202,8 @@ def update_ngdac_profile_attributes(
                     attr_name,
                     attr_value,
                 )
-                
-                
+
+
 def create_ngdac_profiles(
     inname,
     outdir,
@@ -1213,8 +1214,10 @@ def create_ngdac_profiles(
     Create NGDAC profile NetCDF files from a science timeseries NetCDF.
 
     Individual profile NetCDF files are created using pyglider's
-    ``extract_timeseries_profiles`` function. The resulting profiles
-    are then updated in place with ESD-specific NGDAC metadata.
+    ``extract_timeseries_profiles`` function in a temporary directory.
+    The resulting profiles are updated with ESD-specific NGDAC metadata
+    and written to the output directory using the glider name and
+    profile timestamp for the filename.
 
     The input science NetCDF is expected to have already undergone
     QARTOD quality control.
@@ -1225,7 +1228,7 @@ def create_ngdac_profiles(
         Science timeseries NetCDF file to break into profiles.
 
     outdir : str or Path
-        Directory where profile NetCDF files are written.
+        Directory where final profile NetCDF files are written.
 
     deploymentyaml : str or Path
         Deployment YAML file used to create the timeseries NetCDF.
@@ -1242,27 +1245,61 @@ def create_ngdac_profiles(
     with open(deploymentyaml) as fin:
         deployment = yaml.safe_load(fin)
 
+    # GET GLIDER NAME FOR PROFILE FILENAMES
+    glider_name = deployment["metadata"]["glider_name"]
+
     # GET DEPLOYMENT TRAJECTORY ID FROM SCIENCE NETCDF
     with xr.open_dataset(inname) as ds:
         trajectory = ds.attrs["id"]
 
-    # CREATE INDIVIDUAL PROFILE NETCDF FILES USING pyglider
-    pgncprocess.extract_timeseries_profiles(
-        str(inname),
-        str(outdir),
-        [str(deploymentyaml)],
-        force=force,
+    # CREATE OUTPUT DIRECTORY
+    outdir = Path(outdir)
+    outdir.mkdir(
+        parents=True,
+        exist_ok=True,
     )
 
-    # FIND THE PROFILE FILES CREATED BY pyglider
-    profile_files = sorted(
-        Path(outdir).glob("*.nc")
-    )
+    # CREATE A TEMPORARY DIRECTORY FOR pyglider OUTPUT
+    with tempfile.TemporaryDirectory() as temp_dir:
 
-    # APPLY ESD-SEPCIFIC METADATA DIRECTLY TO EACH NETCDF FILE
-    for profile_file in profile_files:
-        update_ngdac_profile_attributes(
-            profile_file,
-            deployment,
-            trajectory,
+        # CREATE INDIVIDUAL PROFILE NETCDF FILES USING pyglider
+        pgncprocess.extract_timeseries_profiles(
+            str(inname),
+            temp_dir,
+            [str(deploymentyaml)],
+            force=True,
         )
+
+        # FIND THE PROFILE FILES CREATED BY pyglider
+        profile_files = sorted(
+            Path(temp_dir).glob("*.nc")
+        )
+
+        # PROCESS EACH PROFILE
+        for profile_file in profile_files:
+
+            # APPLY ESD-SPECIFIC METADATA
+            update_ngdac_profile_attributes(
+                profile_file,
+                deployment,
+                trajectory,
+            )
+
+            # GET PROFILE TIMESTAMP FROM pyglider FILENAME
+            profile_timestamp = profile_file.stem.split("-", 1)[1]
+
+            # CREATE FINAL ESD FILENAME
+            final_file = (
+                outdir
+                / f"{glider_name}-{profile_timestamp}.nc"
+            )
+
+            # CHECK WHETHER FINAL FILE ALREADY EXISTS
+            if final_file.exists() and not force:
+                raise FileExistsError(
+                    f"{final_file} already exists. "
+                    "Use force=True to overwrite."
+                )
+
+            # MOVE FINISHED PROFILE TO FINAL OUTPUT DIRECTORY
+            profile_file.replace(final_file)
