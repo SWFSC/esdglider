@@ -9,7 +9,6 @@ import os
 import tempfile
 from importlib import metadata
 
-import dbdreader
 import numpy as np
 import pandas as pd
 import pyglider.ncprocess as pgncprocess
@@ -53,6 +52,7 @@ def generate_timeseries(
     write_eng: bool = True,
     write_sci: bool = True,
     sci_use_m_depth: bool = False,
+    run_checks: bool = True,
     run_qc: bool = False,
     file_info: str | None = None,
     binary_search: str | None = None,
@@ -87,8 +87,11 @@ def generate_timeseries(
         Note that this variable does not affect 
         which depth variable is used to calculate profiles. 
         For slocums in esdglider, this is always "m_depth"
+    run_checks : bool, optional
+        Whether to run checks on the science timeseries, by default True.
+        Only relevant if write_sci is True.
     run_qc : bool, optional
-        Whether to run qartod check on science timeseries, by default False.
+        Whether to run qartod tests on science timeseries, by default False.
         Only relevant if write_sci is True.
     file_info : str | None, optional
         Information about the processing file, by default None.
@@ -139,9 +142,13 @@ def generate_timeseries(
     #     prof_depth_var = "depth_ctd"
     #     other_depth_var = "depth_measured"
 
-    # Check which dbdreader backend is being used
+    # If writing any 
     if write_raw or write_eng or write_sci:
+        # Check which dbdreader backend is being used
         utils.check_dbdreader_c_extension()
+
+        # If writing any new files, remove plots
+        utils.rmtree(glider_paths["plotdir"])
 
     # --------------------------------------------
     # Raw
@@ -153,12 +160,6 @@ def generate_timeseries(
     prof_summ_path = glider_paths["profsummpath"]
 
     if write_raw:
-        # utils.remove_file(outname_tsraw)
-        # utils.remove_file(outname_tseng)
-        # utils.remove_file(outname_tssci)
-        # utils.remove_file(outname_gr1m)
-        # utils.remove_file(outname_gr5m)
-        # utils.remove_file(prof_summ_path)
         utils.rmtree(glider_paths["outdir"]) #raw: remove all
         utils.makedirs_pass(rawdir)
         utils.makedirs_pass(ancdir)
@@ -168,29 +169,6 @@ def generate_timeseries(
             deploymentyaml, 
             paths.get_path_yaml_slocum_vars("raw")
         ]
-        # # Create raw Netcdf yaml list
-        # raw_netcdf_yaml_list = [
-        #     deploymentyaml, 
-        #     paths.get_path_yaml_deployment_vars("eng"), 
-        #     paths.get_path_yaml_deployment_vars("raw")
-        # ]
-        
-        # i_solocam = ["instrument_shadowgraph", "instrument_glidercam"]
-        # if any(i in deployment["glider_devices"] for i in i_solocam):
-        #     raw_netcdf_yaml_list.append(paths.get_path_yaml_deployment_vars("raw-solocam"))
-
-        # i_flbbcd = ["instrument_flbbcd"]
-        # if any(i in deployment["glider_devices"] for i in i_flbbcd):
-        #     raw_netcdf_yaml_list.append(paths.get_path_yaml_deployment_vars("raw-flbbcd"))
-        # _log.debug("Raw YAML list: %s", raw_netcdf_yaml_list)
-
-        # deployment_raw = pgutils._get_deployment(raw_yaml_list)
-        # deployment_raw["netcdf_variables"] = utils._get_deployment_netcdfvars(raw_netcdf_yaml_list)
-
-        # with tempfile.TemporaryDirectory() as temp_dir:
-        #     temp_file = os.path.join(temp_dir, "temp.yml")
-        #     with open(temp_file, "w", encoding="utf-8") as f:
-        #         yaml.dump(deployment_raw, f, sort_keys=False, default_flow_style=False)
 
         outname_tsraw = core.binary_to_raw_timeseries(
             glider_paths["binarydir"],
@@ -207,16 +185,6 @@ def generate_timeseries(
         # Run postprocessing
         _log.info(f"Post-processing raw timeseries: {outname_tsraw}")
         tsraw = xr.load_dataset(outname_tsraw)
-
-        # tsraw = tsraw.reset_coords(["latitude", "longitude"])
-
-        # new_start = [
-        #     "profile_index",
-        #     "profile_direction",
-        #     "depth_measured",
-        #     "depth_ctd",
-        # ]
-        # tsraw = utils.data_var_reorder(tsraw, new_start)
 
         tsraw = postproc_attrs(
             tsraw, 
@@ -312,14 +280,9 @@ def generate_timeseries(
             tseng, 
             mode, 
             maxgap, 
-            # deployment_start=deployment_start,
-            # deployment_end=deployment_end,
             file_info=file_info,
             prof_summ=prof_summ,
-            # prof_summ_path=glider_paths["profsummpath"],
             prof_index_attrs=prof_index_attrs,
-            # prof_depth_var=prof_depth_var,
-            # prof_args=prof_args
         )
         pgutils._save_dataset(
             tseng,
@@ -335,9 +298,6 @@ def generate_timeseries(
     if write_sci:
         # Since gridded depend on ts, also delete gridded
         utils.remove_file(outname_tssci)
-        # utils.remove_file(outname_gr1m)
-        # utils.remove_file(outname_gr5m)
-        
         utils.rmtree(glider_paths["griddir"]) #sci: remove gridded
         utils.makedirs_pass(tsdir)
 
@@ -384,6 +344,12 @@ def generate_timeseries(
                 profile_filt_time=None,  # type: ignore
                 maxgap=maxgap_esd,
             )
+
+            # Drop rows in science where pressure is nan, because:
+            #   1) in principle there should be no depth if pressure is nan
+            #   2) pyglider does a 'zero screen'
+            #   3) nan pressure values all appear to be at the surface,
+            #       and often have weird associated values
             drop_vars = ["pressure"]
 
         _log.info("Post-processing science timeseries: %s", outname_tssci)
@@ -448,7 +414,7 @@ def generate_timeseries(
         _log.info("Not writing timeseries nc")
 
     # --------------------------------------------
-    if write_sci:
+    if write_sci and run_checks:
         _log.info("Checking flbbcd autoexec values, and cdom status")
         check_flbbcd_autoexec(
             xr.load_dataset(outname_tsraw)
@@ -789,10 +755,6 @@ def postproc_tsl1_sci(
     # ds = xr.load_dataset(ds_file)
     _log.debug("begin sci postproc: ds has %d values", len(ds.time))
 
-    # # Get profile_direction from specified depth field
-    # if prof_depth_var is None:
-    #     raise ValueError("prof_depth_var must be specified for profile processing")
-
     # If using measured depth, rename it to 'depth' for consistency
     try:
         if sci_use_m_depth:
@@ -807,11 +769,6 @@ def postproc_tsl1_sci(
     ds = ds.drop_vars("profile_index")
 
     # General updates
-    # Drop rows in science where pressure is nan, because:
-    #   1) in principle there should be no depth if pressure is nan
-    #   2) pyglider does a 'zero screen'
-    #   3) nan pressure values all appear to be at the surface,
-    #       and often have weird associated values
     ds = postproc_tsl1(
         ds=ds,
         mode=mode,
@@ -830,8 +787,6 @@ def postproc_tsl1_sci(
 def generate_gridded(
     glider_paths: dict,
     write_gridded: bool = True,
-    # use_m_depth: bool = False,
-    # raw_to_sci: bool = False,
 ) -> dict:
     """
     Generate gridded netCDF files for the slocum glider deployment.
@@ -858,8 +813,11 @@ def generate_gridded(
 
     if write_gridded:
         if not os.path.isfile(outname_tssci):
+            _log.error("Could not find %s", outname_tssci)
             raise FileNotFoundError(f"Could not find {outname_tssci}")
+        
         utils.rmtree(glider_paths["griddir"])
+        utils.rmtree(glider_paths["plotdir"])
 
         # if use_m_depth:
         #     _log.info("Gridding science data using glider measured depth (depth_measured)")
@@ -880,7 +838,7 @@ def generate_gridded(
                 
         #         outnames = _run_pyglider_gridding(temp_file, glider_paths)
         # else:
-        _log.info("Gridding science data using CTD-calculated depth")
+        _log.info("Gridding science data using given 'depth' var")
         outnames = _run_pyglider_gridding(outname_tssci, glider_paths)
         _log.debug("gridded outnames %s", "; ".join(outnames))
 

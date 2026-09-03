@@ -11,7 +11,7 @@ import yaml
 CONFIG_DIR = Path("/home/user/glider-lab/deployment-configs")
 # CONFIG_DIR = Path("/home/user/tests/amlr08-20220513")
 
-# Map top-level sections -> variable names -> desired min/max values
+# Map top-level sections -> variable names -> desired attrs
 NEW_BOUNDS = {
     "netcdf_variables": {
         "chlorophyll": {"valid_min": 0.0, "valid_max": 50.0},
@@ -49,3 +49,4 @@ def update_glider_configs(config_directory: Path, updates: dict):
 
 if __name__ == "__main__":
     update_glider_configs(CONFIG_DIR, NEW_BOUNDS)
+    
