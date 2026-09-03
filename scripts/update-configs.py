@@ -8,17 +8,27 @@ from pathlib import Path
 import yaml
 
 # Directory containing your glider YAML config files
-CONFIG_DIR = Path("/home/user/glider-lab/deployment-configs")
-# CONFIG_DIR = Path("/home/user/tests/amlr08-20220513")
+# CONFIG_DIR = Path("/home/user/glider-lab/deployment-configs")
+CONFIG_DIR = Path("/home/user/tests/amlr08-20220513")
 
 # Map top-level sections -> variable names -> desired attrs
 NEW_BOUNDS = {
-    "netcdf_variables": {
-        "chlorophyll": {"valid_min": 0.0, "valid_max": 50.0},
-        "oxygen_concentration": {"valid_min": 0.0, "valid_max": 500.0},
-        "par": {"valid_min": 0.0, "valid_max": 2000.0, "units": "umol m-2 s-1"},
-        "temperature": {"units": "degrees_C"},
-        "backscatter_700": {"units": "m-1 sr-1"},
+    # "netcdf_variables": {
+    #     "chlorophyll": {"valid_min": 0.0, "valid_max": 50.0},
+    #     "oxygen_concentration": {"valid_min": 0.0, "valid_max": 500.0},
+    #     "par": {"valid_min": 0.0, "valid_max": 2000.0, "units": "umol m-2 s-1"},
+    #     "temperature": {"units": "degrees_C"},
+    #     "backscatter_700": {"units": "m-1 sr-1"},
+    # },
+    "glider_devices": {
+        "instrument_glidercam": {"long_name": "Wassoc Glidercam"},
+        "instrument_shadowgraph": {"long_name": "Wassoc Shadowgraph Camera"},
+        "instrument_azfp": {"long_name": "Acoustic Zooplankton Fish Profiler"},
+        "instrument_echosounder": {"long_name": "Nortek Sig 100 Compact Echosounder"},
+        "instrument_par": {"long_name": "Photosynthetically Active Radiation (PAR) Sensor"},
+        "instrument_dmon": {"long_name": "WHOI Digital Acoustic Monitoring Instrument DMON"},
+        "instrument_wispr": {"long_name": "WISPR Passive Acoustic Monitoring System "},
+        "instrument_hydrophone": {"long_name": "Hydrophone for WISPR"},
     },
     # "profile_variables": {
     #     "profile_time": {"valid_min": 0.0, "valid_max": 2000000000.0},

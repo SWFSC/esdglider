@@ -36,7 +36,8 @@ oxygen:
   type: "instrument"
 glidercam:
   _FillValue: -999
-  make_model: "" #'Williamson and Associates Glidercam'
+  long_name: "Wassoc Glidercam"
+  make_model: ""
   serial_number: ""
   calibration_date: ""
   factory_calibrated: ""
@@ -47,7 +48,8 @@ glidercam:
   type: "instrument"
 shadowgraph:
   _FillValue: -999
-  make_model: "" #'Williamson and Associates Shadowgraph Camera (11cm)'
+  long_name: "Wassoc Shadowgraph Camera"
+  make_model: ""
   serial_number: ""
   calibration_date: ""
   factory_calibrated: ""
@@ -58,8 +60,8 @@ shadowgraph:
   type: "instrument"
 azfp:
   _FillValue: -999
+  long_name: "Acoustic Zooplankton Fish Profiler"
   make_model: "" #"ASL Environmental Sciences AZFP 3 Frequency"
-  long_name: 'ASL AZFP'
   serial_number: ""
   calibration_date: ""
   factory_calibrated: ""
@@ -70,6 +72,7 @@ azfp:
   type: "instrument"
 echosounder:
   _FillValue: -999
+  long_name: "Nortek Sig 100 Compact Echosounder"
   make_model: "" #'Nortek Signature 100 Compact Echosounder'
   serial_number: ""
   calibration_date: ""
@@ -81,6 +84,7 @@ echosounder:
   type: "instrument"
 par:
   _FillValue: -999
+  long_name: "Photosynthetically Active Radiation (PAR) Sensor"
   make_model: ""
   serial_number: ""
   calibration_date: ""
@@ -92,6 +96,7 @@ par:
   type: "instrument"
 dmon:
   _FillValue: -999
+  long_name: "WHOI Digital Acoustic Monitoring Instrument DMON"
   make_model: ""
   serial_number: ""
   calibration_date: ""
@@ -104,6 +109,7 @@ dmon:
   type: "instrument"
 wispr:
   _FillValue: -999
+  long_name: "WISPR Passive Acoustic Monitoring System "
   make_model: ""
   serial_number: ""
   calibration_date: ""
@@ -115,6 +121,7 @@ wispr:
   type: "instrument"
 hydrophone:
   _FillValue: -999
+  long_name: "Hydrophone for WISPR"
   make_model: ""
   serial_number: ""
   calibration_date: ""

@@ -148,9 +148,10 @@ def drop_bogus(
     """
 
     # Drop bogus times, as specified
-    _log.info("Dropping bogus values")
     ds = drop_bogus_times(ds, min_dt=min_dt, max_drop=max_drop)
 
+    _log.info("Dropping bogus values")
+    
     # Drop bogus lat/lons
     num_orig = len(ds.time)
     ll_good = (
