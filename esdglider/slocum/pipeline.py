@@ -598,9 +598,13 @@ def postproc_tsl1(
         # This functionality is here so it is run after drop_bogus
         for var in drop_vars:
             if var in list(ds.keys()):
-                _log.info(f"Dropping points with nan values for {var}")
                 num_orig = len(ds.time)
                 var_nan = np.isnan(ds[var].values)
+                _log.info(
+                    "Dropping %d points with nan values for %s", 
+                    var_nan.sum(), 
+                    var
+                )
                 _log.debug(f"depth values: {ds.depth.values[var_nan]}")
                 if any(ds.depth.values[var_nan] >= 5):
                     _log.warning(
