@@ -343,13 +343,27 @@ def generate_timeseries(
 
         if sci_use_m_depth: 
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
-            outname_tssci = core.raw_to_sci_timeseries(
-                outname_tsraw,
-                tsdir,
-                deploymentyaml,
-                fnamesuffix=f"-{mode}-sci",
-                maxgap=maxgap_esd,
-            )
+            with tempfile.TemporaryDirectory() as temp_dir:
+                _log.info("Creating temporary raw timeseries in %s", temp_dir)
+                outname_temp = core.binary_to_raw_timeseries(
+                    glider_paths["binarydir"],
+                    glider_paths["cacdir"],
+                    temp_dir,
+                    deploymentyaml, 
+                    search=binary_search,
+                    fnamesuffix="-temp",
+                    pressure_var="pressure", 
+                    prof_depth_var=None,
+                )
+
+                _log.info("Processing raw timeseries to science timeseries")
+                outname_tssci = core.raw_to_sci_timeseries(
+                    outname_temp,
+                    tsdir,
+                    deploymentyaml,
+                    fnamesuffix=f"-{mode}-sci",
+                    maxgap=maxgap_esd,
+                )
             drop_vars = None
 
         else:            
@@ -651,7 +665,8 @@ def postproc_tsl1(
 
     # Update attribute specific to eng and sci timeseries
     ds.attrs["processing_level"] = (
-        "Values have been interpolated via linear fill, "
+        "Level 1 (L1) processed data timeseries. "
+        + "Values have been interpolated via linear fill, "
         + f"with a maxgap of {maxgap} seconds. "
         + "Minimal data screening."
     )

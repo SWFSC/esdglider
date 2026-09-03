@@ -236,9 +236,9 @@ def binary_to_raw_timeseries(
     search="*.[D|E]BD",
     include_source=False,
     fnamesuffix="",
-    prof_depth_var: str | None ="depth_measured",
-    prof_args: dict | None = None,
     pressure_var: str | None = "sci_water_pressure",
+    prof_depth_var: str | None ="m_depth",
+    prof_args: dict | None = None,
 ):
     """
     An adaptation of pyglider.slocum.binary_to_timeseries to 
@@ -282,10 +282,7 @@ def binary_to_raw_timeseries(
     if not have_dbdreader:
         raise ImportError("Cannot import dbdreader")
 
-    if prof_args is None:
-        prof_args = {}
-
-    if not prof_depth_var in ("m_depth", "depth_ctd"):
+    if not (prof_depth_var in ("m_depth", "depth_ctd") or prof_depth_var is None):
         _log.warning(
             "Unexpected prof_depth_var '%s', rest of pipeline may break. "
             + "Expected either 'm_depth' or 'depth_ctd'", 
@@ -327,13 +324,11 @@ def binary_to_raw_timeseries(
     eng_params = dbd.parameterNames["eng"]
 
     # Check that all sensor names are in sci_params or eng_params
-    # sensor_in_dbd = [i in (eng_params+sci_params) for i in sensors]
     valid_params = set(eng_params + sci_params)
     sensor_in_dbd = [s in valid_params for s in sensors]
     if not all(sensor_in_dbd):
-        _log.info(
-            "Not all sensors are recognized by dbdreader as sci or eng. "
-            + "Removing offending sensors"
+        _log.info("Removing sensors not in binary files: %s", 
+            [s for s, keep in zip(sensors, sensor_in_dbd) if not keep]
         )
         # Log the removed sensors before filtering
         for sensor, name, keep in zip(sensors, thenames, sensor_in_dbd):
@@ -513,18 +508,23 @@ def raw_to_sci_timeseries(
     maxgap=300,
 ):
     """
-    Go from raw timeseries (from esdglider.glider.binary_to_raw_timeseries)
-    to a processed science timeseries.
+    Using the raw timeseries 
+    (created by `esdglider.glider.binary_to_raw_timeseries`), 
+    create a processed science timeseries.
     This function can be used in cases where different science sensors are
     on at different times, e.g. PAM deployments, and thus it is not possible
-    to get the full science timeseries using dbdreader.get_sync.
+    to get the full science timeseries using dbdreader.get_sync with a science sensor as the time base
 
-    Other than not using get_sync, this function closely follows the
-    pyglider.slocum.binary_to_timeseries
+    Other than not using get_sync, this function tries to closely 
+    follow `pyglider.slocum.binary_to_timeseries`
 
     Parameters
     ----------
-    All params are the same as pyglider.slocum.binary_to_timeseries
+    Params are generally the same as pyglider.slocum.binary_to_timeseries
+    Exceptions:
+
+    inname : string
+        name of the raw timeseries netcdf file
 
     Returns
     -------
