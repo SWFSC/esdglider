@@ -72,78 +72,80 @@ def get_path_qartod_config() -> str:
     with resources.as_file(ref) as path:
         return str(path)
 
-def get_path_glider_data_out(
-    deployment_name: str,
-    mode: str,
-    glider_data_out_path: str, 
-) -> dict:
-    """
-    Get (i.e., generate) the glider 'data out' paths.
-    TODO: does this need to stay separate?    
+# def get_path_glider_data_out(
+#     deployment_name: str,
+#     mode: str,
+#     glider_data_out_path: str, 
+# ) -> dict:
+#     """
+#     Get (i.e., generate) the glider 'data out' paths.
+#     TODO: does this need to stay separate?    
     
-    These paths follow the directory structure outlined here:
-    https://swfsc.github.io/glider-lab-manual/content/data-management.html
+#     These paths follow the directory structure outlined here:
+#     https://swfsc.github.io/glider-lab-manual/content/data-management.html
 
-    This function is typically called by get_path_glider()
+#     This function is typically called by get_path_glider()
 
-    Parameters
-    ----------
-    deployment_name, mode: see get_path_glider   
-    glider_data_out_path : str
-        The path to the glider-specifc 'data out' folder. 
-        E.g., "swfscesd-glider-deployments-data-out/2022/amlr08-20220513"
+#     Parameters
+#     ----------
+#     deployment_name, mode: see get_path_glider   
+#     glider_data_out_path : str
+#         The path to the glider-specifc 'data out' folder. 
+#         E.g., "swfscesd-glider-deployments-data-out/2022/amlr08-20220513"
 
-    Returns
-    -------
-    A dictionary of strings that represent the relevant 
-    glider-specific directory and file paths:
-        list TODO
-    """
+#     Returns
+#     -------
+#     A dictionary of strings that represent the relevant 
+#     glider-specific directory and file paths:
+#         list TODO
+#     """
 
-    procl0dir = os.path.join(glider_data_out_path, "processed-L0")
-    procl1dir = os.path.join(glider_data_out_path, "processed-L1")
-    procl2dir = os.path.join(glider_data_out_path, "processed-L2")
-    procl3dir = os.path.join(glider_data_out_path, "processed-L3")
-    plotdir = os.path.join(glider_data_out_path, "plots", mode)
+#     procl0dir = os.path.join(glider_data_out_path, "processed-L0")
+#     procl1dir = os.path.join(glider_data_out_path, "processed-L1")
+#     procl2dir = os.path.join(glider_data_out_path, "processed-L2")
+#     procl3dir = os.path.join(glider_data_out_path, "processed-L3")
+#     plotdir = os.path.join(glider_data_out_path, "plots", mode)
 
-    # Separate, in case in the future they end up in their own directories
-    rawdir = procl0dir
-    tsdir = procl1dir
-    griddir = procl3dir
-    profdir = os.path.join(procl1dir, "ngdac", mode)
+#     # Separate, in case in the future they end up in their own directories
+#     rawdir = procl0dir
+#     tsdir = procl1dir
+#     griddir = procl3dir
+#     profdir = os.path.join(procl1dir, "ngdac", mode)
 
-    ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
-    path_prof_summ = os.path.join(ancillarydir, f"{deployment_name}-{mode}-profiles.csv")
+#     ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+#     ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
 
-    # Create common file names
-    path_raw = os.path.join(rawdir, f"{deployment_name}-{mode}-raw.nc")
-    path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
-    path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
-    path_sci_qc = os.path.join(tsdir, f"{deployment_name}-{mode}-sci-qc.nc")
+#     path_prof_summ = os.path.join(ancillarydir, f"{deployment_name}-{mode}-profiles.csv")
 
-    # These must follow pyglider convention with the "_grid"
-    path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
-    path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
+#     # Create common file names
+#     path_raw = os.path.join(rawdir, f"{deployment_name}-{mode}-raw.nc")
+#     path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
+#     path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
+#     # path_sci_qc = os.path.join(tsdir, f"{deployment_name}-{mode}-sci-qc.nc")
 
-    return {
-        "rawdir": rawdir,
-        "tsdir": tsdir,
-        "griddir": griddir,
-        "profdir": profdir,
-        "plotdir": plotdir,
-        "ancillarydir": ancillarydir,
-        "procl0dir": procl0dir,
-        "procl1dir": procl1dir,
-        "procl2dir": procl2dir,
-        "procl3dir": procl3dir,
-        "tsrawpath": path_raw,
-        "tsscipath": path_sci,
-        "tsengpath": path_eng,
-        # "tssciqcpath": path_sci_qc,
-        "gr1path": path_gr1,
-        "gr5path": path_gr5,
-        "profsummpath": path_prof_summ,
-    }
+#     # These must follow pyglider convention with the "_grid"
+#     path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
+#     path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
+
+#     return {
+#         "rawdir": rawdir,
+#         "tsdir": tsdir,
+#         "griddir": griddir,
+#         "profdir": profdir,
+#         "plotdir": plotdir,
+#         "ancillarydir": ancillarydir,
+#         "procl0dir": procl0dir,
+#         "procl1dir": procl1dir,
+#         "procl2dir": procl2dir,
+#         "procl3dir": procl3dir,
+#         "tsrawpath": path_raw,
+#         "tsscipath": path_sci,
+#         "tsengpath": path_eng,
+#         # "tssciqcpath": path_sci_qc,
+#         "gr1path": path_gr1,
+#         "gr5path": path_gr5,
+#         "profsummpath": path_prof_summ,
+#     }
 
 
 def get_path_glider(
@@ -193,31 +195,59 @@ def get_path_glider(
     # Deployment yaml
     deploymentyaml = os.path.join(config_path, f"{deployment_name}.yml")    
     if not os.path.isfile(deploymentyaml):
-        _log.warning("The deployment yaml ('%s') does not exist", 
-                     deploymentyaml)
+        _log.warning(
+            "The deployment yaml ('%s') does not exist", 
+            deploymentyaml
+        )
 
     # cache path
-    _check_dir_exists(cac_path, "provided cac_path")
+    if cac_path != "":
+        _check_dir_exists(cac_path, "provided cac_path")
 
     # Glider data in and data out paths
     year = utils.year_path(deployment_name)
     glider_data_in_path = os.path.join(data_in_path, year, deployment_name)
-    _check_dir_exists(glider_data_in_path, "derived glider data in path")
-    # if not os.path.isdir(glider_data_in_path):
-    #     _log.warning(f"The derived glider data in path ({glider_data_in_path} does not exist")
+    if data_in_path != "":
+        _check_dir_exists(glider_data_in_path, "derived glider data in path")
     
     glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
-    _check_dir_exists(glider_data_out_path, "derived glider data out path")
-    # if not os.path.isdir(glider_data_out_path):
-    #     _log.warning(f"The derived glider data out path ({glider_data_out_path} does not exist")
+    if data_out_path != "":
+        _check_dir_exists(glider_data_out_path, "derived glider data out path")
 
-    glider_paths_data_out = get_path_glider_data_out(
-        deployment_name = deployment_name,
-        mode = mode,
-        glider_data_out_path = glider_data_out_path, 
-    )
+    # glider_paths_data_out = get_path_glider_data_out(
+    #     deployment_name = deployment_name,
+    #     mode = mode,
+    #     glider_data_out_path = glider_data_out_path, 
+    # )
 
-    out = {
+    procl0dir = os.path.join(glider_data_out_path, "processed-L0")
+    procl1dir = os.path.join(glider_data_out_path, "processed-L1")
+    procl2dir = os.path.join(glider_data_out_path, "processed-L2")
+    procl3dir = os.path.join(glider_data_out_path, "processed-L3")
+    plotdir = os.path.join(glider_data_out_path, "plots", mode)
+    ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
+
+    # Separate, in case in the future they end up in their own directories
+    rawdir = procl0dir
+    tsdir = procl1dir
+    griddir = procl3dir
+    profdir = os.path.join(procl1dir, "ngdac", mode)
+
+    # ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+
+    # Create common file names
+    path_prof_summ = os.path.join(ancillarydir, f"{deployment_name}-{mode}-profiles.csv")
+    path_raw = os.path.join(rawdir, f"{deployment_name}-{mode}-raw.nc")
+    path_sci = os.path.join(tsdir, f"{deployment_name}-{mode}-sci.nc")
+    path_eng = os.path.join(tsdir, f"{deployment_name}-{mode}-eng.nc")
+    # path_sci_qc = os.path.join(tsdir, f"{deployment_name}-{mode}-sci-qc.nc")
+
+    # These must follow pyglider convention with the "_grid"
+    path_gr1 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-1m.nc")
+    path_gr5 = os.path.join(griddir, f"{deployment_name}_grid-{mode}-5m.nc")
+
+    # return out | glider_paths_data_out
+    return {
         "deploymentyaml": deploymentyaml,
         "mode": mode,
         "cacdir": cac_path,
@@ -225,9 +255,25 @@ def get_path_glider(
         # "engyaml": get_path_yaml("eng"),
         "binarydir": os.path.join(glider_data_in_path, "binary", mode), 
         "outdir": glider_data_out_path,
+        "rawdir": rawdir,
+        "tsdir": tsdir,
+        "griddir": griddir,
+        "profdir": profdir,
+        "plotdir": plotdir,
+        "ancillarydir": ancillarydir,
+        "procl0dir": procl0dir,
+        "procl1dir": procl1dir,
+        "procl2dir": procl2dir,
+        "procl3dir": procl3dir,
+        "tsrawpath": path_raw,
+        "tsscipath": path_sci,
+        "tsengpath": path_eng,
+        # "tssciqcpath": path_sci_qc,
+        "gr1path": path_gr1,
+        "gr5path": path_gr5,
+        "profsummpath": path_prof_summ,
     } 
 
-    return out | glider_paths_data_out
 
 
 # def get_path_acoustics_deployment(
@@ -270,7 +316,7 @@ def get_path_glider(
 def get_path_aa(
         deployment_name: str, 
         mode: str, 
-        aa_in_path: str | Path, 
+        aa_in_path: str | Path = "", 
         data_out_path: str | Path = "", 
     ) -> dict:
     """
@@ -308,7 +354,8 @@ def get_path_aa(
         year,
         deployment_name,
     )
-    _check_dir_exists(aa_glider_in_path, "derived acoustic deployment")
+    if aa_in_path != "":
+        _check_dir_exists(aa_glider_in_path, "derived acoustic deployment")
     # if not os.path.isdir(acoustic_deployment_path):
     #     _log.warning(f"The derived acoustic path ({acoustic_deployment_path}) does not exist")
 
@@ -319,9 +366,12 @@ def get_path_aa(
     #     mode,
     # )
     # metadir = os.path.join(acoustic_deployment_path, "metadata")
-    glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
+    # glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
+    # if data_out_path != "":
+    #     _check_dir_exists(glider_data_out_path, "derived glider data out")
 
-    ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+    # ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+    ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
     echoviewdir = os.path.join(ancillarydir, "echoview")
 
     regionspath = os.path.join(echoviewdir, f"{deployment_name}-regions.csv")
@@ -420,7 +470,8 @@ def get_path_imagery(
         year,
         deployment_name,
     )
-    _check_dir_exists(imagery_glider_in_path, "imagery data in")
+    if imagery_in_path != "":
+        _check_dir_exists(imagery_glider_in_path, "imagery data in")
     # if not os.path.isdir(imagery_glider_in_path):
     #     _log.warning("%s does not exist", imagery_glider_in_path)
 
@@ -429,7 +480,8 @@ def get_path_imagery(
         year,
         deployment_name,
     )
-    _check_dir_exists(imagery_glider_meta_path, "imagery metadata")
+    if imagery_meta_path != "":
+        _check_dir_exists(imagery_glider_meta_path, "imagery metadata")
     # if not os.path.isdir(imagery_glider_in_path):
     #     _log.warning("%s does not exist", imagery_glider_in_path)
 
@@ -442,11 +494,12 @@ def get_path_imagery(
         f"{deployment_name}-image-metadata.jsonl"
     )
 
-    glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
-    _check_dir_exists(glider_data_out_path, "derived glider data out")
+    # glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
+    # if data_out_path != "":
+    #     _check_dir_exists(glider_data_out_path, "derived glider data out")
 
-
-    ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+    # ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+    ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
     imgcsv = os.path.join(ancillarydir, f"{deployment_name}-imagery-ancillary.csv")
 
     return {
@@ -458,3 +511,25 @@ def get_path_imagery(
         "ancdir": ancillarydir,
         "imgcsv": imgcsv,
     }
+
+
+def _get_path_ancillary(deployment_name, data_out_path):
+    """
+    Return the path to the ancillary products directory for a given deployment.
+
+    Parameters
+    ----------
+    deployment_name : str
+        The name of the deployment, e.g. amlr08-20220513
+    data_out_path : str
+        The (local) path to the glider 'data out' folder
+
+    Returns
+    -------
+    str
+        The path to the ancillary products directory
+    """
+    year = utils.year_path(deployment_name)
+    glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
+    ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
+    return ancillarydir

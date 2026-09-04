@@ -303,6 +303,11 @@ def generate_timeseries(
 
         if sci_use_m_depth: 
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
+            deployment = pgutils._get_deployment(deploymentyaml)
+            if not "m_depth" in deployment['netcdf_variables']:
+                _log.error("If using sci_use_m_depth, m_depth variable must be in deployment netcdf_variables")
+                raise ValueError("m_depth variable is required in deployment netcdf_variables for sci_use_m_depth")
+
             with tempfile.TemporaryDirectory() as temp_dir:
                 _log.info("Creating temporary raw timeseries in %s", temp_dir)
                 outname_temp = core.binary_to_raw_timeseries(

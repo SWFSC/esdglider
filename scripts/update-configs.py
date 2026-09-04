@@ -8,8 +8,8 @@ from pathlib import Path
 import yaml
 
 # Directory containing your glider YAML config files
-# CONFIG_DIR = Path("/home/user/glider-lab/deployment-configs")
-CONFIG_DIR = Path("/home/user/tests/amlr08-20220513")
+CONFIG_DIR = Path("/home/user/glider-lab/deployment-configs")
+# CONFIG_DIR = Path("/home/user/tests/amlr08-20220513")
 
 # Map top-level sections -> variable names -> desired attrs
 NEW_BOUNDS = {

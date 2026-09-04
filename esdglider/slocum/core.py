@@ -327,7 +327,7 @@ def binary_to_raw_timeseries(
     valid_params = set(eng_params + sci_params)
     sensor_in_dbd = [s in valid_params for s in sensors]
     if not all(sensor_in_dbd):
-        _log.info("Removing sensors not in binary files: %s", 
+        _log.info("Ignoring sensors not in binary files: %s", 
             [s for s, keep in zip(sensors, sensor_in_dbd) if not keep]
         )
         # Log the removed sensors before filtering
