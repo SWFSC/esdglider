@@ -135,6 +135,7 @@ import json
 from ioos_qc.config import Config
 from ioos_qc.streams import XarrayStream
 from ioos_qc.results import collect_results
+from ioos_qc.qartod import qartod_compare
 
 from esdglider import paths
 
@@ -547,13 +548,18 @@ def add_missing_variables_to_config(
     for quality control processing, even if no variable-specific
     thresholds have been provided. For variables containing
     ``valid_min`` and ``valid_max`` attributes, these metadata values
-    are used to construct a default gross range test. If those
-    attributes are unavailable, a permissive fallback gross range test
-    is assigned to prevent workflow failures while still allowing the
-    variable to participate in the QARTOD workflow.
+    are used to construct a default gross range test.
 
-    A default spike test is also added for all automatically configured
-    variables.
+    If ``potential_density`` or ``potential_temperature`` do not
+    contain these attributes, the corresponding attributes from
+    ``density`` or ``temperature`` are used when available.
+
+    If valid range attributes are unavailable, a permissive fallback
+    gross range test is assigned to prevent workflow failures while
+    still allowing the variable to participate in the QARTOD workflow.
+
+    A default spike test and rate-of-change test are also added for all
+    automatically configured variables.
 
     Parameters
     ----------
@@ -581,11 +587,15 @@ def add_missing_variables_to_config(
       unchanged.
     - When available, ``valid_min`` and ``valid_max`` attributes are
       used to construct a default gross range test.
+    - If ``potential_density`` lacks valid range attributes, the
+      attributes from ``density`` are used when available.
+    - If ``potential_temperature`` lacks valid range attributes, the
+      attributes from ``temperature`` are used when available.
     - The default fail range is expanded by one full data span beyond
       the valid range on both sides.
-    - Variables lacking ``valid_min`` and ``valid_max`` attributes are
-      assigned permissive placeholder thresholds and a warning is
-      logged.
+    - Variables lacking usable ``valid_min`` and ``valid_max``
+      attributes are assigned permissive placeholder thresholds and
+      a warning is logged.
     - Automatically generated thresholds should be reviewed and
       replaced with scientifically appropriate values when possible.
     """
@@ -604,6 +614,29 @@ def add_missing_variables_to_config(
         # VARIABLE METADATA
         valid_min = ds[var].attrs.get("valid_min")
         valid_max = ds[var].attrs.get("valid_max")
+        range_source = var
+
+        # USE DENSITY RANGE FOR POTENTIAL DENSITY IF NEEDED
+        if (
+            var == "potential_density"
+            and (valid_min is None or valid_max is None)
+            and "density" in ds
+        ):
+            valid_min = ds["density"].attrs.get("valid_min")
+            valid_max = ds["density"].attrs.get("valid_max")
+            range_source = "density"
+
+        # USE TEMPERATURE RANGE FOR POTENTIAL TEMPERATURE IF NEEDED
+        elif (
+            var == "potential_temperature"
+            and (valid_min is None or valid_max is None)
+            and "temperature" in ds
+        ):
+            valid_min = ds["temperature"].attrs.get("valid_min")
+            valid_max = ds["temperature"].attrs.get("valid_max")
+            range_source = "temperature"
+
+        # BUILD GROSS RANGE THRESHOLDS
         if valid_min is not None and valid_max is not None:
 
             # CALCULATE DEFAULT FAIL RANGE
@@ -611,11 +644,12 @@ def add_missing_variables_to_config(
             fail_min = valid_min - span
             fail_max = valid_max + span
 
-            _log.warning(
+            _log.info(
                 "Variable '%s' is not defined in the QARTOD configuration. "
-                "Using valid_min/valid_max attributes to build default "
+                "Using valid_min/valid_max from '%s' to build default "
                 "gross range thresholds.",
                 var,
+                range_source,
             )
 
             gross_range_config = {
@@ -628,13 +662,14 @@ def add_missing_variables_to_config(
                     float(fail_max),
                 ],
             }
+
         else:
 
             # FALL BACK TO PERMISSIVE THRESHOLDS
             _log.warning(
                 "Variable '%s' is not defined in the QARTOD configuration "
-                "and does not contain valid_min/valid_max attributes. "
-                "Using placeholder thresholds.",
+                "and does not contain usable valid_min/valid_max "
+                "attributes. Using placeholder thresholds.",
                 var,
             )
 
@@ -656,6 +691,7 @@ def add_missing_variables_to_config(
                 },
             }
         }
+
     return config_dict
 
 
@@ -1118,8 +1154,8 @@ def create_qc_variables(
 
         _log.info("Creating QC for %s", var_name)
 
-        # AGGREGATE QARTOD FLAGS
-        final_flags = np.maximum.reduce(test_results).astype("int8")
+        # AGGREGATE QARTOD FLAGS USING QARTOD PRECEDENCE
+        final_flags = qartod_compare(test_results).astype("int8")
         qc_var = f"{var_name}_qc"
 
         # HANDLE EXISTING QC VARIABLES
@@ -1148,8 +1184,8 @@ def create_qc_variables(
                 "flag_meanings": (
                     "GOOD " "UNKNOWN " "SUSPECT " "FAIL " "MISSING"
                 ),
-                "valid_min": 1,
-                "valid_max": 9,
+                "valid_min": np.int8(1),
+                "valid_max": np.int8(9),
                 "comment": (
                     "Aggregate QARTOD flag "
                     "generated using "
@@ -1262,8 +1298,8 @@ def create_placeholder_qc_variables(ds_qc):
                 "flag_meanings": (
                     "GOOD " "UNKNOWN " "SUSPECT " "FAIL " "MISSING"
                 ),
-                "valid_min": 1,
-                "valid_max": 9,
+                "valid_min": np.int8(1),
+                "valid_max": np.int8(9),
             },
         )
 
