@@ -126,6 +126,7 @@ def generate_timeseries(
         if binary_search is None:
             binary_search = "*.[STst][Bb][Dd]"
     else:
+        _log.error("mode must be either 'rt' or 'delayed'")
         raise ValueError("mode must be either 'rt' or 'delayed'")
 
     # Set defaults
@@ -142,7 +143,13 @@ def generate_timeseries(
     #     prof_depth_var = "depth_ctd"
     #     other_depth_var = "depth_measured"
 
-    # If writing any 
+    if write_sci and sci_use_m_depth: 
+        deployment = pgutils._get_deployment(deploymentyaml)
+        if not "m_depth" in deployment['netcdf_variables']:
+            _log.error("If using sci_use_m_depth, m_depth variable must be in deployment netcdf_variables")
+            raise ValueError("m_depth variable is required in deployment netcdf_variables for sci_use_m_depth")
+
+    # If writing any, remove plots
     if write_raw or write_eng or write_sci:
         # Check which dbdreader backend is being used
         utils.check_dbdreader_c_extension()
@@ -303,11 +310,6 @@ def generate_timeseries(
 
         if sci_use_m_depth: 
             _log.info("Generating science timeseries, via raw_to_sci_timeseries")
-            deployment = pgutils._get_deployment(deploymentyaml)
-            if not "m_depth" in deployment['netcdf_variables']:
-                _log.error("If using sci_use_m_depth, m_depth variable must be in deployment netcdf_variables")
-                raise ValueError("m_depth variable is required in deployment netcdf_variables for sci_use_m_depth")
-
             with tempfile.TemporaryDirectory() as temp_dir:
                 _log.info("Creating temporary raw timeseries in %s", temp_dir)
                 outname_temp = core.binary_to_raw_timeseries(
@@ -388,7 +390,8 @@ def generate_timeseries(
             _log.info("Completed QARTOD QC workflow for science timeseries")
 
 
-
+    # --------------------------------------------
+    # Checks
     if write_eng or write_sci:
         _log.info("final eng/sci timeseries checks")
         tseng = xr.load_dataset(outname_tseng)
@@ -418,7 +421,6 @@ def generate_timeseries(
     else:
         _log.info("Not writing timeseries nc")
 
-    # --------------------------------------------
     if write_sci and run_checks:
         _log.info("Checking flbbcd autoexec values, and cdom status")
         check_flbbcd_autoexec(
