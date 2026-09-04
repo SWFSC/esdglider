@@ -644,7 +644,7 @@ def add_missing_variables_to_config(
             fail_min = valid_min - span
             fail_max = valid_max + span
 
-            _log.warning(
+            _log.info(
                 "Variable '%s' is not defined in the QARTOD configuration. "
                 "Using valid_min/valid_max from '%s' to build default "
                 "gross range thresholds.",
