@@ -181,8 +181,8 @@ eng_vars = [
     "pitch",
     "roll",
     "total_num_inflections",
-    "oil_volume_commanded",
-    "oil_volume_measured",
+    # "oil_volume_commanded",
+    "oil_volume",
     "total_amphr",
     "amphr",
     "battery_voltage",
@@ -191,7 +191,7 @@ eng_vars = [
     "leak_detect_forward",
     "leak_detect_science",
     "battery_position",
-    "target_depth",
+    # "target_depth",
     "altitude",
     "distance_over_ground",
     "profile_index",
@@ -270,11 +270,11 @@ def esd_all_plots(
 
     # Load datasets
     _log.info("Loading datasets")
+    ds_raw = xr.load_dataset(ds_paths["outname_tsraw"])
     ds_eng = xr.load_dataset(ds_paths["outname_tseng"])
     ds_sci = xr.load_dataset(ds_paths["outname_tssci"])
     # ds_sci_qc = xr.load_dataset(ds_paths["outname_tssciqc"])
     ds_gr5m = xr.load_dataset(ds_paths["outname_gr5m"])
-    ds_raw = xr.load_dataset(ds_paths["outname_tsraw"])
 
     # Delete old plots
     if base_path is not None:
@@ -610,7 +610,7 @@ def eng_timeseries_loop(
     Parameters
     ----------
     ds : xarray Dataset
-        Timeseries science dataset
+        Timeseries engineering dataset
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of glider.get_path_glider
@@ -1282,23 +1282,23 @@ def eng_plots_to_make(ds: xr.Dataset):
     Dictionary used by eng_tvt_plot to make plots
     """
 
-    da_c_tdepth = ds["target_depth"].dropna(dim="time")
-    da_c_mdepth = ds["depth_measured"].interp(time=da_c_tdepth.time)
+    da_c_tdepth = ds["c_dive_target_depth"].dropna(dim="time")
+    da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
 
     da_ctd_depth = ds["depth_ctd"].dropna(dim="time")
-    da_ctd_mdepth = ds["depth_measured"].interp(time=da_ctd_depth.time)
+    da_ctd_mdepth = ds["m_depth"].interp(time=da_ctd_depth.time)
     da_ctd_diff = da_ctd_depth - da_ctd_mdepth
 
     plots_to_make = {
         "oilVol": {
-            "X": ds["oil_volume_commanded"],
-            "Y": [ds["oil_volume_measured"]],
+            "X": ds["c_de_oil_vol"],
+            "Y": [ds["m_de_oil_vol"]],
             "C": ["C0"],
             "cb": None,
         },
         "diveEnergy": {
-            "X": ds["total_num_inflections"],
-            "Y": [ds["amphr"], ds["total_amphr"]],
+            "X": ds["m_tot_num_inflections"],
+            "Y": [ds["m_coulomb_amphr"], ds["m_coulomb_amphr_total"]],
             "C": ["C0", "C1"],
             "cb": None,
         },
@@ -1318,19 +1318,19 @@ def eng_plots_to_make(ds: xr.Dataset):
             # "cb": None,
         },
         "diveAmpHr": {
-            "X": ds["depth_measured"],
-            "Y": [ds["amphr"]],
+            "X": ds["m_depth"],
+            "Y": [ds["m_coulomb_amphr"]],
             "C": ["C0"],
             "cb": None,
         },
         "leakDetect": {
             "X": ds["time"],
             "Y": [
-                ds["leak_detect"].rolling(time=900, min_periods=10).mean(),
-                ds["leak_detect_forward"]
+                ds["m_leakdetect_voltage"].rolling(time=900, min_periods=10).mean(),
+                ds["m_leakdetect_voltage_forward"]
                 .rolling(time=900, min_periods=10)
                 .mean(),
-                ds["leak_detect_science"]
+                ds["m_leakdetect_voltage_science"]
                 .rolling(time=900, min_periods=10)
                 .mean(),
             ],
@@ -1339,9 +1339,9 @@ def eng_plots_to_make(ds: xr.Dataset):
         },
         "vacuumDepth": {
             "X": ds["time"],
-            "Y": [ds["vacuum"]],
-            "C": [ds["depth_measured"]],
-            "cb": "depth_measured",
+            "Y": [ds["m_vacuum"]],
+            "C": [ds["m_depth"]],
+            "cb": "m_depth",
         },
     }
 

@@ -37,7 +37,7 @@ netcdf_variables:
     valid_min:    -180.0
     coordinate_reference_frame:  urn:ogc:crs:EPSG::4326
 
-  depth_measured: #to differentiate from 'depth_ctd'
+  m_depth: #renamed in postprocessing
     source: m_depth
     long_name: glider measured depth
     observation_type: measured
@@ -62,6 +62,11 @@ netcdf_variables:
     standard_name: platform_roll_angle
     units: rad
 
+  altitude:
+    source: m_altitude
+    long_name: m_altitude
+    units: m
+
   battery_voltage:
     long_name: m_battery
     source: m_battery
@@ -82,7 +87,7 @@ netcdf_variables:
     source: m_coulomb_amphr_total
     units: Ahr
 
-  oil_volume_measured:
+  oil_volume:
     long_name: m_de_oil_vol
     source: m_de_oil_vol
     units: mL

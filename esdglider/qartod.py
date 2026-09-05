@@ -920,9 +920,11 @@ def run_qartod_tests(ds, config):
     )
 
     # RUN CONFIGURED QARTOD TESTS
+    _log.info("Running qartod tests")
     results = stream.run(config)
 
     # COLLECT RESULTS INTO A FLAT LIST
+    _log.info("Collecting qartod test results")
     collected = collect_results(results, how="list")
 
     _log.info("Collected %d QARTOD test results", len(collected))

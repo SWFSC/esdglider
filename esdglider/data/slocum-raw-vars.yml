@@ -1,0 +1,367 @@
+netcdf_variables:
+  # Time and Place:
+  time:
+    source:   m_present_time
+    long_name:     Time
+    standard_name: time
+    calendar:      gregorian
+    time_origin:   "01-JAN-1970 00:00:00"  
+    units:         seconds since 1970-01-01T00:00:00Z
+    axis:          T
+    observation_type: "measured"
+
+  latitude:
+    source:  m_lat
+    long_name:    latitude
+    standard_name: latitude
+    units:        degrees_north
+    axis:         Y
+    comment:     "Estimated between surface fixes"
+    observation_type: measured
+    platform:     platform
+    reference:    WGS84
+    valid_max:    90.0
+    valid_min:    -90.0
+    coordinate_reference_frame:  urn:ogc:crs:EPSG::4326
+
+  longitude:
+    source:  m_lon
+    long_name:    longitude
+    standard_name: longitude
+    units:        degrees_east
+    axis:         X
+    comment:     "Estimated between surface fixes"
+    observation_type: measured
+    platform:     platform
+    reference:    WGS84
+    valid_max:    180.0
+    valid_min:    -180.0
+    coordinate_reference_frame:  urn:ogc:crs:EPSG::4326
+
+  ### Engineering
+  # Measured
+  m_depth:
+    source: m_depth
+    long_name: m_depth
+    standard_name: depth
+    comment: "Glider pressure transducer measured pressure"
+    units: m
+  m_heading:
+    source: m_heading
+    long_name: m_heading
+    standard_name: platform_orientation
+    units: rad
+  m_pitch:
+    source: m_pitch
+    long_name: m_pitch
+    standard_name: platform_pitch_angle
+    units: rad
+  m_roll:
+    source: m_roll
+    long_name: m_roll
+    standard_name: platform_roll_angle
+    units: rad
+  m_tot_num_inflections:
+    long_name: m_tot_num_inflections
+    source: m_tot_num_inflections
+    units: nodim
+  m_altitude:
+    long_name: m_altitude
+    source: m_altitude
+    units: m
+  m_battery:
+    long_name: m_battery
+    source: m_battery
+    units: V
+  m_battpos:
+    long_name: m_battpos
+    source: m_battpos
+    units: inches
+  m_coulomb_amphr:
+    long_name: m_coulomb_amphr
+    source: m_coulomb_amphr
+    units: Ahr
+  m_coulomb_amphr_total:
+    long_name: m_coulomb_amphr_total
+    source: m_coulomb_amphr_total
+    units: Ahr
+  m_coulomb_current:
+    long_name: m_coulomb_current
+    source: m_coulomb_current
+    units: amp
+  m_de_oil_vol:
+    long_name: m_de_oil_vol
+    source: m_de_oil_vol
+    units: mL
+  m_leakdetect_voltage:
+    long_name: m_leakdetect_voltage
+    source: m_leakdetect_voltage
+    units: V
+  m_leakdetect_voltage_forward:
+    long_name: m_leakdetect_voltage_forward
+    source: m_leakdetect_voltage_forward
+    units: V
+  m_leakdetect_voltage_science:
+    long_name: m_leakdetect_voltage_science
+    source: m_leakdetect_voltage_science
+    units: V
+  m_gps_lat:
+    comment: GPS latitude
+    long_name: m_gps_lat
+    source: m_gps_lat
+    units: degrees_north
+  m_gps_lon:
+    comment: GPS longitude
+    long_name: m_gps_lon
+    source: m_gps_lon
+    units: degrees_east
+  m_vacuum:
+    long_name: m_vacuum
+    source: m_vacuum
+    units: inHg
+  m_depth_rate:
+    long_name: m_depth_rate
+    source: m_depth_rate
+    units: m s-1
+  m_fin:
+    long_name: m_fin
+    source: m_fin
+    units: rad
+  m_speed:
+    long_name: m_speed
+    source: m_speed
+    units: m s-1
+  m_speed_avg:
+    long_name: m_speed_avg
+    source: m_speed_avg
+    units: m s-1
+  m_water_vx:
+    long_name: m_water_vx
+    source: m_water_vx
+    units: m s-1
+  m_water_vy:
+    long_name: m_water_vy
+    source: m_water_vy
+    units: m s-1
+
+  # Commanded
+  c_dive_target_depth:
+    long_name: c_dive_target_depth
+    source: c_dive_target_depth
+    units: m
+  c_wpt_lat:
+    source: c_wpt_lat
+    long_name: c_wpt_lat
+    standard_name: latitude
+    units: degree_north
+  c_wpt_lon:
+    source: c_wpt_lon
+    long_name: c_wpt_lon
+    standard_name: longitude
+    units: degree_east
+  c_autoballast_state:
+    long_name: c_autoballast_state
+    source: c_autoballast_state
+    units: enum
+  c_bpump_value:
+    long_name: c_bpump_value
+    source: c_bpump_value
+    units: cc
+  c_climb_bpump:
+    long_name: c_climb_bpump
+    source: c_climb_bpump
+    units: cc
+  c_de_oil_vol:
+    long_name: c_de_oil_vol
+    source: c_de_oil_vol
+    units: mL
+  c_dive_bpump:
+    long_name: c_dive_bpump
+    source: c_dive_bpump
+    units: cc
+  c_pitch:
+    long_name: c_pitch
+    source: c_pitch
+    units: rad
+  c_fin:
+    long_name: c_fin
+    source: c_fin
+    units: rad
+  c_use_bpump:
+    long_name: c_use_bpump
+    source: c_use_bpump
+    units: enum
+
+  # Other
+  d_bpump_value:
+    long_name: d_bpump_value
+    source: d_bpump_value
+    units: cc
+  d_pitch_value:
+    long_name: d_pitch_value
+    source: d_pitch_value
+    units: rad
+  d_use_bpump:
+    long_name: d_use_bpump
+    source: d_use_bpump
+    units: enum
+  use_pitch:
+    long_name: use_pitch
+    source: use_pitch
+    units: enum
+
+
+  ### Science
+  sci_m_present_time:
+    long_name: sci_m_present_time
+    source: sci_m_present_time
+    standard_name: time
+    time_origin: "01-JAN-1970 00:00:00"
+    units: seconds since 1970-01-01T00:00:00Z
+
+  # Seabird CTD
+  sci_ctd41cp_timestamp:
+    long_name: sci_ctd41cp_timestamp
+    source: sci_ctd41cp_timestamp
+    standard_name: time
+    time_origin: "01-JAN-1970 00:00:00"
+    units: seconds since 1970-01-01T00:00:00Z
+  sci_water_cond:
+    source: sci_water_cond
+    long_name: sci_water_cond
+    standard_name: sea_water_electrical_conductivity
+    units: S m-1
+    observation_type: "measured"
+  sci_water_temp:
+    source:  sci_water_temp
+    long_name: sci_water_temp
+    standard_name: sea_water_temperature
+    units: degrees_C
+    observation_type: "measured"
+  sci_water_pressure:
+    source:  sci_water_pressure
+    long_name: sci_water_pressure
+    standard_name: sea_water_pressure
+    units: dbar
+    conversion: bar2dbar
+    positive: "down"
+    reference_datum: "sea-surface"
+    observation_type: "measured"
+
+  # # TODO: RBR CTD
+  # sci_rbrctd_timestamp:
+  #   long_name: sci_rbrctd_timestamp
+  #   source: sci_rbrctd_timestamp
+  #   standard_name: time
+  #   time_origin: "01-JAN-1970 00:00:00"
+  #   units: seconds since 1970-01-01T00:00:00Z
+ 
+  # Oxygen
+  sci_oxy4_timestamp:
+    long_name: sci_oxy4_timestamp
+    source: sci_oxy4_timestamp
+    standard_name: time
+    time_origin: "01-JAN-1970 00:00:00"
+    units: seconds since 1970-01-01T00:00:00Z
+  sci_oxy4_temp:
+    long_name: sci_oxy4_temp
+    source: sci_oxy4_temp
+    units: degrees_C
+  sci_oxy4_oxygen:
+    source:  sci_oxy4_oxygen
+    long_name: sci_oxy4_oxygen
+    standard_name: mole_concentration_of_dissolved_molecular_oxygen_in_sea_water
+    units: umol l-1
+    observation_type: "measured"
+  sci_oxy4_saturation:
+    source:  sci_oxy4_saturation
+    long_name: sci_oxy4_saturation
+    standard_name: fractional_saturation_of_oxygen_in_sea_water
+    units: percent
+    observation_type: "measured"
+
+  # Ecopuck (flbbcd)
+  sci_flbbcd_timestamp:
+    long_name: sci_flbbcd_timestamp
+    source: sci_flbbcd_timestamp
+    standard_name: time
+    time_origin: "01-JAN-1970 00:00:00"
+    units: seconds since 1970-01-01T00:00:00Z
+  sci_flbbcd_chlor_sig:
+    long_name: sci_flbbcd_chlor_sig
+    source: sci_flbbcd_chlor_sig
+    units:  nodim
+  sci_flbbcd_cdom_sig:
+    long_name: sci_flbbcd_cdom_sig
+    source: sci_flbbcd_cdom_sig
+    units:  nodim
+  sci_flbbcd_bb_sig:
+    long_name: sci_flbbcd_bb_sig
+    source: sci_flbbcd_bb_sig
+    units:  nodim
+  sci_flbbcd_chlor_units:
+    source:  sci_flbbcd_chlor_units
+    long_name: sci_flbbcd_chlor_units
+    standard_name: mass_concentration_of_chlorophyll_in_sea_water
+    units: ug L-1
+    observation_type: measured
+  sci_flbbcd_cdom_units:
+    source:  sci_flbbcd_cdom_units
+    long_name: sci_flbbcd_cdom_units
+    standard_name: concentration_of_colored_dissolved_organic_matter_in_sea_water_expressed_as_equivalent_mass_fraction_of_quinine_sulfate_dihydrate
+    units: ppb
+    observation_type: calculated
+  sci_flbbcd_bb_units:
+    source: sci_flbbcd_bb_units
+    long_name: 700 nm wavelength backscatter
+    standard_name: volume_backwards_scattering_coefficient_of_radiative_flux_in_sea_water
+    units: "m-1 sr-1"
+    observation_type: calculated
+  u_flbbcd_chlor_cwo:
+    source: u_flbbcd_chlor_cwo
+    long_name: u_flbbcd_chlor_cwo
+    units: nodim
+  u_flbbcd_chlor_sf:
+    source: u_flbbcd_chlor_sf
+    long_name: u_flbbcd_chlor_sf
+    units: ug/l/nodim
+  u_flbbcd_bb_cwo:
+    source: u_flbbcd_bb_cwo
+    long_name: u_flbbcd_bb_cwo
+    units: nodim
+  u_flbbcd_bb_sf:
+    source: u_flbbcd_bb_sf
+    long_name: u_flbbcd_bb_sf
+    units: Mnodim
+  u_flbbcd_cdom_cwo:
+    source: u_flbbcd_cdom_cwo
+    long_name: u_flbbcd_cdom_cwo
+    units: nodim
+  u_flbbcd_cdom_sf:
+    source: u_flbbcd_cdom_sf
+    long_name: u_flbbcd_cdom_sf
+    units: ppb/nodim
+
+  # PAR
+  sci_bsipar_timestamp:
+    long_name: sci_bsipar_timestamp
+    source: sci_bsipar_timestamp
+    standard_name: time
+    time_origin: "01-JAN-1970 00:00:00"
+    units: seconds since 1970-01-01T00:00:00Z
+  sci_bsipar_par:
+    source:  sci_bsipar_par
+    long_name: sci_bsipar_par
+    standard_name: downwelling_photosynthetic_photon_spherical_irradiance_in_sea_water
+    units: uE m-2 s-1
+    observation_type: "measured"
+
+  # Solocam
+  sci_solocam_free_disk_space:
+    long_name: sci_solocam_free_disk_space
+    source: sci_solocam_free_disk_space
+    units:  nodim
+  sci_solocam_image_files:
+    long_name: sci_solocam_image_files
+    source: sci_solocam_image_files
+    units:  nodim

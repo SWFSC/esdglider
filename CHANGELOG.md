@@ -4,7 +4,7 @@ All notable changes to the esdglider package will be documented in this file. Se
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0-dev - Unreleased]
 
 ### Module and function restructuring
 - Changed the name of the module `glider` to `slocum`, to reflect that this module is specific to slocum data (#39). Also, split the slocum module into submodules: `core`, `pipeline`, and `rt`. `core` contains functions that may be generally applicable to others processing slocum data, `pipeline` contains functions that are specific to ESD pipelines, and `rt` contains functions specific to slocum rt data efforts. (#46)

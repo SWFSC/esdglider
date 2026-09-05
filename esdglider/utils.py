@@ -56,6 +56,33 @@ def _get_deployment_netcdfvars(deploymentyaml):
     return ncvar
 
 
+def get_var_by_source(ds, sensor_name):
+    """
+    Returns the variable name in `ds` where attrs['source'] matches `sensor_name`.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The dataset to search.
+    sensor_name : str
+        The value to match against the 'source' attribute of the variables.
+
+    Returns
+    -------
+    str
+        The name of the variable whose 'source' attribute matches `sensor_name`.
+
+    Raises
+    ------
+    KeyError
+        If no variable with the specified 'source' attribute is found.
+    """
+    for var_name, da in ds.data_vars.items():
+        if da.attrs.get('source') == sensor_name:
+            return var_name
+    raise KeyError(f"No variable found with source attribute '{sensor_name}'")
+
+
 def drop_bogus_times(
     ds: xr.Dataset,
     min_dt: str = "1970-01-01",
@@ -124,9 +151,10 @@ def drop_bogus(
     """
 
     # Drop bogus times, as specified
-    _log.info("Dropping bogus values")
     ds = drop_bogus_times(ds, min_dt=min_dt, max_drop=max_drop)
 
+    _log.info("Dropping bogus values")
+    
     # Drop bogus lat/lons
     num_orig = len(ds.time)
     ll_good = (
@@ -859,6 +887,7 @@ def correct_cdom(ds: xr.Dataset) -> xr.Dataset:
 
         # Get instrument attributes
         instr_attrs = ast.literal_eval(ds.instrument_flbbcd)
+        var_cdom = get_var_by_source(ds, "sci_flbbcd_cdom_units")
 
         # Depending on CDOM status, remove or correct CDOM values as necessary
         if cdom_status == "oot":
@@ -871,11 +900,7 @@ def correct_cdom(ds: xr.Dataset) -> xr.Dataset:
                 + "these CDOM data were irretrievable, "
                 + "and have been removed from the dataset"
             )
-
-            # ds['cdom'].values[:] = np.nan
-            # ds["cdom"].attrs["comment"] = append_string(
-            #     ds["cdom"].attrs["comment"], cdom_oot_message)
-            ds = ds.drop_vars("cdom")
+            ds = ds.drop_vars([var_cdom])
             instr_attrs["comment"] = append_string(
                 instr_attrs["comment"], cdom_oot_message)
             ds.attrs["instrument_flbbcd"] = str(instr_attrs)
@@ -889,18 +914,17 @@ def correct_cdom(ds: xr.Dataset) -> xr.Dataset:
                     "Per Sea-Bird Scientific notice 'Incorrect CDOM values', " 
                     + "applied Reference Adjustment Factor (RAF) of 5.62. " 
                     + "to the data: CDOM adjusted = 5.62 * CDOM"
-                )
-                
-                ds["cdom"] = ds["cdom"] * 5.62
-                ds["cdom"].attrs["comment"] = append_string(
-                    ds["cdom"].attrs["comment"], cdom_raf_message)
+                )                
+                ds[var_cdom] = ds[var_cdom] * 5.62
+                ds[var_cdom].attrs["comment"] = append_string(
+                    ds[var_cdom].attrs["comment"], cdom_raf_message)
                 instr_attrs["comment"] = append_string(
                     instr_attrs["comment"], cdom_raf_message)
                 ds.attrs["instrument_flbbcd"] = str(instr_attrs)        
         
         elif cdom_status == "ok":
             _log.info(
-                "instrument_flbbcd calibration date is outside of "
+                "instrument_flbbcd calibration date not within "
                 + "the Sea-Bird correction windows, "
                 + "and thus no values need correction"
             )
@@ -954,34 +978,43 @@ def calc_flbbcd(
         + "and esdglider.utils.calc_flbbcd"
     )
 
-    if all(v in ds.data_vars for v in ["chlorophyll", "chlorophyll_signal"]):
+    # Set/pull values based on sensor attribtue
+    var_chlor_units = get_var_by_source(ds, "sci_flbbcd_chlor_units")
+    var_chlor_sig = get_var_by_source(ds, "sci_flbbcd_chlor_sig")
+    var_cdom_units = get_var_by_source(ds, "sci_flbbcd_cdom_units")
+    var_cdom_sig = get_var_by_source(ds, "sci_flbbcd_cdom_sig")
+    var_bb_units = get_var_by_source(ds, "sci_flbbcd_bb_units")
+    var_bb_sig = get_var_by_source(ds, "sci_flbbcd_bb_sig")
+
+    def _calc_flbbcd_units(sig, calib):
+        return calib[1] * (sig - calib[0])
+
+    if all(v in ds.data_vars for v in [var_chlor_units, var_chlor_sig]):
         _log.debug("Recalculating chlorophyll")
-        ds["chlorophyll"] = chlor_calib[1] * (ds["chlorophyll_signal"] - chlor_calib[0])
-        ds["chlorophyll"].attrs["comment"] = append_string(
-            ds["chlorophyll"].attrs["comment"], msg)
+        ds[var_chlor_units].values = _calc_flbbcd_units(ds[var_chlor_sig].values, chlor_calib)
+        ds[var_chlor_units].attrs["comment"] = append_string(
+            ds[var_chlor_units].attrs["comment"], msg)
     else:
         _log.warning(
-            "chlorophyll variables not present in dataset, and thus not recalculated"
+            "chlorophyll variables not present in dataset; not recalculated"
         )
 
-    if all(v in ds.data_vars for v in ["cdom", "cdom_signal"]):
+    if all(v in ds.data_vars for v in [var_cdom_units, var_cdom_sig]):
         _log.debug("Recalculating cdom")
-        ds["cdom"] = cdom_calib[1] * (ds["cdom_signal"] - cdom_calib[0])
-        ds["cdom"].attrs["comment"] = append_string(
-            ds["cdom"].attrs["comment"], msg)
+        ds[var_cdom_units].values = _calc_flbbcd_units(ds[var_cdom_sig].values, cdom_calib)
+        ds[var_cdom_units].attrs["comment"] = append_string(
+            ds[var_cdom_units].attrs["comment"], msg)
     else:
-        _log.warning(
-            "cdom variables not present in dataset, and thus not recalculated"
-        )
+        _log.warning("cdom variables not present in dataset; not recalculated")
 
-    if all(v in ds.data_vars for v in ["backscatter_700", "backscatter_700_signal"]):
+    if all(v in ds.data_vars for v in [var_bb_units, var_bb_sig]):
         _log.debug("Recalculating backscatter_700")
-        ds["backscatter_700"] = bb_calib[1] * (ds["backscatter_700_signal"] - bb_calib[0])
-        ds["backscatter_700"].attrs["comment"] = append_string(
-            ds["backscatter_700"].attrs["comment"], msg)
+        ds[var_bb_units].values = _calc_flbbcd_units(ds[var_bb_sig].values, bb_calib)
+        ds[var_bb_units].attrs["comment"] = append_string(
+            ds[var_bb_units].attrs["comment"], msg)
     else:
         _log.warning(
-            "backscatter_700 variables not present in dataset, and thus not recalculated"
+            "backscatter_700 variables not present in dataset; not recalculated"
         )
 
     _log.info("Finished recalculating FLBBCD output values")
