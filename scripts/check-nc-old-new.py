@@ -32,9 +32,10 @@ year = "2022"
 project="SANDIEGO"
 
 # NOTE: OLD DIR expects old dir structure (.../data/processed-L1/...)
+OLD_USE_NEW = True  # Set to True if the old directory structure is the new one (e.g., processed-L0, processed-L1, processed-L3, ancillary-products)
 OLD_BASE_DIR = (
-    home / "mnt-gcs" / "amlr-gliders-deployments-dev" 
-    / project
+    home / f"tests/{deployment_name}"
+    # home / "mnt-gcs" / "amlr-gliders-deployments-dev" / project
     / year / deployment_name
 )
 NEW_BASE_DIR = (
@@ -75,9 +76,25 @@ CHECK_ATTRIBUTES = True  # Compare global and variable metadata
 # PATH RESOLUTION LOGIC
 # Customize these functions to handle differing directory structures.
 # ==============================================================================
-def get_old_path(dataset_id: str) -> Path:
+def get_old_path(dataset_id: str, use_new: bool = False) -> Path | None:
     """Returns absolute path to OLD file given a dataset identifier."""
-    return OLD_BASE_DIR / "data" / "processed-L1" / dataset_id
+    if use_new:        
+        if "raw" in dataset_id:
+            path_out = OLD_BASE_DIR / "processed-L0" / dataset_id
+        elif "eng" in dataset_id or "sci" in dataset_id:
+            path_out = OLD_BASE_DIR / "processed-L1" / dataset_id
+        elif "grid" in dataset_id:
+            path_out = OLD_BASE_DIR / "processed-L3" / dataset_id
+        elif ".csv" in dataset_id:
+            path_out = OLD_BASE_DIR / "ancillary-products" / dataset_id
+        else:
+            print("dataset_id syntax not recognized")
+            path_out = None
+
+    else:
+        path_out = OLD_BASE_DIR / "data" / "processed-L1" / dataset_id
+
+    return path_out
 
 
 def get_new_path(dataset_id: str) -> Path | None:
@@ -395,12 +412,12 @@ def compare_csv_files(
     return meta_diffs, struct_diffs, value_diffs
 
 
-def process_dataset(dataset_id: str) -> str:
+def process_dataset(dataset_id: str, old_use_new: bool = False) -> str:
     """Identifies file extension, opens files with the appropriate library, and compares them."""
-    old_file = get_old_path(dataset_id)
+    old_file = get_old_path(dataset_id, use_new=old_use_new)
     new_file = get_new_path(dataset_id)
 
-    if new_file is None:
+    if old_file is None or new_file is None:
         return "MISSING"
 
     if not old_file.exists():
@@ -650,7 +667,7 @@ def main():
         print(f"DATASET: {dataset_id}")
         print("=" * 60)
 
-        status = process_dataset(dataset_id)
+        status = process_dataset(dataset_id, old_use_new=OLD_USE_NEW)
         summary[status].append(dataset_id)
 
     print("\n" + "=" * 60)
