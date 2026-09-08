@@ -1,3 +1,5 @@
+# This script was written by Gemini, and adapted by Sam Woodman
+ 
 import json
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
@@ -27,8 +29,6 @@ def run_pipeline(files, deployment_name, depl_meta_file, img_meta_file, num_core
     """
     Runs pipeline to generate the deployment-level and image-specific
     metadata files. 
-
-    This function was written by Gemini, and adapted by Sam Woodman
 
     Parameters
     ----------

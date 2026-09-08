@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - Removed `solocam_img_meta`, and added `get_solocam_dt` to the `imagery` module for formatting the image timestamps
     - Added `utils.check_string_length`, for checking that all strings in a list (e.g., solocam image file names) are the same length, and returning useful warning logs if not
     - Changed `imagery.imagery_timeseries` to use `solocam_dt_from_meta` and `check_string_length`
+- Added function `generate_osi_manifest` for generating OSI image json file, for DAG processing. Also added assocaited script `generate_osi_json.py`
 
 ### Data corrections
 - Added several functions and a data file for checking and correcting ecopuck data:
