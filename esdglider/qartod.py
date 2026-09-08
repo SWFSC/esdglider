@@ -15,18 +15,32 @@ The workflow is designed to operate on fully processed
 science NetCDF files and generate DAC-compliant quality
 control variables using the ``ioos_qc`` package. Quality
 control tests are configured through a YAML-based
-configuration file and applied to all eligible variables
+configuration file and applied to eligible variables
 containing a time dimension.
 
-The resulting QC flags are aggregated into DAC-compliant
-*_qc variables, linked to their parent variables through
-the ancillary_variables attribute, and written to a QC-enhanced
-NetCDF file suitable for GliderDAC submission and downstream
-scientific analysis. In addition to QC generation, this
-module provides utilities for creating deployment-level QC
-summary tables from combined QARTOD datasets. Visualization
-of QC results is implemented separately in the companion
-plots.py module.
+Variables not explicitly defined in the YAML configuration
+are automatically assigned default QARTOD configurations
+using available variable metadata. Deployment-specific
+spike and rate-of-change thresholds are then calculated
+from the observations in the dataset and applied to the
+in-memory configuration without modifying the YAML
+configuration file.
+
+QARTOD tests are executed one variable at a time to reduce
+peak memory usage for large glider datasets. Each variable's
+test results are collected and immediately aggregated into
+a single QARTOD flag array before processing the next
+variable.
+
+The resulting aggregate QC flags are written as
+DAC-compliant ``*_qc`` variables, linked to their parent
+variables through the ``ancillary_variables`` attribute,
+and saved to a QC-enhanced NetCDF file suitable for
+GliderDAC submission and downstream scientific analysis.
+The module also provides utilities for creating
+deployment-level QC summary tables. Visualization of QC
+results is implemented separately in the companion
+``plots.py`` module.
 
 Workflow
 --------
@@ -36,16 +50,84 @@ steps:
 1. Open the input science NetCDF dataset.
 2. Identify variables eligible for QARTOD testing.
 3. Load the YAML QARTOD configuration.
-4. Automatically generate default QC configurations.
-5. Compute deployment-specific thresholds.
-6. Construct the ioos_qc.config.Config object.
-7. Execute configured QARTOD tests.
-8. Generate aggregate DAC-compliant ``*_qc`` variables.
-9. Create placeholder QC variables for metadata time
-   variables that are not evaluated by QARTOD.
-10. Update ``ancillary_variables`` attributes.
-11. Add QC provenance metadata.
-12. Write the QC-enhanced dataset to NetCDF.
+4. Automatically generate default configurations for
+   eligible variables not defined in the YAML.
+5. Compute deployment-specific spike and rate-of-change
+   thresholds and update the in-memory configuration.
+6. Process each configured variable independently.
+7. Run the configured QARTOD tests for that variable.
+8. Collect and immediately aggregate the variable's test
+   results using QARTOD flag precedence.
+9. Generate DAC-compliant ``*_qc`` variables from the
+   aggregate results.
+10. Update ``ancillary_variables`` attributes and record
+    QC configuration provenance.
+11. Create placeholder QC variables for metadata time
+    variables that are not evaluated by QARTOD.
+12. Add ``ioos_qc`` version provenance.
+13. Write the QC-enhanced dataset to NetCDF using
+    DAC-compliant QC encodings.Overview
+--------
+This module provides an operational implementation of the
+IOOS QARTOD (Quality Assurance of Real-Time Oceanographic
+Data) framework for ESD Glider science datasets.
+
+The workflow is designed to operate on fully processed
+science NetCDF files and generate DAC-compliant quality
+control variables using the ``ioos_qc`` package. Quality
+control tests are configured through a YAML-based
+configuration file and applied to eligible variables
+containing a time dimension.
+
+Variables not explicitly defined in the YAML configuration
+are automatically assigned default QARTOD configurations
+using available variable metadata. Deployment-specific
+spike and rate-of-change thresholds are then calculated
+from the observations in the dataset and applied to the
+in-memory configuration without modifying the YAML
+configuration file.
+
+QARTOD tests are executed one variable at a time to reduce
+peak memory usage for large glider datasets. Each variable's
+test results are collected and immediately aggregated into
+a single QARTOD flag array before processing the next
+variable.
+
+The resulting aggregate QC flags are written as
+DAC-compliant ``*_qc`` variables, linked to their parent
+variables through the ``ancillary_variables`` attribute,
+and saved to a QC-enhanced NetCDF file suitable for
+GliderDAC submission and downstream scientific analysis.
+The module also provides utilities for creating
+deployment-level QC summary tables. Visualization of QC
+results is implemented separately in the companion
+``plots.py`` module.
+
+Workflow
+--------
+The operational QARTOD workflow performs the following
+steps:
+
+1. Open the input science NetCDF dataset.
+2. Identify variables eligible for QARTOD testing.
+3. Load the YAML QARTOD configuration.
+4. Automatically generate default configurations for
+   eligible variables not defined in the YAML.
+5. Compute deployment-specific spike and rate-of-change
+   thresholds and update the in-memory configuration.
+6. Process each configured variable independently.
+7. Run the configured QARTOD tests for that variable.
+8. Collect and immediately aggregate the variable's test
+   results using QARTOD flag precedence.
+9. Generate DAC-compliant ``*_qc`` variables from the
+   aggregate results.
+10. Update ``ancillary_variables`` attributes and record
+    QC configuration provenance.
+11. Create placeholder QC variables for metadata time
+    variables that are not evaluated by QARTOD.
+12. Add ``ioos_qc`` version provenance.
+13. Write the QC-enhanced dataset to NetCDF using
+    DAC-compliant QC encodings.
 
 Key Features
 ------------
@@ -58,6 +140,14 @@ Key Features
   for unconfigured variables
 - Metadata-derived gross range thresholds using
   ``valid_min`` and ``valid_max`` attributes
+- Deployment-specific spike and rate-of-change
+  threshold calculations
+- In-memory threshold updates without modifying the
+  YAML configuration file
+- Variable-by-variable QARTOD processing to reduce
+  peak memory usage
+- Immediate aggregation of individual QARTOD test
+  results using QARTOD flag precedence
 - Aggregate QC flag generation following DAC
   conventions
 - Placeholder QC variables for required metadata
@@ -65,6 +155,8 @@ Key Features
 - DAC-compliant ``standard_name`` generation
 - Preservation of existing
   ``ancillary_variables`` metadata
+- QC configuration provenance stored with generated
+  QC variables
 - Provenance tracking through
   ``ioos_qc_version`` metadata
 - DAC-compliant NetCDF encoding using:
