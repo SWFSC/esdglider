@@ -12,7 +12,7 @@ from google.cloud import storage
 from esdglider.gcp import check_gcs_file_exists, check_gcs_directory_exists
 from esdglider.paths import get_path_glider, get_path_imagery 
 # from esdglider.imagery import get_path_imagery_deployment
-from esdglider.utils import split_deployment, get_path_year, dataframe_col_reorder
+from esdglider.utils import get_glider_name, get_path_year, dataframe_col_reorder
 
 _log = logging.getLogger(__name__)
 
@@ -221,12 +221,11 @@ def make_deployment_yaml(
             if key == "par":
                 netcdf_vars.pop("par", None)
 
-    deployment_split = split_deployment(deployment_name)
     metadata["deployment_name"] = deployment_name
     metadata["os_version"] = str(db_depl["Software_Version"].values[0])
     metadata["project"] = project
     metadata["sea_name"] = sea_name
-    metadata["glider_name"] = deployment_split[0]
+    metadata["glider_name"] = get_glider_name(deployment_name)
     if not any(db_devices["Device_Type"] == "Teledyne Glider Slocum G3"):
         raise ValueError(
             "No device 'Teledyne Glider Slocum G3'. Please add to the build",

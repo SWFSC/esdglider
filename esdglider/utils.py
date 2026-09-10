@@ -314,7 +314,7 @@ def datetime_now_utc(format="%Y-%m-%dT%H:%M:%SZ"):
     return datetime.now(timezone.utc).strftime(format)
 
 
-def split_deployment(deployment_name):
+def _split_deployment(deployment_name):
     """
     Split the deployment string into glider name, and date deployed
     Splits by "-"
@@ -338,7 +338,7 @@ def get_glider_name(deployment_name):
     Assumes the deployment name is in the format 'glidername-YYYYMMDD'.
     Returns the glider name as a string.
     """
-    deployment_split = split_deployment(deployment_name)
+    deployment_split = _split_deployment(deployment_name)
     glider_name = deployment_split[0]
     return glider_name
 
@@ -355,7 +355,7 @@ def get_path_year(deployment_name):
     and ringo-20190101 would return 2019
     """
 
-    deployment_split = split_deployment(deployment_name)
+    deployment_split = _split_deployment(deployment_name)
     deployment_date = deployment_split[1]
     year = deployment_date[0:4]
 
