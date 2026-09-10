@@ -4,16 +4,18 @@ Functions for interacting with GCP (Fail-Fast Architecture)
 
 import logging
 import os
-from pathlib import Path
-import subprocess
 import shutil
+import subprocess
 from functools import wraps
+from pathlib import Path, PurePosixPath
 
 import google_crc32c
-from google.cloud import secretmanager
+from google.cloud import secretmanager, storage
 
 _log = logging.getLogger(__name__)
 
+# Instantiate client once at module level for connection reuse
+_SECRET_CLIENT = secretmanager.SecretManagerServiceClient()
 
 def log_and_raise_shell_errors(command_name: str):
     """
@@ -67,8 +69,7 @@ def check_gcsfuse_installed() -> None:
 
 
 def access_secret_version(project_id: str, secret_id: str, version_id: str = "latest") -> str:
-    """
-    Access the payload for the given secret version if one exists.
+    """Access the payload for the given secret version if one exists.
     
     Verifies payload data integrity via a CRC32c checksum verification
     step before returning the decoded string.
@@ -93,19 +94,126 @@ def access_secret_version(project_id: str, secret_id: str, version_id: str = "la
     ValueError
         If data corruption is detected via an invalid CRC32c checksum.
     """
-    client = secretmanager.SecretManagerServiceClient()
     name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
-    response = client.access_secret_version(request={"name": name})
+    response = _SECRET_CLIENT.access_secret_version(request={"name": name})
 
-    # Verify payload checksum
-    crc32c = google_crc32c.Checksum()
-    crc32c.update(response.payload.data)
-    if response.payload.data_crc32c != int(crc32c.hexdigest(), 16):
-        msg = f"Data corruption detected while retrieving secret: {secret_id}"
-        _log.critical(msg)
-        raise ValueError(msg)
+    # Verify payload checksum if provided by the response
+    if response.payload.data_crc32c is not None:
+        crc32c = google_crc32c.Checksum()
+        crc32c.update(response.payload.data)
+        if response.payload.data_crc32c != int(crc32c.hexdigest(), 16):
+            msg = f"Data corruption detected while retrieving secret: {secret_id}"
+            _log.critical(msg)
+            raise ValueError(msg)
 
     return response.payload.data.decode("UTF-8")
+
+
+# def access_secret_version(project_id: str, secret_id: str, version_id: str = "latest") -> str:
+#     """
+#     Access the payload for the given secret version if one exists.
+    
+#     Verifies payload data integrity via a CRC32c checksum verification
+#     step before returning the decoded string.
+
+#     Parameters
+#     ----------
+#     project_id : str
+#         The GCP project ID or project number (e.g., 'amlr-gliders-dev').
+#     secret_id : str
+#         The name/ID of the secret to retrieve from Secret Manager.
+#     version_id : str, optional
+#         The specific version number as a string (e.g., "5") or an alias.
+#         Defaults to "latest".
+
+#     Returns
+#     -------
+#     str
+#         The decrypted secret payload material decoded as a UTF-8 string.
+
+#     Raises
+#     ------
+#     ValueError
+#         If data corruption is detected via an invalid CRC32c checksum.
+#     """
+#     client = secretmanager.SecretManagerServiceClient()
+#     name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+#     response = client.access_secret_version(request={"name": name})
+
+#     # Verify payload checksum
+#     crc32c = google_crc32c.Checksum()
+#     crc32c.update(response.payload.data)
+#     if response.payload.data_crc32c != int(crc32c.hexdigest(), 16):
+#         msg = f"Data corruption detected while retrieving secret: {secret_id}"
+#         _log.critical(msg)
+#         raise ValueError(msg)
+
+#     return response.payload.data.decode("UTF-8")
+
+
+def sync_directory_to_gcs(
+    local_dir: Path,
+    bucket_name: str,
+    gcs_prefix: str,
+    delete: bool = True,
+):
+    """Uploads files from a local directory to a GCS bucket using native Python SDK.
+    Only uploads files if they do not already exist at the destination prefix.
+    
+    Parameters
+    ----------
+    local_dir : Path
+        Local directory source to sync from.
+    bucket_name : str
+        Target GCS bucket name.
+    gcs_prefix : str
+        Target object prefix inside the GCS bucket.
+    delete : bool, optional
+        If True, deletes objects under the GCS prefix that do not exist in local_dir.
+        Defaults to True.
+    """
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+
+    _log.info(
+        "Synchronizing local directory '%s' to GCS bucket '%s', "
+        + "with prefix '%s', and with delete as '%s'",
+        local_dir,
+        bucket_name,
+        gcs_prefix,
+        delete,
+    )
+
+    prefix_str = PurePosixPath(gcs_prefix).as_posix() if gcs_prefix else ""
+    list_prefix = f"{prefix_str}/" if prefix_str and not prefix_str.endswith("/") else prefix_str
+
+    # Fetch existing blobs once to avoid making an API call per local file
+    _log.debug(f"Fetching existing GCS objects under gs://{bucket_name}/{list_prefix}")
+    existing_blobs = {blob.name: blob for blob in bucket.list_blobs(prefix=list_prefix)}
+
+    local_blob_names = set()
+
+    # Iterate through local files
+    for file_path in local_dir.rglob("*"):
+        if file_path.is_file():
+            relative_path = file_path.relative_to(local_dir)
+            blob_name = (PurePosixPath(prefix_str) / relative_path.as_posix()).as_posix()
+            local_blob_names.add(blob_name)
+
+            # Check if file already exists in GCS destination
+            if blob_name in existing_blobs:
+                _log.debug(f"Skipping {file_path.name}; gs://{bucket_name}/{blob_name} already exists.")
+            else:
+                blob = bucket.blob(blob_name)
+                _log.info(f"Uploading {file_path} to gs://{bucket_name}/{blob_name}")
+                blob.upload_from_filename(file_path)
+
+    # Delete unmatched destination objects if delete=True
+    if delete:
+        for blob_name, blob in existing_blobs.items():
+            if blob_name not in local_blob_names:
+                _log.info(f"Deleting unmatched GCS blob: gs://{bucket_name}/{blob_name}")
+                blob.delete()
 
 
 # ---------------------------------------

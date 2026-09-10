@@ -205,7 +205,7 @@ def get_path_glider(
         _check_dir_exists(cac_path, "provided cac_path")
 
     # Glider data in and data out paths
-    year = utils.year_path(deployment_name)
+    year = utils.get_path_year(deployment_name)
     glider_data_in_path = os.path.join(data_in_path, year, deployment_name)
     if data_in_path != "":
         _check_dir_exists(glider_data_in_path, "derived glider data in path")
@@ -346,7 +346,7 @@ def get_path_aa(
     aa_in_path = str(aa_in_path)
     data_out_path = str(data_out_path)
 
-    year = utils.year_path(deployment_name)
+    year = utils.get_path_year(deployment_name)
 
     # Check that relevant deployment path exists
     aa_glider_in_path = os.path.join(
@@ -463,7 +463,7 @@ def get_path_imagery(
     imagery_meta_path = str(imagery_meta_path)
     data_out_path = str(data_out_path)
     
-    year = utils.year_path(deployment_name)
+    year = utils.get_path_year(deployment_name)
 
     imagery_glider_in_path = os.path.join(
         imagery_in_path,
@@ -529,7 +529,7 @@ def _get_path_ancillary(deployment_name, data_out_path):
     str
         The path to the ancillary products directory
     """
-    year = utils.year_path(deployment_name)
+    year = utils.get_path_year(deployment_name)
     glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
     ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
     return ancillarydir

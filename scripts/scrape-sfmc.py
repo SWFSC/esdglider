@@ -1,10 +1,10 @@
-#!/usr/bin/env python
-
 import argparse
 import logging
 import sys
 
-import esdglider.slocum.rt as rt
+from esdglider.slocum import rt
+
+logger = logging.getLogger(__name__)
 
 
 def main(args):
@@ -27,21 +27,22 @@ def main(args):
             datefmt="%Y-%m-%d %H:%M:%S",
         )
 
-    # TODO: extract paths call, a la slocum.binary_to_nc
-    deployment_info = {
-        "project": args.project,
-        "deployment": args.deployment,
-    }
+    # # TODO: extract paths call, a la slocum.binary_to_nc
+    # deployment_info = {
+    #     # "project": args.project,
+    #     "deployment": args.deployment_name,
+    # }
 
     rt.scrape_sfmc(
-        deployment_info=deployment_info,
+        deployment_name=args.deployment_name,
+        # deployment_info=deployment_info,
         bucket=args.bucket,
         sfmc_path=args.sfmc_path,
         gcpproject_id=args.gcpproject_id,
         secret_id=args.secret_id,
     )
 
-    logging.info("Completed rt.scrape_sfmc")
+    logger.info("Completed rt.scrape_sfmc")
 
 
 if __name__ == "__main__":
@@ -50,15 +51,15 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    arg_parser.add_argument(
-        "project",
-        type=str,
-        help="Glider project name",
-        choices=["FREEBYRD", "REFOCUS", "SANDIEGO", "ECOSWIM"],
-    )
+    # arg_parser.add_argument(
+    #     "project",
+    #     type=str,
+    #     help="Glider project name",
+    #     choices=["FREEBYRD", "REFOCUS", "SANDIEGO", "ECOSWIM"],
+    # )
 
     arg_parser.add_argument(
-        "deployment",
+        "deployment_name",
         type=str,
         help="Deployment name, eg amlr03-20220425",
     )

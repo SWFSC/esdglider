@@ -971,6 +971,13 @@ def check_flbbcd_autoexec(
  
     #         sensor_data = dbd.get(*flbbcd_cal_names, return_nans=False)
     #         cal_values = [np.unique(i[1]) for i in sensor_data]
+            if not all(key in ds for key in flbbcd_cal_names):
+                _log.warning(
+                    "Not all required FLBBCD calibration keys are present "
+                    + "in the dataset. Ending check"
+                )
+                return 
+
             cal_values = [np.unique(ds[i].values) for i in flbbcd_cal_names]
             cal_values = [arr[~np.isnan(arr)] for arr in cal_values]
             if not all(len(item) == 1 for item in cal_values):

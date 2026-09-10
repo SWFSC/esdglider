@@ -12,7 +12,7 @@ from google.cloud import storage
 from esdglider.gcp import check_gcs_file_exists, check_gcs_directory_exists
 from esdglider.paths import get_path_glider, get_path_imagery 
 # from esdglider.imagery import get_path_imagery_deployment
-from esdglider.utils import split_deployment, year_path, dataframe_col_reorder
+from esdglider.utils import split_deployment, get_path_year, dataframe_col_reorder
 
 _log = logging.getLogger(__name__)
 
@@ -335,7 +335,7 @@ def make_website_yaml(
         deployment_name = d["Deployment_Name"]
         _log.info("Working on deployment %s", deployment_name)
         # project = d["Project"]
-        year = year_path(deployment_name)
+        year = get_path_year(deployment_name)
         mode = "delayed"
         path_pre = os.path.join(year, deployment_name).replace("\\", "/")
         # paths_acoustics = get_path_acoustics_deployment(path_pre, deployment_name, mode)

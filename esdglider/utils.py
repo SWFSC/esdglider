@@ -332,7 +332,18 @@ def split_deployment(deployment_name):
     return deployment_split
 
 
-def year_path(deployment_name):
+def get_glider_name(deployment_name):
+    """
+    Get the glider name from the deployment name.
+    Assumes the deployment name is in the format 'glidername-YYYYMMDD'.
+    Returns the glider name as a string.
+    """
+    deployment_split = split_deployment(deployment_name)
+    glider_name = deployment_split[0]
+    return glider_name
+
+
+def get_path_year(deployment_name):
     """
     From the glider project and deployment name (both strings),
     generate and return the year string to use in file paths

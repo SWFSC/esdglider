@@ -461,7 +461,11 @@ def eng_tvt_loop(
     if max_workers == 1:
         _log.info("Plotting with one worker, not in parallel")
         for key in vars_toloop:
-            eng_tvt_plot(key, ds, eng_dict, base_path=base_path, show=show)
+            try:
+                eng_tvt_plot(key, ds, eng_dict, base_path=base_path, show=show)
+            except Exception as e:
+                _log.error(f"Failed to generate plot for key '{key}': {e}", exc_info=True)
+                continue
     else:
         if max_workers is None:
             max_workers = max(1, os.cpu_count())  # type: ignore
@@ -1283,11 +1287,18 @@ def eng_plots_to_make(ds: xr.Dataset):
     """
 
     da_c_tdepth = ds["c_dive_target_depth"].dropna(dim="time")
-    da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
+    try:
+        da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
+    except ValueError:
+        da_c_mdepth = None
 
     da_ctd_depth = ds["depth_ctd"].dropna(dim="time")
-    da_ctd_mdepth = ds["m_depth"].interp(time=da_ctd_depth.time)
-    da_ctd_diff = da_ctd_depth - da_ctd_mdepth
+    try:
+        da_ctd_mdepth = ds["m_depth"].interp(time=da_ctd_depth.time)
+        da_ctd_diff = da_ctd_depth - da_ctd_mdepth 
+    except ValueError:
+        da_ctd_mdepth = None
+        da_ctd_diff = None
 
     plots_to_make = {
         "oilVol": {
