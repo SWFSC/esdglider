@@ -1,10 +1,12 @@
 import logging
 
 import gspread
-import sqlalchemy
 import pandas as pd
+import sqlalchemy
 
-import esdglider.config as config
+from esdglider import config
+
+logger = logging.getLogger(__name__)
 
 """
 Write various database views and summaries to the ESD Fleet Status page
@@ -22,7 +24,7 @@ sqlalchemy engine. It should not be committed to GitHub.
 
 def write_to_sheet(sh, wk_name, df):
     # wk_name = "Devices-Calibrations"
-    logging.info("Updating the %s worksheet on the %s spreadsheet", wk_name, sh.title)
+    logger.info("Updating the %s worksheet on the %s spreadsheet", wk_name, sh.title)
     wk = sh.worksheet(wk_name)
     wk.update([df.columns.values.tolist()] + df.values.tolist())
 

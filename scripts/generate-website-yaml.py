@@ -3,7 +3,7 @@ import logging
 # import gspread
 import sqlalchemy
 
-import esdglider.config as config
+from esdglider import config
 
 """
 Make a yaml file for all glider deployments to display on the website
