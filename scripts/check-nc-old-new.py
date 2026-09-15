@@ -30,10 +30,10 @@ deployment_name = "amlr08-20220513"; year = "2022"; project="SANDIEGO"
 # deployment_name = "stenella-20250414"
 
 # NOTE: OLD DIR expects old dir structure (.../data/processed-L1/...)
-OLD_USE_NEW = True  # Set to True if the old directory structure is the new one (e.g., processed-L0, processed-L1, processed-L3, ancillary-products)
+OLD_USE_NEW = False  # Set to True if the old directory structure is the new one (e.g., processed-L0, processed-L1, processed-L3, ancillary-products)
 OLD_BASE_DIR = (
-    home / f"tests/{deployment_name}"
-    # home / "mnt-gcs" / "amlr-gliders-deployments-dev" / project
+    # home / f"tests/{deployment_name}"
+    home / "mnt-gcs" / "amlr-gliders-deployments-dev" / project
     / year / deployment_name
 )
 NEW_BASE_DIR = (

@@ -3,22 +3,22 @@ import functools
 import logging
 import os
 import typing
+from pathlib import Path
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import cmocean.cm as cmo
 import matplotlib
 import matplotlib.dates as mdates
-import matplotlib.lines as mlines
 import matplotlib.figure
+import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
 import pandas as pd
+import xarray as xr
 from cartopy.mpl.geoaxes import GeoAxes
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
-from pathlib import Path
 from numpy.typing import NDArray
 
 from esdglider import utils
@@ -29,6 +29,7 @@ _log = logging.getLogger(__name__)
 """
 label_size = 11
 title_size = 13
+xaxis_format = "%d %b %H:%M" #"%m/%d %H:%M"
 
 # Folder names
 scatter_path = "pointMaps"
@@ -61,7 +62,7 @@ var: str
 
 def adj_var(ds, var):
     """Get the adjusted var values for the plot. Eg, take the log"""
-    if var not in adjustments.keys():
+    if var not in adjustments:
         return ds[var]
     if adjustments[var] == np.log10:
         return adjustments[var](ds[var])
@@ -84,7 +85,7 @@ def adj_var_label(ds, var):
     # else:
     #     return f"{var} [{u}]"
 
-    if var not in adjustments.keys():
+    if var not in adjustments:
         return f"{var} [{u}]"
     elif adjustments[var] == np.log10:
         return "$log_{10}$" + f"({var} [{u}])"
@@ -463,7 +464,7 @@ def eng_tvt_loop(
         for key in vars_toloop:
             try:
                 eng_tvt_plot(key, ds, eng_dict, base_path=base_path, show=show)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 _log.error(f"Failed to generate plot for key '{key}': {e}", exc_info=True)
                 continue
     else:
@@ -1020,6 +1021,7 @@ def sci_timesection_plot(
 
     # for label in ax.get_xticklabels(which='major'):
     #     label.set(rotation=15, horizontalalignment='center')
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
     fig.autofmt_xdate()
     # fig_cnt += 1
 
@@ -1489,8 +1491,7 @@ def eng_timeseries_plot(
     )
 
     ax.scatter(ds.time, ds[var], s=3)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
-    # fig.colorbar(p, location="right").set_label(adj_var_label(ds, var), size=label_size)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
     fig.autofmt_xdate()
 
     if base_path is not None:
@@ -1562,10 +1563,11 @@ def sci_timeseries_plot(
     p = ax.scatter(
         ds.time, ds[depth_var], c=adj_var(ds, var), cmap=sci_vars[var], s=3
     )
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
     fig.colorbar(p, location="right").set_label(
         adj_var_label(ds, var), size=label_size
     )
+
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
     fig.autofmt_xdate()
 
     if base_path is not None:
@@ -1956,7 +1958,7 @@ def plot_qc_summary(
         "v",
     }
 
-    deployment_name = ds_qc.attrs.get("deployment_name", "unknown")
+    # deployment_name = ds_qc.attrs.get("deployment_name", "unknown")
     _log.info(f"Making QC summary plot for dataset {ds_qc.attrs['deployment_name']}")
 
     # IDENTIFY VARIABLES FOR SUMMARY
@@ -2006,13 +2008,13 @@ def plot_qc_summary(
     bottom = np.zeros(len(summary_df))
 
     # PLOT STACKED BAR SEGMENTS
-    for flag in QC_FLAG_NAMES:
+    for flag, col in QC_FLAG_NAMES.items():
         heights = summary_df[flag]
         ax.bar(
             summary_df["variable"],
             heights,
             bottom=bottom,
-            color=QC_FLAG_NAMES[flag],
+            color=col,
             width=0.7,
             label=flag,
         )
@@ -2215,8 +2217,8 @@ def plot_qc_timeseries(
                 )
 
         ax.invert_yaxis()
-        ax.set_xlabel("Time")
-        ax.set_ylabel("Depth (m)")
+        ax.set_xlabel("Time", size=label_size)
+        ax.set_ylabel("Depth (m)", size=label_size)
 
         # BUILD FIGURE TITLE
         if deployment_name is None:
@@ -2231,8 +2233,7 @@ def plot_qc_timeseries(
         ax.set_title(title)
 
         # FORMAT X-AXIS AS MM/DD HH:MM
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
-
+        ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
         fig.autofmt_xdate()
 
         # MAKE CUSTOM LEGEND
