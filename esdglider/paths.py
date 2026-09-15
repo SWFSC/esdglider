@@ -21,7 +21,7 @@ aa_in_bucket_name = "swfscesd-glider-active-acoustics-data-in"
 
 def _check_dir_exists(dir_path, description):
     if not os.path.isdir(dir_path):
-        _log.warning(f"The {description} path ('{dir_path}') does not exist")
+        _log.debug("The %s path ('%s') does not exist", description, dir_path)
 
 def get_path_flbbcd_calibrations() -> str:
     """
@@ -127,7 +127,8 @@ def get_path_glider(
         A dictionary with the relevant paths
     """
 
-    # Checks
+    # Checks / prep
+    year = utils.get_path_year(deployment_name)
     if mode not in ["delayed", "rt"]:
         raise ValueError("mode must be either 'rt' or 'delayed'")
 
@@ -143,15 +144,15 @@ def get_path_glider(
     #     cac_path = str(cac_path)    
     cac_path = _resolve_path(cac_path, home_path, "cac")
     if cac_path != "":
-        _check_dir_exists(cac_path, "provided cac_path")
+        _check_dir_exists(cac_path, "provided cache")
     # _log.info("Using cache path: %s", cac_path)
 
-    # if config_path == "":
-    #     config_path = str(home_path / "glider-processing" / "deployment-configs")
-    # else:
-    #     config_path = str(config_path)
-    # _log.info("Using config path: %s", config_path)
-    config_path = _resolve_path(config_path, home_path, "config")
+    if config_path == "":
+        config_path = str(home_path / "glider-processing" / "deployment-configs" / year)
+    else:
+        config_path = str(config_path)
+    _log.info("Using config path: %s", config_path)
+    # config_path = _resolve_path(config_path, home_path, "config")
 
     # if data_in_path == "":
     #     data_in_path = str(mnt_path / data_in_bucket_name)
@@ -168,10 +169,9 @@ def get_path_glider(
     data_out_path = _resolve_path(data_out_path, home_path, "data-out")
 
     # Get year
-    year = utils.get_path_year(deployment_name)
 
     # Deployment yaml
-    deploymentyaml = os.path.join(config_path, year, f"{deployment_name}.yml")    
+    deploymentyaml = os.path.join(config_path, f"{deployment_name}.yml")    
     if not os.path.isfile(deploymentyaml):
         _log.warning(
             "The deployment yaml ('%s') does not exist", 
@@ -183,11 +183,11 @@ def get_path_glider(
     # Glider data in and data out paths
     glider_data_in_path = os.path.join(data_in_path, year, deployment_name)
     if data_in_path != "":
-        _check_dir_exists(glider_data_in_path, "derived glider data in path")
+        _check_dir_exists(glider_data_in_path, "derived glider data in")
     
     glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
     if data_out_path != "":
-        _check_dir_exists(glider_data_out_path, "derived glider data out path")
+        _check_dir_exists(glider_data_out_path, "derived glider data out")
 
     # glider_paths_data_out = get_path_glider_data_out(
     #     deployment_name = deployment_name,
@@ -528,8 +528,8 @@ def _resolve_path(p: str | Path, home: Path, type: str):
         end_path = mnt_path / data_out_bucket_name
     elif type == "cac":
         end_path = Path("standard-glider-files") / "Cache"
-    elif type == "config":
-        end_path = Path("glider-processing") / "deployment-configs"
+    # elif type == "config":
+    #     end_path = Path("glider-processing") / "deployment-configs"
     elif type == "aa-in":
         end_path = mnt_path / aa_in_bucket_name
     elif type == "img-in":
