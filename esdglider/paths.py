@@ -134,43 +134,18 @@ def get_path_glider(
 
     # Either resolve paths, or generate based on ESD defaults
     home_path = Path(home_path)
-    # mnt_path = home_path / "mnt-gcs"
-    # data_in_path = str(data_in_path)
-    # data_out_path = str(data_out_path)
+    data_in_path = _resolve_path(data_in_path, home_path, "data-in")
+    data_out_path = _resolve_path(data_out_path, home_path, "data-out")
 
-    # if cac_path == "":
-    #     cac_path = str(home_path / "standard-glider-files" / "Cache")
-    # else:
-    #     cac_path = str(cac_path)    
     cac_path = _resolve_path(cac_path, home_path, "cac")
-    if cac_path != "":
-        _check_dir_exists(cac_path, "provided cache")
-    # _log.info("Using cache path: %s", cac_path)
+    _check_dir_exists(cac_path, "provided cache")
 
+    # Deployment yaml
     if config_path == "":
         config_path = str(home_path / "glider-processing" / "deployment-configs" / year)
     else:
         config_path = str(config_path)
     _log.info("Using config path: %s", config_path)
-    # config_path = _resolve_path(config_path, home_path, "config")
-
-    # if data_in_path == "":
-    #     data_in_path = str(mnt_path / data_in_bucket_name)
-    # else:
-    #     data_in_path = str(data_in_path)
-    # _log.info("Using data in path: %s", data_in_path)
-    data_in_path = _resolve_path(data_in_path, home_path, "data-in")
-
-    # if data_out_path == "":
-    #     data_out_path = str(mnt_path / data_out_bucket_name)
-    # else:
-    #     data_out_path = str(data_out_path)
-    # _log.info("Using data out path: %s", data_out_path)
-    data_out_path = _resolve_path(data_out_path, home_path, "data-out")
-
-    # Get year
-
-    # Deployment yaml
     deploymentyaml = os.path.join(config_path, f"{deployment_name}.yml")    
     if not os.path.isfile(deploymentyaml):
         _log.warning(
@@ -178,22 +153,12 @@ def get_path_glider(
             deploymentyaml
         )
 
-    # cache path
-
     # Glider data in and data out paths
     glider_data_in_path = os.path.join(data_in_path, year, deployment_name)
-    if data_in_path != "":
-        _check_dir_exists(glider_data_in_path, "derived glider data in")
+    _check_dir_exists(glider_data_in_path, "derived glider data in")
     
     glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
-    if data_out_path != "":
-        _check_dir_exists(glider_data_out_path, "derived glider data out")
-
-    # glider_paths_data_out = get_path_glider_data_out(
-    #     deployment_name = deployment_name,
-    #     mode = mode,
-    #     glider_data_out_path = glider_data_out_path, 
-    # )
+    _check_dir_exists(glider_data_out_path, "derived glider data out")
 
     procl0dir = os.path.join(glider_data_out_path, "processed-L0")
     procl1dir = os.path.join(glider_data_out_path, "processed-L1")
@@ -208,7 +173,6 @@ def get_path_glider(
     griddir = procl3dir
     profdir = os.path.join(procl1dir, "ngdac", mode)
 
-    # ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
 
     # Create common file names
     path_prof_summ = os.path.join(ancillarydir, f"{deployment_name}-{mode}-profiles.csv")
@@ -245,7 +209,6 @@ def get_path_glider(
         "tsrawpath": path_raw,
         "tsscipath": path_sci,
         "tsengpath": path_eng,
-        # "tssciqcpath": path_sci_qc,
         "gr1path": path_gr1,
         "gr5path": path_gr5,
         "profsummpath": path_prof_summ,
@@ -286,29 +249,11 @@ def get_path_aa(
     dict
         A dictionary with the relevant acoustic paths
     """
-        
-    # # Temporary, until going full pathlib
-    # aa_in_path = str(aa_in_path)
-    # data_out_path = str(data_out_path)    
 
     # Either resolve paths, or generate based on ESD defaults
     home_path = Path(home_path)
-    # mnt_path = home_path / "mnt-gcs"
-
-    # if aa_in_path == "":
-    #     aa_in_path = str(mnt_path / aa_in_bucket_name)
-    # else:
-    #     aa_in_path = str(aa_in_path)
-    # _log.info("Using data out path: %s", aa_in_path)
     aa_in_path = _resolve_path(aa_in_path, home_path, "aa-in")
-
-    # if data_out_path == "":
-    #     data_out_path = str(mnt_path / data_out_bucket_name)
-    # else:
-    #     data_out_path = str(data_out_path)
-    # _log.info("Using data out path: %s", data_out_path)
     data_out_path = _resolve_path(data_out_path, home_path, "data-out")
-
 
     # Get year from deployment name
     year = utils.get_path_year(deployment_name)
@@ -319,21 +264,7 @@ def get_path_aa(
         year,
         deployment_name,
     )
-    if aa_in_path != "":
-        _check_dir_exists(aa_glider_in_path, "derived acoustic deployment")
-    # if not os.path.isdir(acoustic_deployment_path):
-    #     _log.warning(f"The derived acoustic path ({acoustic_deployment_path}) does not exist")
-
-    # Return dictionary of file paths
-    # deployment_paths_out = get_path_acoustics_deployment(
-    #     acoustic_deployment_path,
-    #     deployment_name,
-    #     mode,
-    # )
-    # metadir = os.path.join(acoustic_deployment_path, "metadata")
-    # glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
-    # if data_out_path != "":
-    #     _check_dir_exists(glider_data_out_path, "derived glider data out")
+    _check_dir_exists(aa_glider_in_path, "derived acoustic deployment")
 
     # ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
     ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
@@ -394,36 +325,10 @@ def get_path_imagery(
         for a given glider deployment
     """
 
-    # # Temporary, until going full pathlib
-    # imagery_in_path = str(imagery_in_path)
-    # imagery_meta_path = str(imagery_meta_path)
-    # data_out_path = str(data_out_path)
-
     # Either resolve paths, or generate based on ESD defaults
     home_path = Path(home_path)
-    # mnt_path = home_path / "mnt-gcs"
-    # data_in_path = str(data_in_path)
-    # data_out_path = str(data_out_path)
-
-    # if imagery_in_path == "":
-    #     imagery_in_path = str(mnt_path / imagery_in_bucket_name)
-    # else:
-    #     imagery_in_path = str(imagery_in_path)
-    # _log.info("Using imagery in path: %s", imagery_in_path)
     imagery_in_path = _resolve_path(imagery_in_path, home_path, "img-in")
-
-    # if imagery_meta_path == "":
-    #     imagery_meta_path = str(mnt_path / imagery_meta_bucket_name)
-    # else:
-    #     imagery_meta_path = str(imagery_meta_path)
-    # _log.info("Using imagery metadata path: %s", imagery_meta_path)
     imagery_meta_path = _resolve_path(imagery_meta_path, home_path, "img-meta")
-
-    # if data_out_path == "":
-    #     data_out_path = str(mnt_path / data_out_bucket_name)
-    # else:
-    #     data_out_path = str(data_out_path)
-    # _log.info("Using data out path: %s", data_out_path)
     data_out_path = _resolve_path(data_out_path, home_path, "data-out")
 
     year = utils.get_path_year(deployment_name)
@@ -433,20 +338,14 @@ def get_path_imagery(
         year,
         deployment_name,
     )
-    if imagery_in_path != "":
-        _check_dir_exists(imagery_glider_in_path, "imagery data in")
-    # if not os.path.isdir(imagery_glider_in_path):
-    #     _log.warning("%s does not exist", imagery_glider_in_path)
+    _check_dir_exists(imagery_glider_in_path, "imagery data in")
 
     imagery_glider_meta_path = os.path.join(
         imagery_meta_path,
         year,
         deployment_name,
     )
-    if imagery_meta_path != "":
-        _check_dir_exists(imagery_glider_meta_path, "imagery metadata")
-    # if not os.path.isdir(imagery_glider_in_path):
-    #     _log.warning("%s does not exist", imagery_glider_in_path)
+    _check_dir_exists(imagery_glider_meta_path, "imagery metadata")
 
     depl_meta_path = os.path.join(
         imagery_glider_meta_path, 
@@ -457,11 +356,6 @@ def get_path_imagery(
         f"{deployment_name}-image-metadata.jsonl"
     )
 
-    # glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
-    # if data_out_path != "":
-    #     _check_dir_exists(glider_data_out_path, "derived glider data out")
-
-    # ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
     ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
     imgcsv = os.path.join(ancillarydir, f"{deployment_name}-imagery-ancillary.csv")
 
