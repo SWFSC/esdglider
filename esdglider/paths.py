@@ -145,13 +145,14 @@ def get_path_glider(
         config_path = str(home_path / "glider-processing" / "deployment-configs" / year)
     else:
         config_path = str(config_path)
-    _log.info("Using config path: %s", config_path)
     deploymentyaml = os.path.join(config_path, f"{deployment_name}.yml")    
     if not os.path.isfile(deploymentyaml):
         _log.warning(
             "The deployment yaml ('%s') does not exist", 
             deploymentyaml
         )
+    else:
+        _log.info("Using deploymentyaml file: %s", deploymentyaml)
 
     # Glider data in and data out paths
     glider_data_in_path = os.path.join(data_in_path, year, deployment_name)
