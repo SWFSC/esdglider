@@ -242,12 +242,12 @@ def gcs_unmount_bucket(mountpoint: str) -> None:
     """
     mountpoint = str(mountpoint)
     cmd = ["fusermount", "-u", mountpoint]
-    _log.info(f"Executing: {' '.join(cmd)}")
+    _log.debug(f"Executing: {' '.join(cmd)}")
     
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     if result.stdout:
         _log.debug(f"fusermount stdout:\n{result.stdout.strip()}")
-    _log.info(f"Successfully unmounted {mountpoint}")
+    _log.debug(f"Successfully unmounted {mountpoint}")
 
 
 def gcs_mount_bucket(bucket: str, mountpoint: str | Path, ro: bool = False) -> None:
@@ -297,7 +297,7 @@ def gcs_mount_bucket(bucket: str, mountpoint: str | Path, ro: bool = False) -> N
         raise FileNotFoundError(msg)
         
     if os.listdir(mountpoint):
-        _log.info(f"Mountpoint '{mountpoint}' is not empty; attempting pre-unmount clean")
+        _log.debug(f"Mountpoint '{mountpoint}' is not empty; attempting pre-unmount clean")
         try:
             gcs_unmount_bucket(mountpoint)
         except subprocess.CalledProcessError:
@@ -314,7 +314,7 @@ def gcs_mount_bucket(bucket: str, mountpoint: str | Path, ro: bool = False) -> N
         if ro:
             cmd[2:2] = ["-o", "ro"]
 
-        _log.info(f"Executing: {' '.join(cmd)}")
+        _log.debug(f"Executing: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         
         if result.stdout:

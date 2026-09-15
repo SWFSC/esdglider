@@ -37,7 +37,7 @@ OLD_BASE_DIR = (
     / year / deployment_name
 )
 NEW_BASE_DIR = (
-    home / ("mnt-gcs/swfscesd-glider-deployments-data-out")
+    home / "mnt-gcs" / "swfscesd-glider-deployments-data-out"
     # home / f"tests/{deployment_name}"
     / year / deployment_name
 )
@@ -86,25 +86,25 @@ CHECK_ATTRIBUTES = True  # Compare global and variable metadata
 def get_old_path(dataset_id: str, use_new: bool = False) -> Path | None:
     """Returns absolute path to OLD file given a dataset identifier."""
     if use_new:        
-        path_out = get_new_path(dataset_id)
+        path_out = get_new_path(dataset_id, OLD_BASE_DIR)
     else:
         path_out = OLD_BASE_DIR / "data" / "processed-L1" / dataset_id
 
     return path_out
 
 
-def get_new_path(dataset_id: str) -> Path | None:
+def get_new_path(dataset_id: str, base_dir: Path) -> Path | None:
     """Returns absolute path to NEW file given a dataset identifier."""
     if "raw" in dataset_id:
-        path_out = NEW_BASE_DIR / "processed-L0" / dataset_id
+        path_out = base_dir / "processed-L0" / dataset_id
     elif "eng" in dataset_id or "sci" in dataset_id:
-        path_out = NEW_BASE_DIR / "processed-L1" / dataset_id
+        path_out = base_dir / "processed-L1" / dataset_id
     elif "grid" in dataset_id:
-        path_out = NEW_BASE_DIR / "processed-L3" / dataset_id
+        path_out = base_dir / "processed-L3" / dataset_id
     # elif "echoview" in dataset_id:
     #     path_out = NEW_BASE_DIR / "ancillary-products" / dataset_id
     elif ".csv" in dataset_id or "echoview" in dataset_id:
-        path_out = NEW_BASE_DIR / "ancillary-products" / dataset_id
+        path_out = base_dir / "ancillary-products" / dataset_id
     else:
         print("dataset_id syntax not recognized")
         path_out = None
@@ -473,7 +473,7 @@ def compare_text_files(
 def process_dataset(dataset_id: str, old_use_new: bool = False) -> str:
     """Identifies file extension, opens files with the appropriate library, and compares them."""
     old_file = get_old_path(dataset_id, use_new=old_use_new)
-    new_file = get_new_path(dataset_id)
+    new_file = get_new_path(dataset_id, NEW_BASE_DIR)
 
     if old_file is None or new_file is None:
         return "MISSING"
