@@ -165,7 +165,7 @@ def drop_bogus(
     )
     ds = ds.where(ll_good, drop=True)
     if (num_orig - len(ds.time)) > 0:
-        _log.info(
+        _log.warning(
             "Dropped %s nan or out of range lat/lons",
             num_orig - len(ds.time),
         )
@@ -188,7 +188,7 @@ def drop_bogus(
     for var, value in drop_values.items():
         if var not in list(ds.keys()):
             _log.debug(
-                "%s not present in ds - skipping drop_values check",
+                "Var '%s' not present in ds - skipping drop_values check",
                 var,
             )
             continue
@@ -196,8 +196,8 @@ def drop_bogus(
         good = (ds[var] >= value[0]) & (ds[var] <= value[1])
         ds[var] = ds[var].where(good, drop=False)
         if num_orig - len(ds[var]) > 0:
-            _log.info(
-                "Changed %s %s values outside range [%s, %s] to nan",
+            _log.warning(
+                "Changed %d '%s' values outside range [%d, %d] to nan",
                 num_orig - len(ds[var]),
                 var,
                 value[0],
@@ -1029,6 +1029,75 @@ def calc_flbbcd(
         )
 
     _log.info("Finished recalculating FLBBCD output values")
+
+    return ds
+
+
+def check_par(ds: xr.Dataset, var: str = "par"):
+    """
+    Check the PAR (Photosynthetically Active Radiation) values in the dataset.
+    Checks:
+        - Are any values less than 0. 
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The Dataset containing the PAR variable.
+    var : str, optional
+        The name of the PAR variable in the dataset. Default is "par".
+
+    Returns
+    -------
+    None
+    """
+    if var not in ds.data_vars:
+        _log.debug("PAR variable '%s' not present in dataset", var)
+        return
+    else:
+        da = ds[var]
+        
+        par_nonnan = da.count()
+        _log.debug(
+            "In the science timeseries, PAR has %d non-NaN values", 
+            par_nonnan.item()
+        )
+
+        par_neg = (da < 0).sum()
+        if par_neg > 0:
+            _log.warning(
+                "In the science timeseries, PAR has %d negative values "
+                "out of %d non-NaN values (%.2f%%)",
+                par_neg.item(),
+                par_nonnan.item(),
+                (par_neg.item() / par_nonnan.item() * 100),
+            )
+
+
+def correct_par(ds: xr.Dataset, var: str = "par"):
+    """
+    Correct the PAR (Photosynthetically Active Radiation) values in the dataset.
+    Specifically, set any values between 0 and -1 to 0. 
+    All other values, including nans, are left as-is.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The Dataset containing the PAR variable.
+    var : str, optional
+        The name of the PAR variable in the dataset. Default is "par".
+
+    Returns
+    -------
+    xarray.Dataset
+        The corrected Dataset with values between 0 and -1 (inclusive) set to 0 for var.
+    """
+    da = ds[var]
+    n = ((da >= -1) & (da < 0)).sum()
+
+    ds[var] = xr.where((da >= -1) & (da < 0), 0, da, keep_attrs="no_conflicts")
+    ds[var].attrs["comment"] = append_string(
+        ds[var].attrs.get("comment", ""), 
+        f"Changed {n.item()} PAR values between 0 and -1 (inclusive) to 0"
+    )
 
     return ds
 

@@ -421,20 +421,17 @@ def generate_timeseries(
     else:
         _log.info("Not writing timeseries nc")
 
-    if write_sci and run_checks:
-        _log.info("Checking flbbcd autoexec values, and cdom status")
-        check_flbbcd_autoexec(
-            xr.load_dataset(outname_tsraw)
-            # glider_paths["binarydir"], 
-            # glider_paths["cacdir"], 
-            # deploymentyaml,
-            # search=binary_search,
-        )
+    if run_checks:
+        _log.info("Checking cdom status, and flbbcd autoexec and PAR values")
 
-        tssci = xr.load_dataset(outname_tssci)
-        utils.check_cdom_date(tssci) #cdom_status = 
+        with xr.open_dataset(outname_tsraw) as tsraw:
+            check_flbbcd_autoexec(tsraw)
+
+        with xr.open_dataset(outname_tssci) as tssci:
+            utils.check_cdom_date(tssci)
+            utils.check_par(tssci)
             
-        _log.info("Done checks for flbbcd autoexec values and cdom status")
+        _log.info("Done checks")
 
     # --------------------------------------------
     return {
@@ -902,13 +899,7 @@ def _run_pyglider_gridding(inname, glider_paths) -> dict:
     return outnames
 
 
-def check_flbbcd_autoexec(
-    ds
-    # binarydir, 
-    # cacdir, 
-    # deploymentyaml,
-    # search="*.[Dd|Ee][Bb][Dd]",
-):
+def check_flbbcd_autoexec(ds: xr.Dataset):
     """
     Check...
 
