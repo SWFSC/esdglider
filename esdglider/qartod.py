@@ -1083,7 +1083,7 @@ def run_qartod_tests(
         # PROCESS EACH QARTOD TEST INDEPENDENTLY
         for test_name, test_config in qartod_tests.items():
 
-            _log.info(
+            _log.debug(
                 "Running %s for %s",
                 test_name,
                 var_name,
@@ -1330,7 +1330,7 @@ def create_qc_variables(
                     "UNKNOWN "
                     "SUSPECT "
                     "FAIL "
-                    "MISSING "
+                    "MISSING"
                 ),
                 "valid_min": np.int8(1),
                 "valid_max": np.int8(9),
@@ -1353,15 +1353,22 @@ def create_qc_variables(
             "",
         )
         
-        if existing:
-            ds_qc[var_name].attrs[
-                "ancillary_variables"
-            ] = f"{existing} {qc_var}"
-        else:
-            ds_qc[var_name].attrs[
-                "ancillary_variables"
-            ] = qc_var
-    
+        ancillary_vars = existing.split()
+        
+        # REMOVE OLD REFERENCE TO THIS QC VARIABLE
+        ancillary_vars = [
+            var
+            for var in ancillary_vars
+            if var != qc_var
+        ]
+        
+        # ADD NEW QC VARIABLE REFERENCE
+        ancillary_vars.append(qc_var)
+        
+        ds_qc[var_name].attrs[
+            "ancillary_variables"
+        ] = " ".join(ancillary_vars)
+
     return ds_qc
 
 
@@ -1766,8 +1773,8 @@ def run_qartod_qc(
     if config_file is None:
         config_file = paths.get_path_qartod_config()
 
-    # OPEN INPUT DATASET
-    ds = xr.open_dataset(input_file)
+    # LOAD INPUT DATASET INTO MEMORY
+    ds = xr.load_dataset(input_file)
 
     # IDENTIFY VARIABLES FOR QARTOD PROCESSING
     time_variables = find_time_variables(ds)
