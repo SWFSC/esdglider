@@ -1,21 +1,20 @@
+import ast
 import collections
 import logging
 import os
 import shutil
-import pyglider.ncprocess as pgncprocess
-from datetime import datetime, timezone, date
+import statistics
+import tempfile
+from datetime import date, datetime, timezone
 from pathlib import Path
 
-import ast
 import gsw
 import numpy as np
 import pandas as pd
+import pyglider.ncprocess as pgncprocess
 import pytz
-import statistics
 import xarray as xr
 import yaml
-import netCDF4
-import tempfile
 
 _log = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ def _get_deployment_netcdfvars(deploymentyaml):
     for nn, d in enumerate(deploymentyaml):
         with open(d) as fin:
             deployment_ = yaml.safe_load(fin)
-            if "netcdf_variables" in deployment_.keys():
+            if "netcdf_variables" in deployment_:
                 for key, value in deployment_["netcdf_variables"].items():
                     if key not in ncvar:
                         ncvar[key] = value
@@ -222,7 +221,6 @@ def get_file_id_esd(ds) -> str:
     _log.debug("dt %s", dt)
     id = (
         ds.attrs["glider_name"]
-        # + ds.attrs['glider_serial']
         + "-"
         + dt.item().strftime("%Y%m%dT%H%M")
     )
@@ -251,7 +249,7 @@ def dataframe_col_reorder(df: pd.DataFrame, new_start):
     Returns df, with reordered columns
     """
     cols_orig = df.columns
-    if not all([i in cols_orig for i in new_start]):
+    if not all(i in cols_orig for i in new_start):
         _log.error("new_start %s", new_start)
         _log.error("df.columns %s", cols_orig)
         raise ValueError("All values of new_start must be in df.columns")
@@ -282,7 +280,7 @@ def data_var_reorder(ds, new_start):
     """
 
     ds_vars_orig = list(ds.data_vars)
-    if not all([i in ds_vars_orig for i in new_start]):
+    if not all(i in ds_vars_orig for i in new_start):
         _log.error("new_start %s", new_start)
         _log.error("ds.data_vars %s", ds_vars_orig)
         raise ValueError("All values of new_start must be in ds.data_vars")
@@ -618,7 +616,7 @@ def get_utc_offset_integer(timezone_name, dt_object, is_dst=None):
     except pytz.UnknownTimeZoneError:
         print(f"Error: Unknown time zone '{timezone_name}'.")
         return None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"An error occurred: {e}")
         return None
 
@@ -697,7 +695,7 @@ def get_sunrise_sunset(time, lat, lon):
 
     # Establish working dataframe, and convert times to local
     df = pd.DataFrame.from_dict(
-        dict([("time", time), ("lat", lat), ("lon", lon)]),
+        {"time": time, "lat": lat, "lon": lon},
     )
     df["time"] = df["time"].dt.tz_localize("UTC")
 
