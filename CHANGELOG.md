@@ -26,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Updated QARTOD flag aggregation to use `ioos_qc.qartod_compare()` instead of `np.maximum.reduce()`, ensuring aggregate QC flags follow the QARTOD-defined flag precedence.
 - Updated `create_ngdac_profiles()` to open temporary `pyglider` profiles as xarray Datasets, apply ESD-specific metadata updates, and write new final NetCDF files rather than modifying temporary files in place.
 - Updated `update_ngdac_profile_attributes()` to accept and return an xarray Dataset, apply trajectory, platform, and instrument metadata, and remove redundant instrument_* global attributes.
+- Updated `run_qartod_tests()` and `create_qc_variables()` to process variables individually and immediately aggregate test results, reducing memory usage for large glider datasets. Removed `group_qartod_results()` and `build_ioos_qc_config()` functions.
+- Updated `run_qartod_tests()` to process and aggregate individual QARTOD tests sequentially, reducing memory use for large deployments. Added `run_flat_line_chunked()` to process the flat-line test in overlapping chunks, and updated `run_qartod_qc()` to use lazy dataset loading and support a configurable flat-line chunk size.
+- Updated `run_qartod_qc()` to support safe file overwriting and `run_qartod_tests()` and `create_qc_variables()` to improve logging, QC flag metadata, and ancillary variable handling when overwriting existing QC variables.
 
 ### Imagery
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:

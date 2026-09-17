@@ -15,18 +15,34 @@ The workflow is designed to operate on fully processed
 science NetCDF files and generate DAC-compliant quality
 control variables using the ``ioos_qc`` package. Quality
 control tests are configured through a YAML-based
-configuration file and applied to all eligible variables
+configuration file and applied to eligible variables
 containing a time dimension.
 
-The resulting QC flags are aggregated into DAC-compliant
-*_qc variables, linked to their parent variables through
-the ancillary_variables attribute, and written to a QC-enhanced
-NetCDF file suitable for GliderDAC submission and downstream
-scientific analysis. In addition to QC generation, this
-module provides utilities for creating deployment-level QC
-summary tables from combined QARTOD datasets. Visualization
-of QC results is implemented separately in the companion
-plots.py module.
+Variables not explicitly defined in the YAML configuration
+are automatically assigned default QARTOD configurations
+using available variable metadata. Deployment-specific
+spike and rate-of-change thresholds are then calculated
+from the observations in the dataset and applied to the
+in-memory configuration without modifying the YAML
+configuration file.
+
+QARTOD tests are executed one variable and test at a time
+to reduce peak memory usage for large glider datasets.
+Individual test results are immediately aggregated into
+a single QARTOD flag array and released before the next
+test is processed. The memory-intensive flat-line test is
+processed in overlapping chunks to further limit memory
+use while preserving the required preceding time window.
+
+The resulting aggregate QC flags are written as
+DAC-compliant ``*_qc`` variables, linked to their parent
+variables through the ``ancillary_variables`` attribute,
+and saved to a QC-enhanced NetCDF file suitable for
+GliderDAC submission and downstream scientific analysis.
+The module also provides utilities for creating
+deployment-level QC summary tables. Visualization of QC
+results is implemented separately in the companion
+``plots.py`` module.
 
 Workflow
 --------
@@ -36,16 +52,23 @@ steps:
 1. Open the input science NetCDF dataset.
 2. Identify variables eligible for QARTOD testing.
 3. Load the YAML QARTOD configuration.
-4. Automatically generate default QC configurations.
-5. Compute deployment-specific thresholds.
-6. Construct the ioos_qc.config.Config object.
-7. Execute configured QARTOD tests.
-8. Generate aggregate DAC-compliant ``*_qc`` variables.
-9. Create placeholder QC variables for metadata time
-   variables that are not evaluated by QARTOD.
-10. Update ``ancillary_variables`` attributes.
-11. Add QC provenance metadata.
-12. Write the QC-enhanced dataset to NetCDF.
+4. Automatically generate default configurations for
+   eligible variables not defined in the YAML.
+5. Compute deployment-specific spike and rate-of-change
+   thresholds and update the in-memory configuration.
+6. Process each configured variable independently.
+7. Run each configured QARTOD test independently.
+8. Process flat-line tests in overlapping chunks.
+9. Immediately aggregate each test result using QARTOD
+   flag precedence.
+10. Generate DAC-compliant ``*_qc`` variables from the
+    aggregate results.
+11. Create placeholder QC variables for metadata time
+    variables that are not evaluated by QARTOD.
+12. Add ``ioos_qc`` version provenance.
+13. Write the QC-enhanced dataset to NetCDF using
+    DAC-compliant QC encodings.
+
 
 Key Features
 ------------
@@ -58,6 +81,17 @@ Key Features
   for unconfigured variables
 - Metadata-derived gross range thresholds using
   ``valid_min`` and ``valid_max`` attributes
+- Deployment-specific spike and rate-of-change
+  threshold calculations
+- In-memory threshold updates without modifying the
+  YAML configuration file
+- Variable- and test-level QARTOD processing to reduce
+  peak memory usage
+- Overlapping chunk-based processing for the QARTOD
+  flat-line test
+- Immediate aggregation and release of individual
+  QARTOD test results
+- Configurable flat-line chunk size
 - Aggregate QC flag generation following DAC
   conventions
 - Placeholder QC variables for required metadata
@@ -65,6 +99,8 @@ Key Features
 - DAC-compliant ``standard_name`` generation
 - Preservation of existing
   ``ancillary_variables`` metadata
+- QC configuration provenance stored with generated
+  QC variables
 - Provenance tracking through
   ``ioos_qc_version`` metadata
 - DAC-compliant NetCDF encoding using:
@@ -806,50 +842,144 @@ def update_dynamic_thresholds(
 
 
 # =========================================================
-# BUILD IOOS_QC CONFIG
+# CHUNK FLAT LINE TEST
 # =========================================================
 
 
-def build_ioos_qc_config(config_dict):
+def run_flat_line_chunked(
+    ds,
+    var_name,
+    test_config,
+    chunk_size=10000,
+):
     """
-    Build an IOOS QC configuration object from a parsed
-    QARTOD configuration dictionary.
+    Run the QARTOD flat-line test in overlapping chunks.
 
-    This function converts a Python dictionary containing
-    QARTOD configuration settings into an
-    ``ioos_qc.config.Config`` object that can be consumed
-    directly by the IOOS QC processing framework.
-
-    The resulting configuration object defines the variables,
-    tests, thresholds, and processing contexts that will be
-    evaluated when QARTOD quality control tests are executed.
+    Processes the dataset in smaller chunks to limit memory use while
+    retaining the preceding time window required by the flat-line test.
+    Overlapping flags are discarded so each observation is represented
+    once in the final result.
 
     Parameters
     ----------
-    config_dict : dict
-        Parsed QARTOD configuration dictionary, typically
-        generated by ``load_qartod_config()``.
+    ds : xarray.Dataset
+        Dataset containing the variable and time coordinate.
+    var_name : str
+        Name of the variable to test.
+    test_config : dict
+        QARTOD flat-line test configuration containing the suspect and
+        fail thresholds.
+    chunk_size : int, optional
+        Number of observations to process per chunk. Default is 10000.
 
     Returns
     -------
-    ioos_qc.config.Config
-        Fully constructed IOOS QC configuration object used
-        to execute QARTOD tests through the ``ioos_qc``
-        framework.
-
-    Notes
-    -----
-    The configuration dictionary is converted into an
-    ``ioos_qc.config.Config`` object because the
-    ``ioos_qc`` processing engine expects a Config
-    instance rather than a raw Python dictionary.
+    numpy.ndarray
+        QARTOD flat-line flags for all observations as an int8 array.
     """
+    # GET NUMBER OF OBSERVATIONS
+    n_obs = ds.sizes["time"]
 
-    config = Config(config_dict)
+    # GET FLAT-LINE THRESHOLDS
+    suspect_threshold = test_config["suspect_threshold"]
+    fail_threshold = test_config["fail_threshold"]
 
-    _log.info("Built ioos_qc Config")
+    # SET REQUIRED OVERLAP
+    overlap_seconds = max(
+        suspect_threshold,
+        fail_threshold,
+    )
 
-    return config
+    # INITIALIZE FINAL FLAGS
+    final_flags = np.full(
+        n_obs,
+        2,
+        dtype="int8",
+    )
+
+    # START FIRST CHUNK
+    start = 0
+    while start < n_obs:
+        # SET CHUNK END
+        stop = min(
+            start + chunk_size,
+            n_obs,
+        )
+
+        # SET OVERLAP START
+        if start == 0:
+            overlap_start = 0
+        else:
+            # GET CHUNK START TIME
+            chunk_start_time = ds["time"].values[start]
+
+            # GET REQUIRED OVERLAP TIME
+            overlap_time = (
+                chunk_start_time
+                - np.timedelta64(
+                    int(np.ceil(overlap_seconds)),
+                    "s",
+                )
+            )
+            # FIND OVERLAP INDEX
+            overlap_start = np.searchsorted(
+                ds["time"].values,
+                overlap_time,
+            )
+        # SELECT CHUNK WITH OVERLAP
+        ds_chunk = ds.isel(
+            time=slice(overlap_start, stop)
+        )
+        # BUILD FLAT-LINE CONFIG
+        test_config_dict = {
+            "contexts": [
+                {
+                    "streams": {
+                        var_name: {
+                            "qartod": {
+                                "flat_line_test": test_config,
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+        # CREATE QARTOD CONFIG
+        qc_config = Config(test_config_dict)
+        # CREATE CHUNK DATA STREAM
+        chunk_stream = XarrayStream(
+            ds_chunk,
+            time="time",
+        )
+        # RUN FLAT-LINE TEST
+        results = chunk_stream.run(qc_config)
+        # COLLECT TEST RESULTS
+        collected = collect_results(
+            results,
+            how="list",
+        )
+        # CONVERT RESULTS TO FLAGS
+        chunk_flags = (
+            collected[0]
+            .results
+            .filled(2)
+            .astype("int8")
+        )
+        # REMOVE OVERLAP FROM RESULTS
+        offset = start - overlap_start
+        # STORE CURRENT CHUNK FLAGS
+        final_flags[start:stop] = chunk_flags[
+            offset:
+        ]
+        # RELEASE CHUNK MEMORY
+        del results
+        del collected
+        del chunk_flags
+        del ds_chunk
+        # MOVE TO NEXT CHUNK
+        start = stop
+
+    return final_flags
 
 
 # =========================================================
@@ -857,20 +987,18 @@ def build_ioos_qc_config(config_dict):
 # =========================================================
 
 
-def run_qartod_tests(ds, config):
+def run_qartod_tests(
+    ds,
+    config_dict,
+    flat_line_chunk_size=10000,
+):
     """
-    Run configured IOOS QARTOD tests on a glider dataset.
+    Run configured IOOS QARTOD tests one variable and test at a time.
 
-    This function creates an ``ioos_qc.XarrayStream`` from the
-    input dataset and executes all QARTOD tests defined in the
-    provided configuration. The function automatically detects
-    whether the dataset uses ``latitude``/``longitude`` or
-    ``lat``/``lon`` coordinate names and passes the appropriate
-    variables to ``ioos_qc``.
-
-    The resulting QARTOD outputs are collected into a flat list
-    of test result objects which can subsequently be grouped and
-    aggregated into DAC-compatible ``*_qc`` variables.
+    Each QARTOD test is run, collected, and immediately aggregated
+    before the next test is processed. Flat-line tests are processed
+    in overlapping chunks to further reduce memory use for large
+    glider datasets.
 
     Parameters
     ----------
@@ -881,17 +1009,19 @@ def run_qartod_tests(ds, config):
         ``pressure``, ``latitude``/``longitude``, or
         ``lat``/``lon`` coordinate variables.
 
-    config : ioos_qc.config.Config
-        Fully constructed IOOS QC configuration object
-        containing the QARTOD tests and thresholds to apply.
+    config_dict : dict
+        Parsed QARTOD configuration dictionary containing
+        the tests and thresholds to apply.
+        
+    flat_line_chunk_size : int, optional
+        Number of observations processed per flat-line test
+        chunk. Default is 10000.
 
     Returns
     -------
-    list
-        List of collected QARTOD test result objects returned
-        by ``ioos_qc.results.collect_results()``. Each result
-        contains the variable name, test name, and associated
-        quality flags.
+    dict
+        Dictionary containing aggregate QARTOD flags for each
+        successfully processed variable.
     """
 
     # DETERMINE LATITUDE VARIABLE
@@ -919,117 +1049,130 @@ def run_qartod_tests(ds, config):
         lon=lon_var,
     )
 
-    # RUN CONFIGURED QARTOD TESTS
-    _log.info("Running qartod tests")
-    results = stream.run(config)
+    # ACCESS CONFIGURED STREAMS
+    streams = config_dict["contexts"][0]["streams"]
 
-    # COLLECT RESULTS INTO A FLAT LIST
-    _log.info("Collecting qartod test results")
-    collected = collect_results(results, how="list")
+    # STORE ONLY FINAL AGGREGATE FLAGS
+    aggregate_results = {}
 
-    _log.info("Collected %d QARTOD test results", len(collected))
+    # PROCESS EACH VARIABLE INDEPENDENTLY
+    for var_name, stream_config in streams.items():
 
-    return collected
+        if var_name not in ds:
+            _log.info(
+                "Skipping QARTOD tests for %s because it "
+                "is not present in the dataset.",
+                var_name,
+            )
+            continue
 
+        if "qartod" not in stream_config:
+            continue
 
-# =========================================================
-# GROUP RESULTS
-# =========================================================
+        _log.info(
+            "Running QARTOD tests for %s",
+            var_name,
+        )
 
+        # ACCESS QARTOD TESTS FOR THIS VARIABLE
+        qartod_tests = stream_config["qartod"]
 
-def group_qartod_results(ds, collected):
-    """
-    Group individual QARTOD test results by variable name.
+        # INITIALIZE AGGREGATE FLAGS FOR THIS VARIABLE
+        final_flags = None
 
-    This function reorganizes the raw QARTOD test results
-    returned by ``ioos_qc`` into a dictionary structure
-    where all test outputs associated with a given variable
-    are grouped together.
+        # PROCESS EACH QARTOD TEST INDEPENDENTLY
+        for test_name, test_config in qartod_tests.items():
 
-    The grouped results are subsequently used to create
-    aggregate QC variables by combining the individual
-    QARTOD test flags into a single DAC-compliant
-    ``*_qc`` variable for each dataset variable.
+            _log.debug(
+                "Running %s for %s",
+                test_name,
+                var_name,
+            )
 
-    Parameters
-    ----------
-    ds : xarray.Dataset
-        Input glider dataset containing the variables
-        that were evaluated during QARTOD processing.
-
-    collected : list
-        List of collected QARTOD test results generated
-        by ``ioos_qc.results.collect_results()``.
-
-    Returns
-    -------
-    dict
-        Dictionary containing grouped QARTOD test flags.
-
-        Dictionary structure:
-
-        .. code-block:: python
-
-            {
-                "temperature": [
-                    gross_range_flags,
-                    spike_flags,
-                    flat_line_flags
-                ],
-                "conductivity": [
-                    gross_range_flags,
-                    spike_flags
+            # BUILD CONFIGURATION FOR ONLY THIS TEST
+            test_config_dict = {
+                "contexts": [
+                    {
+                        "streams": {
+                            var_name: {
+                                "qartod": {
+                                    test_name: test_config,
+                                }
+                            }
+                        }
+                    }
                 ]
             }
 
-        Each dictionary key represents a dataset variable
-        and each value contains a list of flag arrays
-        generated by the individual QARTOD tests applied
-        to that variable.
+            test_qc_config = Config(test_config_dict)
+            
+            if test_name == "flat_line_test":
+                test_flags = run_flat_line_chunked(
+                    ds,
+                    var_name,
+                    test_config,
+                    chunk_size=flat_line_chunk_size,
+                )
 
-    Notes
-    -----
-    The ``ioos_qc`` framework returns results as individual
-    test objects. This function consolidates those objects
-    into a variable-centric structure that is easier to
-    process when generating aggregate QC variables.
+            else:
+                # RUN ONLY THIS QARTOD TEST
+                results = stream.run(test_qc_config)
 
-    Missing values within QARTOD result arrays are replaced
-    with the IOOS QARTOD flag value:
+                # COLLECT THIS TEST'S RESULT
+                collected = collect_results(
+                    results,
+                    how="list",
+                )
 
-    - 2 = NOT_EVALUATED
+                if not collected:
+                    _log.info(
+                        "No result generated for %s on %s",
+                        test_name,
+                        var_name,
+                    )
 
-    All flags are converted to ``int8`` to maintain
-    consistency with IOOS DAC QC variable requirements.
+                    del results
+                    del collected
 
-    Variables that are not present in the dataset are
-    ignored to prevent creation of orphan QC results.
-    """
+                    continue
 
-    # INITIALIZE OUTPUT DICTIONARY
-    grouped_results = {}
+                test_flags = (
+                    collected[0]
+                    .results
+                    .filled(2)
+                    .astype("int8")
+                )
 
-    # PROCESS COLLECTED QARTOD RESULTS
-    for result in collected:
+                del results
+                del collected
 
-        # EXTRACT VARIABLE NAME
-        var_name = str(result.stream_id).split(":")[0]
+            # INITIALIZE OR UPDATE AGGREGATE FLAGS
+            if final_flags is None:
+                final_flags = test_flags.copy()
+            else:
+                final_flags = qartod_compare(
+                    [final_flags, test_flags]
+                ).astype("int8")
 
-        # VERIFY VARIABLE EXISTS IN DATASET
-        if var_name not in ds.variables:
-            continue
+            _log.info(
+                "Finished %s for %s",
+                test_name,
+                var_name,
+            )
 
-        # INITIALIZE VARIABLE ENTRY
-        if var_name not in grouped_results:
-            grouped_results[var_name] = []
+            # RELEASE THIS TEST'S FLAG ARRAY
+            del test_flags
 
-        # CONVERT FLAGS TO INT8
-        flags = result.results.filled(2).astype("int8")
+        # STORE FINAL AGGREGATE FLAGS FOR THIS VARIABLE
+        if final_flags is not None:
+            aggregate_results[var_name] = final_flags
 
-        # STORE TEST FLAGS
-        grouped_results[var_name].append(flags)
+        _log.info(
+            "Finished QARTOD tests for %s",
+            var_name,
+        )
 
-    return grouped_results
+    return aggregate_results
 
 
 # =========================================================
@@ -1080,25 +1223,23 @@ def build_flag_configuration(config_dict, var_name):
 
 def create_qc_variables(
     ds,
-    grouped_results,
+    aggregate_results,
     config_dict,
     overwrite_qc=True,
 ):
     """
     Create aggregate DAC-compliant QARTOD QC variables.
 
-    This function combines the individual QARTOD test
-    results associated with each variable into a single
-    aggregate QC variable following IOOS DAC conventions.
+    This function adds the aggregate QARTOD flags generated by
+    ``run_qartod_tests()`` to the input dataset. Each variable's
+    individual QARTOD test results have already been combined using
+    QARTOD flag precedence before being passed to this function.
 
-    For each variable, the most severe flag value from all
-    configured QARTOD tests is retained at each observation
-    using a maximum-value aggregation approach. The resulting
-    aggregate flags are written to a new *_qc variable, linked
-    back to the parent variable through the ancillary_variables
-    attribute, and include a serialized flag_configuration
-    attribute documenting the QARTOD configuration used to
-    generate the aggregate flags.
+    The aggregate flags are written to new ``*_qc`` variables and
+    linked to their parent variables through the
+    ``ancillary_variables`` attribute. Each QC variable also includes
+    a serialized ``flag_configuration`` attribute documenting the
+    QARTOD configuration used to generate the flags.
 
     Existing QC variables may optionally be replaced when
     ``overwrite_qc=True``.
@@ -1109,60 +1250,54 @@ def create_qc_variables(
         Input dataset containing the original science
         variables.
 
-    grouped_results : dict
-        Dictionary of grouped QARTOD results generated by
-        ``group_qartod_results()``.
+    aggregate_results : dict
+        Dictionary of aggregate QARTOD flags generated by
+        ``run_qartod_tests()``.
 
         Expected structure:
 
         .. code-block:: python
 
             {
-                "temperature": [
-                    gross_range_flags,
-                    spike_flags,
-                    flat_line_flags
-                ],
-                "conductivity": [
-                    gross_range_flags,
-                    spike_flags
-                ]
+                "temperature": temperature_flags,
+                "conductivity": conductivity_flags,
+                "salinity": salinity_flags,
             }
 
+        Each value is a single ``int8`` array containing the
+        aggregate QARTOD flags for that variable.
+
     config_dict : dict
-            Parsed QARTOD configuration dictionary containing the
-            deployment-specific threshold values used during the
-            current QC workflow. The configuration is used to record
-            QC provenance in the output ``*_qc`` variables.
+        Parsed QARTOD configuration dictionary containing the
+        deployment-specific threshold values used during the current
+        QC workflow. The configuration is used to record QC
+        provenance in the output ``*_qc`` variables.
 
     overwrite_qc : bool, optional
-        If True, existing QC variables are removed and
-        replaced with newly generated aggregate QARTOD
-        variables. If False, existing QC variables are
-        preserved and skipped.
+        If True, existing QC variables are removed and replaced with
+        newly generated aggregate QARTOD variables. If False,
+        existing QC variables are preserved and skipped.
 
     Returns
     -------
     xarray.Dataset
-        Copy of the input dataset containing the newly
-        generated aggregate QARTOD QC variables.
+        Copy of the input dataset containing the newly generated
+        aggregate QARTOD QC variables.
     """
 
     # CREATE WORKING COPY OF DATASET
     ds_qc = ds.copy()
 
-    # PROCESS EACH VARIABLE WITH QARTOD RESULTS
-    for var_name, test_results in grouped_results.items():
+    # PROCESS EACH VARIABLE WITH AGGREGATE QARTOD RESULTS
+    for var_name, final_flags in aggregate_results.items():
 
         _log.info("Creating QC for %s", var_name)
-
-        # AGGREGATE QARTOD FLAGS USING QARTOD PRECEDENCE
-        final_flags = qartod_compare(test_results).astype("int8")
+        
         qc_var = f"{var_name}_qc"
-
+        
         # HANDLE EXISTING QC VARIABLES
         if qc_var in ds_qc.variables:
-
+            
             if overwrite_qc:
                 ds_qc = ds_qc.drop_vars(qc_var)
                 _log.info(
@@ -1171,7 +1306,7 @@ def create_qc_variables(
                 )
             else:
                 continue
-
+            
         # CREATE AGGREGATE QC VARIABLE
         ds_qc[qc_var] = xr.DataArray(
             final_flags,
@@ -1179,12 +1314,23 @@ def create_qc_variables(
             coords=ds[var_name].coords,
             attrs={
                 "long_name": (
-                    "QARTOD aggregate quality flag for " f"{var_name}"
+                    "QARTOD aggregate quality flag for "
+                    f"{var_name}"
                 ),
-                "standard_name": get_qc_standard_name(ds, var_name),
-                "flag_values": np.array([1, 2, 3, 4, 9], dtype="int8"),
+                "standard_name": get_qc_standard_name(
+                    ds,
+                    var_name,
+                ),
+                "flag_values": np.array(
+                    [1, 2, 3, 4, 9],
+                    dtype="int8",
+                ),
                 "flag_meanings": (
-                    "GOOD " "UNKNOWN " "SUSPECT " "FAIL " "MISSING"
+                    "GOOD "
+                    "UNKNOWN "
+                    "SUSPECT "
+                    "FAIL "
+                    "MISSING"
                 ),
                 "valid_min": np.int8(1),
                 "valid_max": np.int8(9),
@@ -1197,19 +1343,31 @@ def create_qc_variables(
                     config_dict,
                     var_name,
                 ),
-                "average_method": 'QC_protocol',
+                "average_method": "QC_protocol",
             },
         )
-
+        
         # UPDATE ANCILLARY VARIABLE LINKS
-        existing = ds_qc[var_name].attrs.get("ancillary_variables", "")
-
-        if existing:
-            ds_qc[var_name].attrs[
-                "ancillary_variables"
-            ] = f"{existing} {qc_var}"
-        else:
-            ds_qc[var_name].attrs["ancillary_variables"] = qc_var
+        existing = ds_qc[var_name].attrs.get(
+            "ancillary_variables",
+            "",
+        )
+        
+        ancillary_vars = existing.split()
+        
+        # REMOVE OLD REFERENCE TO THIS QC VARIABLE
+        ancillary_vars = [
+            var
+            for var in ancillary_vars
+            if var != qc_var
+        ]
+        
+        # ADD NEW QC VARIABLE REFERENCE
+        ancillary_vars.append(qc_var)
+        
+        ds_qc[var_name].attrs[
+            "ancillary_variables"
+        ] = " ".join(ancillary_vars)
 
     return ds_qc
 
@@ -1512,6 +1670,7 @@ def run_qartod_qc(
     output_file,
     config_file=None,
     overwrite_qc=True,
+    flat_line_chunk_size=10000,
 ):
     """
     Execute the complete operational QARTOD quality control
@@ -1530,10 +1689,10 @@ def run_qartod_qc(
     2. Identify variables eligible for QARTOD testing
     3. Load the QARTOD YAML configuration
     4. Automatically add missing variable configurations
-    5. Build the IOOS QC Config object
-    6. Execute QARTOD tests
-    7. Group test results by variable
-    8. Generate aggregate DAC-compliant QC variables
+    5. Compute deployment-specific thresholds
+    6. Execute QARTOD tests one variable and test at a time
+    7. Process flat-line tests in overlapping chunks
+    8. Immediately aggregate individual test results
     9. Add QC provenance metadata
     10. Create placeholder QC variables
     11. Save the QC-enhanced dataset
@@ -1554,6 +1713,10 @@ def run_qartod_qc(
         replaced with newly generated aggregate QARTOD
         variables. If False, existing QC variables are
         preserved.
+        
+    flat_line_chunk_size : int, optional
+        Number of observations processed per flat-line test
+        chunk. Default is 10000.
 
     Returns
     -------
@@ -1610,7 +1773,7 @@ def run_qartod_qc(
     if config_file is None:
         config_file = paths.get_path_qartod_config()
 
-    # LOAD INPUT DATASET
+    # LOAD INPUT DATASET INTO MEMORY
     ds = xr.load_dataset(input_file)
 
     # IDENTIFY VARIABLES FOR QARTOD PROCESSING
@@ -1632,18 +1795,19 @@ def run_qartod_qc(
         config_dict,
     )
 
-    # BUILD IOOS QC CONFIGURATION OBJECT
-    config = build_ioos_qc_config(config_dict)
-
-    # EXECUTE QARTOD TESTS
-    collected = run_qartod_tests(ds, config)
-
-    # GROUP RESULTS BY VARIABLE
-    grouped_results = group_qartod_results(ds, collected)
+    # EXECUTE QARTOD TESTS ONE VARIABLE AT A TIME
+    aggregate_results = run_qartod_tests(
+        ds,
+        config_dict,
+        flat_line_chunk_size=flat_line_chunk_size
+    )
 
     # CREATE AGGREGATE QC VARIABLES
     ds_qc = create_qc_variables(
-        ds, grouped_results, config_dict, overwrite_qc=overwrite_qc
+        ds,
+        aggregate_results,
+        config_dict,
+        overwrite_qc=overwrite_qc,
     )
 
     # ADD QC PROVENANCE METADATA
