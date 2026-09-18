@@ -166,13 +166,13 @@ def get_path_glider(
     procl2dir = os.path.join(glider_data_out_path, "processed-L2")
     procl3dir = os.path.join(glider_data_out_path, "processed-L3")
     plotdir = os.path.join(glider_data_out_path, "plots", mode)
+    ngdacdir = os.path.join(procl1dir, "ngdac", mode)
     ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
 
     # Separate, in case in the future they end up in their own directories
     rawdir = procl0dir
     tsdir = procl1dir
     griddir = procl3dir
-    profdir = os.path.join(procl1dir, "ngdac", mode)
 
 
     # Create common file names
@@ -200,7 +200,7 @@ def get_path_glider(
         "rawdir": rawdir,
         "tsdir": tsdir,
         "griddir": griddir,
-        "profdir": profdir,
+        "ngdacdir": ngdacdir,
         "plotdir": plotdir,
         "ancillarydir": ancillarydir,
         "procl0dir": procl0dir,

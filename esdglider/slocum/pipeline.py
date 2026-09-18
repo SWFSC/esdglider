@@ -474,9 +474,18 @@ def postproc_attrs(
     """
 
     # Rerun pyglider metadata functions, now that drop_bogus has been run,
-    # for the sake of times
-    # metadata and device info have already been added, so not needed here
+    # for the sake of times. 
+    # Metadata and device info have already been added, so not needed here
     ds = pgutils.fill_metadata(ds, {}, {})
+
+    # Drop some attributes from pyglider we don't want to keep
+    attrs_to_drop = [
+        "deployment_start", 
+        "deployment_end", 
+        # "start_date", 
+    ]
+    for attr in attrs_to_drop:
+        ds.attrs.pop(attr, None)
 
     # Determine the glider ID using min_dt, and check vs ID from time
     time_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M")
@@ -486,27 +495,34 @@ def postproc_attrs(
         if min_dt_str != time_str:
             _log.warning(
                 "The dataset ID generated from the metadata (%s) "
-                + "is different from that generated from the time (%s)."
-                + "Using the ID from the metadata",
+                "is different from that generated from the time (%s). "
+                "Using the ID from the metadata",
                 min_dt_str,
                 time_str,
             )
     else:
         _log.info(
             "There is no deployment_min_dt attribute in the dataset. "
-            + "Using the first time value for the ID."
+            "Using the first time value for the ID."
         )
         min_dt_str = time_str
         
     ds.attrs["id"] = f"{ds.attrs['glider_name']}-{min_dt_str}"
 
     # Other ESD-specific updates
-    # ds.attrs["id"] = utils.get_file_id_esd(ds)
     ds.attrs["title"] = ds.attrs["id"]
-    ds.attrs["license"] = (
+    ds.attrs["disclaimer"] = (
         "This data may be redistributed and used without restriction.  "
-        + "Data provided as is with no expressed or implied assurance "
-        + "of quality assurance or quality control"
+        "Data provided as is with no expressed or implied assurance "
+        "of quality assurance or quality control"
+    )
+    ds.attrs["license"] = (
+        "These data were produced by NOAA and are not "
+        "subject to copyright protection in the United States. "
+        "NOAA waives any potential copyright and related rights in thse data "
+        "worldwide through the Creative Commons Zero 1.0 Universal Public "
+        "Domain Dedication "
+        "(CC0-1.0, https://creativecommons.org/publicdomain/zero/1.0/)."
     )
     
     if file_info is None:

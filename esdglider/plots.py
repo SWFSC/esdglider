@@ -1714,8 +1714,7 @@ def ts_plot(
 
     _log.info(f"Making ts plot for variable {var}")
     deployment = ds.deployment_name
-    start = ds.deployment_start[0:10]
-    end = ds.deployment_end[0:10]
+    start, end = utils.get_date_start_end(ds)
 
     Sg, Tg, sigma = utils.calc_ts(ds)
 
@@ -1821,8 +1820,7 @@ def sci_surface_map(
 
     _log.info(f"Making surface map for variable {var}")
     deployment = ds.deployment_name
-    start = ds.deployment_start[0:10]
-    end = ds.deployment_end[0:10]
+    start, end = utils.get_date_start_end(ds)
 
     map_lon_border = 0.1
     map_lat_border = 0.2

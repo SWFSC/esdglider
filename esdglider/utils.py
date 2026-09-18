@@ -206,25 +206,25 @@ def drop_bogus(
     return ds
 
 
-def get_file_id_esd(ds) -> str:
-    """
-    ESD's version of pyglider.utils.get_file_id
-    This version does not require the glider_serial
-    Make a file id for a Dataset: Id = *glider_name* + "YYYYMMDDTHHMM"
-    """
+# def get_file_id_esd(ds) -> str:
+#     """
+#     ESD's version of pyglider.utils.get_file_id
+#     This version does not require the glider_serial
+#     Make a file id for a Dataset: Id = *glider_name* + "YYYYMMDDTHHMM"
+#     """
 
-    _log.debug(ds.time)
-    if ds.time.dtype != "datetime64[ns]":
-        dt = ds.time.values[0].astype("timedelta64[s]") + np.datetime64("1970-01-01")
-    else:
-        dt = ds.time.values[0].astype("datetime64[s]")
-    _log.debug("dt %s", dt)
-    id = (
-        ds.attrs["glider_name"]
-        + "-"
-        + dt.item().strftime("%Y%m%dT%H%M")
-    )
-    return id
+#     _log.debug(ds.time)
+#     if ds.time.dtype != "datetime64[ns]":
+#         dt = ds.time.values[0].astype("timedelta64[s]") + np.datetime64("1970-01-01")
+#     else:
+#         dt = ds.time.values[0].astype("datetime64[s]")
+#     _log.debug("dt %s", dt)
+#     id = (
+#         ds.attrs["glider_name"]
+#         + "-"
+#         + dt.item().strftime("%Y%m%dT%H%M")
+#     )
+#     return id
 
 
 def read_deploymentyaml(deploymentyaml: str):
@@ -582,7 +582,28 @@ def check_string_length(x: list) -> list:
             )
         
     return diff_files
-    
+
+
+def get_date_start_end(ds: xr.Dataset) -> tuple[str, str]:
+    """
+    Get the start and end dates of a deployment from an xarray dataset.
+
+    Parameters
+    ----------
+    ds : xarray dataset
+        The dataset, required to have 'time' values.
+        The time values are expected to be sorted.
+
+    Returns
+    -------
+    tuple of str
+        The start (first) and end (last) dates in 'YYYY-MM-DD' format.
+    """
+    dt = ds.time.values
+    start = np.datetime_as_string(dt[0], unit='D')
+    end = np.datetime_as_string(dt[-1], unit='D')
+
+    return start, end
 
 
 def get_utc_offset_integer(timezone_name, dt_object, is_dst=None):
@@ -1227,8 +1248,8 @@ def update_ngdac_profile_attributes(
         Updated profile dataset containing ESD-specific metadata.
     """
 
-    # COPY DATASET BEFORE MODIFYING
-    ds = ds.copy()
+    # # COPY DATASET BEFORE MODIFYING
+    # ds = ds.copy()
 
     # LOAD DEPLOYMENT METADATA
     meta = deployment["metadata"]
