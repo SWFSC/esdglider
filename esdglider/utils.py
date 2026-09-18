@@ -1,21 +1,20 @@
+import ast
 import collections
 import logging
 import os
 import shutil
-import pyglider.ncprocess as pgncprocess
-from datetime import datetime, timezone, date
+import statistics
+import tempfile
+from datetime import date, datetime, timezone
 from pathlib import Path
 
-import ast
 import gsw
 import numpy as np
 import pandas as pd
+import pyglider.ncprocess as pgncprocess
 import pytz
-import statistics
 import xarray as xr
 import yaml
-import netCDF4
-import tempfile
 
 _log = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ def _get_deployment_netcdfvars(deploymentyaml):
     for nn, d in enumerate(deploymentyaml):
         with open(d) as fin:
             deployment_ = yaml.safe_load(fin)
-            if "netcdf_variables" in deployment_.keys():
+            if "netcdf_variables" in deployment_:
                 for key, value in deployment_["netcdf_variables"].items():
                     if key not in ncvar:
                         ncvar[key] = value
@@ -165,7 +164,7 @@ def drop_bogus(
     )
     ds = ds.where(ll_good, drop=True)
     if (num_orig - len(ds.time)) > 0:
-        _log.info(
+        _log.warning(
             "Dropped %s nan or out of range lat/lons",
             num_orig - len(ds.time),
         )
@@ -188,7 +187,7 @@ def drop_bogus(
     for var, value in drop_values.items():
         if var not in list(ds.keys()):
             _log.debug(
-                "%s not present in ds - skipping drop_values check",
+                "Var '%s' not present in ds - skipping drop_values check",
                 var,
             )
             continue
@@ -196,8 +195,8 @@ def drop_bogus(
         good = (ds[var] >= value[0]) & (ds[var] <= value[1])
         ds[var] = ds[var].where(good, drop=False)
         if num_orig - len(ds[var]) > 0:
-            _log.info(
-                "Changed %s %s values outside range [%s, %s] to nan",
+            _log.warning(
+                "Changed %d '%s' values outside range [%d, %d] to nan",
                 num_orig - len(ds[var]),
                 var,
                 value[0],
@@ -207,26 +206,25 @@ def drop_bogus(
     return ds
 
 
-def get_file_id_esd(ds) -> str:
-    """
-    ESD's version of pyglider.utils.get_file_id
-    This version does not require the glider_serial
-    Make a file id for a Dataset: Id = *glider_name* + "YYYYMMDDTHHMM"
-    """
+# def get_file_id_esd(ds) -> str:
+#     """
+#     ESD's version of pyglider.utils.get_file_id
+#     This version does not require the glider_serial
+#     Make a file id for a Dataset: Id = *glider_name* + "YYYYMMDDTHHMM"
+#     """
 
-    _log.debug(ds.time)
-    if ds.time.dtype != "datetime64[ns]":
-        dt = ds.time.values[0].astype("timedelta64[s]") + np.datetime64("1970-01-01")
-    else:
-        dt = ds.time.values[0].astype("datetime64[s]")
-    _log.debug("dt %s", dt)
-    id = (
-        ds.attrs["glider_name"]
-        # + ds.attrs['glider_serial']
-        + "-"
-        + dt.item().strftime("%Y%m%dT%H%M")
-    )
-    return id
+#     _log.debug(ds.time)
+#     if ds.time.dtype != "datetime64[ns]":
+#         dt = ds.time.values[0].astype("timedelta64[s]") + np.datetime64("1970-01-01")
+#     else:
+#         dt = ds.time.values[0].astype("datetime64[s]")
+#     _log.debug("dt %s", dt)
+#     id = (
+#         ds.attrs["glider_name"]
+#         + "-"
+#         + dt.item().strftime("%Y%m%dT%H%M")
+#     )
+#     return id
 
 
 def read_deploymentyaml(deploymentyaml: str):
@@ -251,7 +249,7 @@ def dataframe_col_reorder(df: pd.DataFrame, new_start):
     Returns df, with reordered columns
     """
     cols_orig = df.columns
-    if not all([i in cols_orig for i in new_start]):
+    if not all(i in cols_orig for i in new_start):
         _log.error("new_start %s", new_start)
         _log.error("df.columns %s", cols_orig)
         raise ValueError("All values of new_start must be in df.columns")
@@ -282,7 +280,7 @@ def data_var_reorder(ds, new_start):
     """
 
     ds_vars_orig = list(ds.data_vars)
-    if not all([i in ds_vars_orig for i in new_start]):
+    if not all(i in ds_vars_orig for i in new_start):
         _log.error("new_start %s", new_start)
         _log.error("ds.data_vars %s", ds_vars_orig)
         raise ValueError("All values of new_start must be in ds.data_vars")
@@ -314,7 +312,7 @@ def datetime_now_utc(format="%Y-%m-%dT%H:%M:%SZ"):
     return datetime.now(timezone.utc).strftime(format)
 
 
-def split_deployment(deployment_name):
+def _split_deployment(deployment_name):
     """
     Split the deployment string into glider name, and date deployed
     Splits by "-"
@@ -332,7 +330,18 @@ def split_deployment(deployment_name):
     return deployment_split
 
 
-def year_path(deployment_name):
+def get_glider_name(deployment_name):
+    """
+    Get the glider name from the deployment name.
+    Assumes the deployment name is in the format 'glidername-YYYYMMDD'.
+    Returns the glider name as a string.
+    """
+    deployment_split = _split_deployment(deployment_name)
+    glider_name = deployment_split[0]
+    return glider_name
+
+
+def get_path_year(deployment_name):
     """
     From the glider project and deployment name (both strings),
     generate and return the year string to use in file paths
@@ -344,7 +353,7 @@ def year_path(deployment_name):
     and ringo-20190101 would return 2019
     """
 
-    deployment_split = split_deployment(deployment_name)
+    deployment_split = _split_deployment(deployment_name)
     deployment_date = deployment_split[1]
     year = deployment_date[0:4]
 
@@ -573,7 +582,28 @@ def check_string_length(x: list) -> list:
             )
         
     return diff_files
-    
+
+
+def get_date_start_end(ds: xr.Dataset) -> tuple[str, str]:
+    """
+    Get the start and end dates of a deployment from an xarray dataset.
+
+    Parameters
+    ----------
+    ds : xarray dataset
+        The dataset, required to have 'time' values.
+        The time values are expected to be sorted.
+
+    Returns
+    -------
+    tuple of str
+        The start (first) and end (last) dates in 'YYYY-MM-DD' format.
+    """
+    dt = ds.time.values
+    start = np.datetime_as_string(dt[0], unit='D')
+    end = np.datetime_as_string(dt[-1], unit='D')
+
+    return start, end
 
 
 def get_utc_offset_integer(timezone_name, dt_object, is_dst=None):
@@ -607,7 +637,7 @@ def get_utc_offset_integer(timezone_name, dt_object, is_dst=None):
     except pytz.UnknownTimeZoneError:
         print(f"Error: Unknown time zone '{timezone_name}'.")
         return None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"An error occurred: {e}")
         return None
 
@@ -686,7 +716,7 @@ def get_sunrise_sunset(time, lat, lon):
 
     # Establish working dataframe, and convert times to local
     df = pd.DataFrame.from_dict(
-        dict([("time", time), ("lat", lat), ("lon", lon)]),
+        {"time": time, "lat": lat, "lon": lon},
     )
     df["time"] = df["time"].dt.tz_localize("UTC")
 
@@ -1022,6 +1052,75 @@ def calc_flbbcd(
     return ds
 
 
+def check_par(ds: xr.Dataset, var: str = "par"):
+    """
+    Check the PAR (Photosynthetically Active Radiation) values in the dataset.
+    Checks:
+        - Are any values less than 0. 
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The Dataset containing the PAR variable.
+    var : str, optional
+        The name of the PAR variable in the dataset. Default is "par".
+
+    Returns
+    -------
+    None
+    """
+    if var not in ds.data_vars:
+        _log.debug("PAR variable '%s' not present in dataset", var)
+        return
+    else:
+        da = ds[var]
+        
+        par_nonnan = da.count()
+        _log.debug(
+            "In the science timeseries, PAR has %d non-NaN values", 
+            par_nonnan.item()
+        )
+
+        par_neg = (da < 0).sum()
+        if par_neg > 0:
+            _log.warning(
+                "In the science timeseries, PAR has %d negative values "
+                "out of %d non-NaN values (%.2f%%)",
+                par_neg.item(),
+                par_nonnan.item(),
+                (par_neg.item() / par_nonnan.item() * 100),
+            )
+
+
+def correct_par(ds: xr.Dataset, var: str = "par"):
+    """
+    Correct the PAR (Photosynthetically Active Radiation) values in the dataset.
+    Specifically, set any values between 0 and -1 to 0. 
+    All other values, including nans, are left as-is.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The Dataset containing the PAR variable.
+    var : str, optional
+        The name of the PAR variable in the dataset. Default is "par".
+
+    Returns
+    -------
+    xarray.Dataset
+        The corrected Dataset with values between 0 and -1 (inclusive) set to 0 for var.
+    """
+    da = ds[var]
+    n = ((da >= -1) & (da < 0)).sum()
+
+    ds[var] = xr.where((da >= -1) & (da < 0), 0, da, keep_attrs="no_conflicts")
+    ds[var].attrs["comment"] = append_string(
+        ds[var].attrs.get("comment", ""), 
+        f"Changed {n.item()} PAR values between 0 and -1 (inclusive) to 0"
+    )
+
+    return ds
+
+
 def append_string(text, msg):
     """
     Append a message to a string, with a space in between if the string is not empty
@@ -1149,8 +1248,8 @@ def update_ngdac_profile_attributes(
         Updated profile dataset containing ESD-specific metadata.
     """
 
-    # COPY DATASET BEFORE MODIFYING
-    ds = ds.copy()
+    # # COPY DATASET BEFORE MODIFYING
+    # ds = ds.copy()
 
     # LOAD DEPLOYMENT METADATA
     meta = deployment["metadata"]

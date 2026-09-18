@@ -407,6 +407,15 @@ netcdf_variables:
     standard_name: downwelling_photosynthetic_photon_spherical_irradiance_in_sea_water
     units: uE m-2 s-1
     observation_type: "measured"
+  sci_bsipar_sensor_volts:
+    source: sci_bsipar_sensor_volts
+    long_name: sci_bsipar_sensor_volts
+    units: volts
+  sci_bsipar_supply_volts:
+    source: sci_bsipar_supply_volts
+    long_name: sci_bsipar_supply_volts
+    units: volts
+
 
   # Solocam
   sci_solocam_free_disk_space:
