@@ -2,7 +2,7 @@ import logging
 
 import sqlalchemy
 
-import esdglider.config as config
+from esdglider import config
 
 """
 Scrape info from database, and generate draft of

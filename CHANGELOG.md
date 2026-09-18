@@ -29,10 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Timeseries profiles
 - Added `update_ngdac_profile_attributes()` and `create_ngdac_profiles()` in `utils` to use pyglider's `extract_timeseries_profiles()` to write profile netcdf files and update metadata for ESD and NGDAC standards.
-- Changed `create_ngdac_profiles()` in `utils` to run `pgncprocess.extract_timeseries_profiles()` and write files to a temporary directory, have the wrapper function read the files out of the temporary directory for post-processing, and then write files to desired output directory with the correct filenames (Ex: "amlr08-20220515T0644.nc")
-- Changed `create_ngdac_profiles()` to open temporary `pyglider` profiles as xarray Datasets, apply ESD-specific metadata updates, and write new final NetCDF files rather than modifying temporary files in place.
-- Changed `update_ngdac_profile_attributes()` to accept and return an xarray Dataset, apply trajectory, platform, and instrument metadata, and remove redundant instrument_* global attributes.
-- Added `combine_datasets()` to the `utils` for combining profile NetCDF files into a deployment dataset.
+- Updated `create_ngdac_profiles()` in `utils` to run `pgncprocess.extract_timeseries_profiles()` and write files to a temporary directory, have the wrapper function read the files out of the temporary directory for post-processing, and then write files to desired output directory with the correct filenames (Ex: "amlr08-20220515T0644.nc")
+- Updated `add_missing_variables_to_config()` to use the 'valid_min' and 'valid_max' attributes from 'density' and 'temperature' as fallback gross-range limits when those attributes are unavailable for 'potential_density' and 'potential_temperature'.
+- Updated `create_qc_variables()` and `create_placeholder_qc_variables()` to explicitly store the 'valid_min' and 'valid_max' QC attributes as 'int8'.
+- Updated QARTOD flag aggregation to use `ioos_qc.qartod_compare()` instead of `np.maximum.reduce()`, ensuring aggregate QC flags follow the QARTOD-defined flag precedence.
+- Updated `create_ngdac_profiles()` to open temporary `pyglider` profiles as xarray Datasets, apply ESD-specific metadata updates, and write new final NetCDF files rather than modifying temporary files in place.
+- Updated `update_ngdac_profile_attributes()` to accept and return an xarray Dataset, apply trajectory, platform, and instrument metadata, and remove redundant instrument_* global attributes.
+- Updated `run_qartod_tests()` and `create_qc_variables()` to process variables individually and immediately aggregate test results, reducing memory usage for large glider datasets. Removed `group_qartod_results()` and `build_ioos_qc_config()` functions.
+- Updated `run_qartod_tests()` to process and aggregate individual QARTOD tests sequentially, reducing memory use for large deployments. Added `run_flat_line_chunked()` to process the flat-line test in overlapping chunks, and updated `run_qartod_qc()` to use lazy dataset loading and support a configurable flat-line chunk size.
+- Updated `run_qartod_qc()` to support safe file overwriting and `run_qartod_tests()` and `create_qc_variables()` to improve logging, QC flag metadata, and ancillary variable handling when overwriting existing QC variables.
 
 ### Imagery
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
