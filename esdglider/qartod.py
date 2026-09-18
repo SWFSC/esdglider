@@ -160,18 +160,18 @@ for flag values, standard names, ancillary variable
 relationships, and NetCDF encodings.
 """
 
-import logging
-import numpy as np
-import xarray as xr
-import pandas as pd
-import yaml
-import ioos_qc
 import json
+import logging
 
+import ioos_qc
+import numpy as np
+import pandas as pd
+import xarray as xr
+import yaml
 from ioos_qc.config import Config
-from ioos_qc.streams import XarrayStream
-from ioos_qc.results import collect_results
 from ioos_qc.qartod import qartod_compare
+from ioos_qc.results import collect_results
+from ioos_qc.streams import XarrayStream
 
 from esdglider import paths
 
@@ -543,7 +543,7 @@ def get_rate_of_change_threshold(values, times):
     list_times = []
     for nn, xx in enumerate(values):
         if (xx > (mean - std)) and (xx < (mean + std)):
-            list_values.append(values[nn])
+            list_values.append(xx)
             list_times.append(times[nn])
 
     # ENSURE THERE ARE ENOUGH DATA POINTS TO COMPUTE THE RATE OF CHANGE
@@ -638,6 +638,7 @@ def add_missing_variables_to_config(
 
     # ACCESS STREAM CONFIGURATION SECTION
     streams = config_dict["contexts"][0]["streams"]
+    fail_span_placeholder = [-1e10, 1e10]
 
     # PROCESS ALL TIME-DEPENDENT VARIABLES
     for var in time_variables:
@@ -674,7 +675,6 @@ def add_missing_variables_to_config(
 
         # BUILD GROSS RANGE THRESHOLDS
         if valid_min is not None and valid_max is not None:
-
             # CALCULATE DEFAULT FAIL RANGE
             span = valid_max - valid_min
             fail_min = valid_min - span
@@ -699,8 +699,20 @@ def add_missing_variables_to_config(
                 ],
             }
 
-        else:
+        elif valid_min is not None:
+            _log.warning(
+                "Variable '%s' is not defined in the QARTOD configuration "
+                "and does not contain usable valid_max attributes. "
+                "Using placeholder thresholds, for all except suspect min.",
+                var,
+            )
 
+            gross_range_config = {
+                "suspect_span": [valid_min, 9999],
+                "fail_span": fail_span_placeholder,
+            }
+
+        else:
             # FALL BACK TO PERMISSIVE THRESHOLDS
             _log.warning(
                 "Variable '%s' is not defined in the QARTOD configuration "
@@ -711,7 +723,7 @@ def add_missing_variables_to_config(
 
             gross_range_config = {
                 "suspect_span": [-9999, 9999],
-                "fail_span": [-1e10, 1e10],
+                "fail_span": fail_span_placeholder,
             }
 
         # CREATE DEFAULT QARTOD CONFIGURATION
@@ -1154,7 +1166,7 @@ def run_qartod_tests(
                     [final_flags, test_flags]
                 ).astype("int8")
 
-            _log.info(
+            _log.debug(
                 "Finished %s for %s",
                 test_name,
                 var_name,
