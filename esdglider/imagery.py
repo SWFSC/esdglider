@@ -4,6 +4,7 @@ import logging
 import os
 from PIL import Image
 from PIL.ExifTags import TAGS
+import json
 
 import numpy as np
 import pandas as pd
@@ -412,3 +413,88 @@ def extract_image_metadata(image_path):
         
     except Exception:  # noqa: BLE001
         return {"n": image_path.name, "error": "failed"}
+
+
+def generate_osi_manifest(
+    jsonl_filepath: str,
+    output_filepath: str,
+    target_dirs: set[str],
+    deployment_name: str, 
+    log_interval: int = 10000
+) -> None:
+    """
+    Streams a JSONL file line-by-line, filters by directory, and writes a streaming
+    JSON manifest format without holding the full dataset in memory.
+
+    This function generates an OSI-compatible image manifest. 
+    """
+    _log.info(f"Starting processing for file: '{jsonl_filepath}'")
+
+    yr = utils.year_path(deployment_name)
+    base_uri = f"gs://swfscesd-glider-imagery-data-in/{yr}/{deployment_name}/images"
+    target_dirs_set = set(target_dirs)
+    _log.info(f"Target directories to filter: {target_dirs_set}")
+
+    total_lines = 0
+    matched_count = 0
+    malformed_count = 0
+
+    try:
+        with open(jsonl_filepath, "r", encoding="utf-8") as infile, \
+             open(output_filepath, "w", encoding="utf-8") as outfile:
+            
+            outfile.write('{"instances": [{"input_images": [')
+            
+            is_first_match = True
+            
+            for line in infile:
+                total_lines += 1
+                
+                # Log progress periodically for large files
+                if total_lines % log_interval == 0:
+                    _log.info(f"Processed {total_lines:,} lines... ({matched_count:,} matches found so far)")
+                
+                line = line.strip()
+                if not line or not line.startswith('{'):
+                    continue
+                
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    malformed_count += 1
+                    _log.warning(f"Line {total_lines:,}: Malformed JSON syntax. Skipping.")
+                    continue
+                
+                # Check target filter
+                if data.get("p") in target_dirs_set:
+                    file_name = data.get("n")
+                    dir_name = data.get("p")
+                    
+                    if not file_name:
+                        _log.warning(f"Line {total_lines:,}: Missing filename key 'n'. Skipping.")
+                        continue
+
+                    uri = f"{base_uri}/{dir_name}/{file_name}"
+                    
+                    if not is_first_match:
+                        outfile.write(",\n")
+                    else:
+                        is_first_match = False
+                    
+                    outfile.write(f'"{uri}"')
+                    matched_count += 1
+
+            outfile.write(']}]}')
+
+        _log.info("Processing complete.")
+        _log.info(f"Total lines read: {total_lines:,}")
+        _log.info(f"Total matched records written to '{output_filepath}': {matched_count:,}")
+        if malformed_count > 0:
+            _log.warning(f"Encountered {malformed_count:,} malformed or skipped lines.")
+
+    except FileNotFoundError:
+        _log.error(f"Input file not found at: '{jsonl_filepath}'")
+        raise
+    except Exception as e:
+        _log.error(f"An unexpected error occurred on line {total_lines:,}: {str(e)}")
+        raise
