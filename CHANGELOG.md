@@ -20,24 +20,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed `gcp` module, using Gemini to follow a "Fail-Fast" module design. 
 
 ### QC Flags
-- Added a qartod module, for generating qartod flags using the `ioos_qc` package for the science dataset.
-- Added dynamic QARTOD threshold calculation utilities to the `qartod` module and added create_qc_summary_table() for generating profile-level deployment QC summary tables.
-- Changed  `add_missing_variables_to_config()` to use the 'valid_min' and 'valid_max' attributes from 'density' and 'temperature' as fallback gross-range limits when those attributes are unavailable for 'potential_density' and 'potential_temperature'.
-- Changed `create_qc_variables()` and `create_placeholder_qc_variables()` to explicitly store the 'valid_min' and 'valid_max' QC attributes as 'int8'.
-- Changed QARTOD flag aggregation to use `ioos_qc.qartod_compare()` instead of `np.maximum.reduce()`, ensuring aggregate QC flags follow the QARTOD-defined flag precedence.
+- Added a qartod module, for generating qartod flags using the `ioos_qc` package for the science dataset. Full functionality is run via `run_qartod_qc`
+- Added dynamic QARTOD threshold calculation utilities to the `qartod` module and added create_qc_summary_table for generating profile-level deployment QC summary tables.
+- Changed  `add_missing_variables_to_config` to use the 'valid_min' and 'valid_max' attributes from 'density' and 'temperature' as fallback gross-range limits when those attributes are unavailable for 'potential_density' and 'potential_temperature'.
+- Changed `create_qc_variables` and `create_placeholder_qc_variables` to explicitly store the 'valid_min' and 'valid_max' QC attributes as 'int8'.
+- Changed QARTOD flag aggregation to use `ioos_qc.qartod_compare` instead of `np.maximum.reduce`, ensuring aggregate QC flags follow the QARTOD-defined flag precedence.
 - Added deployment QC plotting utilities in `plots`, including stacked QC flag summary plots and variable-specific QC flag time-series plots.
+- Changed `run_qartod_tests` to process and aggregate individual QARTOD tests sequentially, reducing memory use for large deployments. Added `run_flat_line_chunked` to process the flat-line test in overlapping chunks, and updated `run_qartod_qc` to use lazy dataset loading and support a configurable flat-line chunk size. Additionally, changed `run_qartod_qc` to support safe file overwriting and `run_qartod_tests` and `create_qc_variables` to improve logging, QC flag metadata, and ancillary variable handling when overwriting existing QC variables.
 
 ### Timeseries profiles
-- Added `update_ngdac_profile_attributes()` and `create_ngdac_profiles()` in `utils` to use pyglider's `extract_timeseries_profiles()` to write profile netcdf files and update metadata for ESD and NGDAC standards.
-- Updated `create_ngdac_profiles()` in `utils` to run `pgncprocess.extract_timeseries_profiles()` and write files to a temporary directory, have the wrapper function read the files out of the temporary directory for post-processing, and then write files to desired output directory with the correct filenames (Ex: "amlr08-20220515T0644.nc")
-- Updated `add_missing_variables_to_config()` to use the 'valid_min' and 'valid_max' attributes from 'density' and 'temperature' as fallback gross-range limits when those attributes are unavailable for 'potential_density' and 'potential_temperature'.
-- Updated `create_qc_variables()` and `create_placeholder_qc_variables()` to explicitly store the 'valid_min' and 'valid_max' QC attributes as 'int8'.
-- Updated QARTOD flag aggregation to use `ioos_qc.qartod_compare()` instead of `np.maximum.reduce()`, ensuring aggregate QC flags follow the QARTOD-defined flag precedence.
-- Updated `create_ngdac_profiles()` to open temporary `pyglider` profiles as xarray Datasets, apply ESD-specific metadata updates, and write new final NetCDF files rather than modifying temporary files in place.
-- Updated `update_ngdac_profile_attributes()` to accept and return an xarray Dataset, apply trajectory, platform, and instrument metadata, and remove redundant instrument_* global attributes.
-- Updated `run_qartod_tests()` and `create_qc_variables()` to process variables individually and immediately aggregate test results, reducing memory usage for large glider datasets. Removed `group_qartod_results()` and `build_ioos_qc_config()` functions.
-- Updated `run_qartod_tests()` to process and aggregate individual QARTOD tests sequentially, reducing memory use for large deployments. Added `run_flat_line_chunked()` to process the flat-line test in overlapping chunks, and updated `run_qartod_qc()` to use lazy dataset loading and support a configurable flat-line chunk size.
-- Updated `run_qartod_qc()` to support safe file overwriting and `run_qartod_tests()` and `create_qc_variables()` to improve logging, QC flag metadata, and ancillary variable handling when overwriting existing QC variables.
+- Added `update_ngdac_profile_attributes` and `create_ngdac_profiles` in `utils` to use pyglider's `extract_timeseries_profiles` to write profile netcdf files and update metadata for ESD and NGDAC standards.
+- Updated `create_ngdac_profiles` in `utils` to run `pgncprocess.extract_timeseries_profiles` and write files to a temporary directory, have the wrapper function read the files out of the temporary directory for post-processing, and then write files to desired output directory with the correct filenames (Ex: "amlr08-20220515T0644.nc")
 
 ### Imagery
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
@@ -53,10 +46,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - `check_flbbcd_autoexec` checks the flbbcd calibration values from the calibration yaml against the values from the binary files (i.e., from the autoexec). 
     - `calc_flbbcd` calculates correct output values the signal and calibration values, for chlorophyll, cdom, and backscatter_700
     - `correct_flbbcd_raw_sci` recalculates the flbbcd output values, and updates the raw and science timeseries
-- Added several functions for checking and correcting CDOM values, based on data notices from Seabird Scientific:
+- Added several functions to for checking and correcting CDOM values, based on data notices from Seabird Scientific:
     - `check_cdom_date` determines the status of the CDOM data (e.g., is it out-of-tolerance)
     - `correct_cdom` depending on status of the CDOM data, removes CDOM data, or applies correction factor
     - `correct_cdom_raw_sci` removes or corrects CDOM data, for the raw and science timeseries
+- Added `check_par` for checking a dataset for negative PAR values
 
 ### Other
 - Removed `utils.to_netcdf_esd`, and switched to using either pyglider's `utils._save_dataset` (for L1 timeseries) or `ds.to_netcdf`. 
@@ -71,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added a `check-nc-old-new.py` script for comparing sets of old and new processed glider deployment files and plots. Useful to make sure code cleanup don't affect output files. 
 - Changed multiple functions so optional arguments, for `esdglider.profiles.findProfiles`, are passed into functions as a dictionary with the named arguments, rather than kwargs.
 - Added valid_min and valid_max values for several variables to the `data/netcdf-variables-sci.yml` file.
+- Changed license to CC0-1.0, to align with NOAA guidelines.
 
 ## [0.4.0] - 2026-04-17
 

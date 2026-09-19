@@ -703,7 +703,7 @@ def add_missing_variables_to_config(
             _log.warning(
                 "Variable '%s' is not defined in the QARTOD configuration "
                 "and does not contain usable valid_max attributes. "
-                "Using placeholder thresholds, for all except suspect min.",
+                "Using valid_max placeholder thresholds.",
                 var,
             )
 
