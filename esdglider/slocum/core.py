@@ -254,8 +254,9 @@ def binary_to_raw_timeseries(
     variables (from sci_m_present_time). These times are merged,
     and these values are the time index of the output file.
 
-    No values are interpolated. If the metadata contains a 'deployment_min_dt' 
-    entry, timestamps before this minimum deployment time are dropped. If the 
+    No values are interpolated. If the metadata contains 
+    a 'start_date' entry (must be in ISO 8601 format), 
+    timestamps before this start date are dropped. 
     dataset contains (i.e., the yaml specifies) a variable named 'pressure', 
     then the depth from the CTD will be calculated and retained as 'depth_ctd'.
 
@@ -454,15 +455,11 @@ def binary_to_raw_timeseries(
     # screen out-of-range times; these won't convert:
     ds["time"] = ds.time.where((ds.time > 0) & (ds.time < 6.4e9), np.nan)
     ds["time"] = (ds.time * 1e9).astype("datetime64[ns]")
-    # drop bogus times
-    if "deployment_min_dt" in deployment["metadata"]:
-        min_dt_str = deployment["metadata"]["deployment_min_dt"]
-    else:
-        min_dt_str = "1970-01-01"
-    ds = utils.drop_bogus_times(ds, min_dt=min_dt_str, max_drop=True)
-    
-    # ds = ds.where(ds.time >= np.datetime64(min_dt_str), drop=True)
     ds["time"].attrs = attr
+
+    # drop bogus times
+    min_dt_str = deployment["metadata"].get("start_date", "1970-01-01")
+    ds = utils.drop_bogus_times(ds, min_dt=min_dt_str, max_drop=True)
 
     # Drop rows with nan values across all data variables
     ds = ds.dropna("time", how="all")

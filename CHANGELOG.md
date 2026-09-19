@@ -65,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added a `check-nc-old-new.py` script for comparing sets of old and new processed glider deployment files and plots. Useful to make sure code cleanup don't affect output files. 
 - Changed multiple functions so optional arguments, for `esdglider.profiles.findProfiles`, are passed into functions as a dictionary with the named arguments, rather than kwargs.
 - Added valid_min and valid_max values for several variables to the `data/netcdf-variables-sci.yml` file.
+- Changed applicable functions to now check the deployment metadata for a 'start_date' attribute (rather than 'deployment_min_dt') for the deployment start time, for instance to filter for values after this start datetime.
 - Changed license to CC0-1.0, to align with NOAA guidelines.
 
 ## [0.4.0] - 2026-04-17

@@ -15,6 +15,7 @@ import pyglider.ncprocess as pgncprocess
 import pytz
 import xarray as xr
 import yaml
+from dateutil.parser import isoparse
 
 _log = logging.getLogger(__name__)
 
@@ -24,35 +25,35 @@ Utilities, mostly specific to ESD needs and ways of processing
 """
 
 # Logistical utilities ########################################################
-def _get_deployment_netcdfvars(deploymentyaml):
-    """
-    Loop through deploymentyaml files, and concatenate all netcdf vars
-    from the various deployment YAML files.
-    Allows for yaml files with only netcdf variables, 
-    for raw and engineering datasets.
+# def _get_deployment_netcdfvars(deploymentyaml):
+#     """
+#     Loop through deploymentyaml files, and concatenate all netcdf vars
+#     from the various deployment YAML files.
+#     Allows for yaml files with only netcdf variables, 
+#     for raw and engineering datasets.
 
-    Parameters
-    ----------
-    deploymentyaml : str or list of str
-        Path(s) to the deployment YAML file(s).
+#     Parameters
+#     ----------
+#     deploymentyaml : str or list of str
+#         Path(s) to the deployment YAML file(s).
 
-    Returns
-    -------
-    dict
-        A dictionary containing the concatenated NetCDF variables from the deployment YAML files.
-    """
-    ncvar = {}
-    if isinstance(deploymentyaml, str):
-        deploymentyaml = [deploymentyaml]
-    for nn, d in enumerate(deploymentyaml):
-        with open(d) as fin:
-            deployment_ = yaml.safe_load(fin)
-            if "netcdf_variables" in deployment_:
-                for key, value in deployment_["netcdf_variables"].items():
-                    if key not in ncvar:
-                        ncvar[key] = value
+#     Returns
+#     -------
+#     dict
+#         A dictionary containing the concatenated NetCDF variables from the deployment YAML files.
+#     """
+#     ncvar = {}
+#     if isinstance(deploymentyaml, str):
+#         deploymentyaml = [deploymentyaml]
+#     for nn, d in enumerate(deploymentyaml):
+#         with open(d) as fin:
+#             deployment_ = yaml.safe_load(fin)
+#             if "netcdf_variables" in deployment_:
+#                 for key, value in deployment_["netcdf_variables"].items():
+#                     if key not in ncvar:
+#                         ncvar[key] = value
 
-    return ncvar
+#     return ncvar
 
 
 def get_var_by_source(ds, sensor_name):
@@ -93,11 +94,12 @@ def drop_bogus_times(
     See the function 'drop_bogus' for a description of arguments
     """
     _log.info("Dropping bogus times")
+    min_dt_dt = parse_iso8601(min_dt)
 
     # For out of range or nan time/lat/lon, drop rows
     num_orig = len(ds.time)
     num_orig_nan = np.count_nonzero(np.isnan(ds.time.values))
-    ds = ds.where(ds.time >= np.datetime64(min_dt), drop=True)
+    ds = ds.where(ds.time >= np.datetime64(min_dt_dt), drop=True)
     if (num_orig - len(ds.time)) > 0:
         _log.info(
             "Dropped %s times that were either nan (n=%s) or before '%s'",
@@ -132,14 +134,13 @@ def drop_bogus(
               If not specified, then times before 1970-01-01
             - after the current time (if max_drop is True)
         - dropping rows with bogus lat/lon values (out of range or nan)
-        - changing out of range science variable values to np.nan
+        - changing nonsensical science variable values to np.nan
 
     ds: `xarray.Dataset`
         processed glider data
     min_dt: str; default="1970-01-01"
         String representing the minimum datetime to keep.
-        Passed to np.datetime64 to be used to filter.
-        For instance, '2017-01-01', or '2020-03-06 12:00:00'.
+        Must be in ISO 8601 format, e.g., 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS'.
     max_drop: bool; default=False
         If True, drop times that are after the current UTC time.
 
@@ -310,6 +311,54 @@ def datetime_now_utc(format="%Y-%m-%dT%H:%M:%SZ"):
         controlled by 'format' input
     """
     return datetime.now(timezone.utc).strftime(format)
+
+
+def parse_iso8601(dstring: str) -> datetime | None:
+    """
+    Parse a string as an ISO 8601 date.
+    # Examples:
+    dt1 = parse_iso8601("20210616T143025")      # Returns datetime.datetime(2021, 6, 16, 14, 30, 25)
+    dt2 = parse_iso8601("2021-06-16T14:30:25")  # Returns datetime.datetime(2021, 6, 16, 14, 30, 25)
+    dt3 = parse_iso8601("June 16, 2021")        # Returns None
+
+    Parameters
+    ----------
+    dstring : str
+        The date string to parse.
+
+    Returns
+    -------
+    datetime | None
+        A datetime object if parsing is successful, None otherwise.
+    """
+    try:
+        return isoparse(dstring)
+    except (ValueError, TypeError):
+        return None
+
+
+# def is_iso8601(dstring: str) -> bool:
+#     """
+#     Check if a string is in ISO 8601 date format.
+#     # print(is_iso8601("20210616T143025"))      # True (Basic format)
+#     # print(is_iso8601("2021-06-16T14:30:25"))  # True (Extended format)
+#     # print(is_iso8601("June 16, 2021"))        # False
+
+#     Parameters
+#     ----------
+#     dstring : str
+#         The date string to check.
+
+#     Returns
+#     -------
+#     bool
+#         True if the string is in ISO 8601 format, False otherwise.
+#     """
+#     try:
+#         isoparse(dstring)
+#         return True
+#     except (ValueError, TypeError):
+#         return False
 
 
 def _split_deployment(deployment_name):

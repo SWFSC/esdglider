@@ -32,6 +32,7 @@ dependencies = [
   "numpy",
   "pandas",
   "pyglider",
+  "python-dateutil", 
   "pyyaml",
   "xarray",
   "ioos_qc",

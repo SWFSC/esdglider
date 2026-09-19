@@ -117,6 +117,23 @@ def generate_timeseries(
     ancdir = glider_paths["ancillarydir"]
 
     deployment = pgutils._get_deployment(deploymentyaml)
+    start_date = deployment["metadata"].get("start_date", None)
+    if start_date is None:
+        _log.warning(
+            "start_date is not specified in deployment metadata. "
+            "All valid timestamps will be kept"
+        )
+    else:
+        if utils.parse_iso8601(start_date) is None:
+            _log.error(
+                "start_date (%s) is not in a valid ISO 8601 format in "
+                "deployment metadata",
+                start_date
+            )
+            raise ValueError(
+                "start_date is provided, but is not in a "
+                "valid ISO 8601 format in deployment metadata"
+            )
 
     # Check mode, set binary_search regex. Use uncompressed by default
     if mode == "delayed":
@@ -146,8 +163,14 @@ def generate_timeseries(
     if write_sci and sci_use_m_depth: 
         deployment = pgutils._get_deployment(deploymentyaml)
         if not "m_depth" in deployment['netcdf_variables']:
-            _log.error("If using sci_use_m_depth, m_depth variable must be in deployment netcdf_variables")
-            raise ValueError("m_depth variable is required in deployment netcdf_variables for sci_use_m_depth")
+            _log.error(
+                "If using sci_use_m_depth, m_depth variable "
+                "must be in deployment netcdf_variables"
+            )
+            raise ValueError(
+                "m_depth variable is required in deployment "
+                "netcdf_variables for sci_use_m_depth"
+            )
 
     # If writing any, remove plots
     if write_raw or write_eng or write_sci:
@@ -189,21 +212,22 @@ def generate_timeseries(
             prof_args=prof_args,
         )
 
-        # Run postprocessing
-        _log.info(f"Post-processing raw timeseries: {outname_tsraw}")
+        _log.info("Post-processing raw timeseries: %s", outname_tsraw)
         tsraw = xr.load_dataset(outname_tsraw)
 
+        # Attributes
         tsraw = postproc_attrs(
             tsraw, 
             mode, 
             file_info=file_info,
+            start_date=start_date, 
         )
         tsraw.attrs["comment"] = utils.append_string(
             tsraw.attrs["comment"], 
             (
                 "The variable names for this raw dataset are the glider "
-                + "sensor names. See the relevant masterdata file "
-                + "for sensor name details"
+                "sensor names. See the relevant masterdata file "
+                "for sensor name details"
             ), 
         )
 
@@ -288,6 +312,7 @@ def generate_timeseries(
             mode, 
             maxgap, 
             file_info=file_info,
+            start_date=start_date, 
             prof_summ=prof_summ,
             prof_index_attrs=prof_index_attrs,
         )
@@ -367,6 +392,7 @@ def generate_timeseries(
             maxgap, 
             sci_use_m_depth=sci_use_m_depth,
             file_info=file_info,
+            start_date=start_date, 
             drop_vars=drop_vars, 
             prof_summ=prof_summ,
             prof_index_attrs=prof_index_attrs,
@@ -446,12 +472,13 @@ def postproc_attrs(
         mode: str, 
         *, 
         file_info: str | None = None,
+        start_date: str |None = None
     ) -> xr.Dataset:
     """
     Update attributes of xarray Dataset ds, including:
         - running pyglider's utils.fill_metadata
         - determining glider ID. The datetime is extracted from either 
-          'deployment_min_dt' attribute if it exists, 
+          'start_date' attribute if it exists, 
           or the first glider timestamp
         - setting 'title' as equivalent to 'id'
         - setting other ESD-specific attributes (e.g., license, file, history)
@@ -466,6 +493,8 @@ def postproc_attrs(
         Deployment mode, either 'rt' or 'delayed'
     file_info : str | None, optional
         Information about the processing file, by default None.
+    start_date : str | None, optional
+        The start date of the deployment in ISO 8601 format, by default None.
 
     Returns
     -------
@@ -476,37 +505,58 @@ def postproc_attrs(
     # Rerun pyglider metadata functions, now that drop_bogus has been run,
     # for the sake of times. 
     # Metadata and device info have already been added, so not needed here
-    ds = pgutils.fill_metadata(ds, {}, {})
+    ds = pgutils.fill_metadata(ds, {}, {})    
+
+    # # Determine the glider ID using min_dt, and check vs ID from time
+    # time0_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M%S")
+    # if "start_date" in ds.attrs:
+    #     # min_dt64 = np.datetime64(ds.attrs["start_date"])
+    #     min_dt64 = utils.parse_iso8601(ds.attrs["start_date"])
+    #     min_dt_str = min_dt64.strftime("%Y%m%dT%H%M")
+    #     if min_dt_str != time0_str:
+    #         _log.warning(
+    #             "The dataset ID generated from the metadata (%s) "
+    #             "is different from that generated from the time (%s). "
+    #             "Using the ID from the metadata",
+    #             min_dt_str,
+    #             time0_str,
+    #         )
+    # else:
+    #     _log.info(
+    #         "There is no start_date attribute in the dataset. "
+    #         "Using the first time value for the ID."
+    #     )
+    #     min_dt_str = time0_str   
 
     # Drop some attributes from pyglider we don't want to keep
     attrs_to_drop = [
         "deployment_start", 
         "deployment_end", 
-        # "start_date", 
     ]
+
+    time0_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M")
+    if start_date is None:
+        attrs_to_drop.append("start_date")
+        min_dt_str = time0_str
+
+    else:
+        ds.attrs["start_date"] = start_date
+        # Check glider ID with start_date vs ID from time0
+        min_dt64 = utils.parse_iso8601(start_date)
+        min_dt_str = min_dt64.strftime("%Y%m%dT%H%M")  # type: ignore
+        if min_dt_str != time0_str:
+            _log.warning(
+                "The time component of the dataset ID "
+                "generated from the metadata (%s) is demostrably "
+                "different from that generated from the time (%s). "
+                "Using the ID from the metadata",
+                min_dt_str,
+                time0_str,
+            )
+
     for attr in attrs_to_drop:
         ds.attrs.pop(attr, None)
 
-    # Determine the glider ID using min_dt, and check vs ID from time
-    time_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M")
-    if "deployment_min_dt" in ds.attrs:
-        min_dt64 = np.datetime64(ds.deployment_min_dt)
-        min_dt_str = min_dt64.item().strftime("%Y%m%dT%H%M")
-        if min_dt_str != time_str:
-            _log.warning(
-                "The dataset ID generated from the metadata (%s) "
-                "is different from that generated from the time (%s). "
-                "Using the ID from the metadata",
-                min_dt_str,
-                time_str,
-            )
-    else:
-        _log.info(
-            "There is no deployment_min_dt attribute in the dataset. "
-            "Using the first time value for the ID."
-        )
-        min_dt_str = time_str
-        
     ds.attrs["id"] = f"{ds.attrs['glider_name']}-{min_dt_str}"
 
     # Other ESD-specific updates
@@ -546,6 +596,7 @@ def postproc_tsl1(
     maxgap: int, 
     *, 
     file_info: str | None = None,
+    start_date: str | None = None,
     drop_vars: list | None = None,
     prof_summ: pd.DataFrame | None = None,
     prof_index_attrs: dict | None = None,
@@ -554,7 +605,7 @@ def postproc_tsl1(
     Post-processing steps shared by both the L1 timeseries (sci and eng):
         - dropping bogus times, meaning times:
             - before 1970-01-01
-            - before the deployment start (if specified via attr 'deployment_min_dt')
+            - before the deployment start (if specified via attr 'start_date')
             - after the current time
         - dropping bogus values (utils.drop_bogus)
         - dropping data 'rows' where a variable specified in 'drop_vars'
@@ -577,6 +628,8 @@ def postproc_tsl1(
         The maximum allowed gap (in seconds) for interpolation.
     file_info : str | None, optional
         Information about the processing file, by default None.
+    start_date : str | None, optional
+        Passed to postproc_attrs
     drop_vars : list | None, optional
         List of variables for which to drop the whole timestamp 
         if they contain NaN values, by default None
@@ -594,11 +647,11 @@ def postproc_tsl1(
     # DROP BOGUS VALUES
     # Remove times that are nan / <min_dt / >current time, and drop other bogus values
     _log.info("The given timeseries has %s data points", ds.time.shape[0])
-    if "deployment_min_dt" in ds.attrs:
-        min_dt = ds.deployment_min_dt
-    else:
-        min_dt = "1970-01-01"
-    ds = utils.drop_bogus(ds, min_dt=min_dt, max_drop=True)
+    ds = utils.drop_bogus(
+        ds, 
+        min_dt=start_date or "1970-01-01", #1970-01-01 if None
+        max_drop=True
+    )
 
     # Check for and verbosely remove any duplicated timestamps
     ds_index = ds.get_index("time")
@@ -606,8 +659,8 @@ def postproc_tsl1(
         df_dup = ds_index.duplicated()
         _log.warning(
             "There are %d duplicated timestamps in the current dataset. "
-            + "The second of the duplicated timestamps will be dropped. "
-            + "Indexes, of the original dataset: %s",
+            "The second of the duplicated timestamps will be dropped. "
+            "Indexes, of the original dataset: %s",
             df_dup.sum(),
             ", ".join([str(i[0]) for i in np.argwhere(df_dup)]),  # type: ignore
         )
@@ -629,7 +682,7 @@ def postproc_tsl1(
                 if any(ds.depth.values[var_nan] >= 5):
                     _log.warning(
                         "Some nan %s values that will be "
-                        + "dropped have a depth >=5",
+                        "dropped have a depth >=5",
                         var
                     )
                 ds = ds.where(~np.isnan(ds[var]), drop=True)
@@ -651,14 +704,14 @@ def postproc_tsl1(
         _log.debug("Profile info not provided - skipping profiles")
 
     # ATTRIBUTES
-    ds = postproc_attrs(ds, mode, file_info=file_info)
+    ds = postproc_attrs(ds, mode, file_info=file_info, start_date=start_date)
 
     # Update attribute specific to eng and sci timeseries
     ds.attrs["processing_level"] = (
         "Level 1 (L1) processed data timeseries. "
-        + "Values have been interpolated via linear fill, "
-        + f"with a maxgap of {maxgap} seconds. "
-        + "Minimal data screening."
+        "Values have been interpolated via linear fill, "
+        f"with a maxgap of {maxgap} seconds. "
+        "Minimal data screening."
     )
 
     return ds
@@ -670,6 +723,7 @@ def postproc_tsl1_eng(
     maxgap: int, 
     *, 
     file_info: str | None = None,
+    start_date: str | None = None,
     prof_summ: pd.DataFrame | None = None,
     prof_index_attrs: dict | None = None,
 ) -> xr.Dataset:
@@ -689,6 +743,8 @@ def postproc_tsl1_eng(
         The maximum allowed gap (in seconds) for interpolation.
     file_info : str | None, optional
         Information about the processing file, by default None
+    start_date : str | None, optional
+        Passed through to postproc_attrs
     prof_summ : pd.DataFrame | None, optional
         Profile summary DataFrame, by default None
     prof_index_attrs : dict | None, optional
@@ -719,6 +775,7 @@ def postproc_tsl1_eng(
         mode=mode, 
         maxgap=maxgap, 
         file_info=file_info,
+        start_date=start_date, 
         prof_summ=prof_summ,
         prof_index_attrs=prof_index_attrs,
     )
@@ -739,6 +796,7 @@ def postproc_tsl1_sci(
         sci_use_m_depth: bool,
         *,
         file_info: str | None = None,
+        start_date: str | None = None,
         drop_vars: list | None = None,
         prof_summ: pd.DataFrame | None = None,
         prof_index_attrs: dict | None = None,
@@ -759,6 +817,8 @@ def postproc_tsl1_sci(
         The maximum allowed gap (in seconds) for interpolation.
     file_info : str | None, optional
         Information about the processing file, by default None.
+    start_date : str | None, optional
+        Passed through to postproc_attrs
     drop_vars : list | None, optional
         List of variables for which to drop the whole timestamp 
         if they contain NaN values, by default None
@@ -798,6 +858,7 @@ def postproc_tsl1_sci(
         mode=mode,
         maxgap=maxgap,
         file_info=file_info,
+        start_date=start_date,
         drop_vars=drop_vars,
         prof_summ=prof_summ,
         prof_index_attrs=prof_index_attrs,
