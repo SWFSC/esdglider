@@ -90,7 +90,7 @@ def get_path_glider(
     mode: str, 
     *, 
     home_path: str | Path = "",
-    cac_path: str | Path = "",
+    cache_path: str | Path = "",
     config_path: str | Path = "", 
     data_in_path: str | Path = "", 
     data_out_path: str | Path = "", 
@@ -137,8 +137,8 @@ def get_path_glider(
     data_in_path = _resolve_path(data_in_path, home_path, "data-in")
     data_out_path = _resolve_path(data_out_path, home_path, "data-out")
 
-    cac_path = _resolve_path(cac_path, home_path, "cac")
-    _check_dir_exists(cac_path, "provided cache")
+    cache_path = _resolve_path(cache_path, home_path, "cac")
+    _check_dir_exists(cache_path, "provided cache")
 
     # Deployment yaml
     if config_path == "":
@@ -190,7 +190,7 @@ def get_path_glider(
     return {
         "deploymentyaml": deploymentyaml,
         "mode": mode,
-        "cacdir": cac_path,
+        "cacdir": cache_path,
         "data_in_path": data_in_path,
         "data_out_path": data_out_path,
         # "rawyaml": get_path_yaml("raw"),

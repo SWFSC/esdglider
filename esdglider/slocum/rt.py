@@ -12,48 +12,48 @@ from esdglider import gcp, utils
 _log = logging.getLogger(__name__)
 
 
-def scrape_sfmc(deployment_name, bucket, sfmc_path, gcpproject_id, secret_id):
+def scrape_sfmc(
+        deployment_name: str, 
+        bucket_name: str, 
+        sfmc_path: str | Path, 
+        cache_path: str | Path, 
+        gcpproject_id: str, 
+        secret_id: str, 
+    ):
     """
     rsync files from sfmc, and send them to correct bucket directories;
+
+
+    Parameters
+    ----------
+    deployment_name : str
+        The name of the deployment.
+    bucket_name : str
+        The name of the GCS data in bucket.
+    sfmc_path : str | Path
+        The local path to store SFMC files.
+    gcpproject_id : str
+        The GCP project ID.
+    secret_id : str
+        The secret ID for accessing the SFMC password.
+    cache_path : str | Path
+        The local path to the cache file directory.
+
     Returns 0
     """
 
-    # deployment = deployment_info["deployment"]
-    # project = deployment_info["project"]
     _log.info(f"Scraping files from SFMC for deployment {deployment_name}")
     glider = utils.get_glider_name(deployment_name)
     year = utils.get_path_year(deployment_name)
 
-    # # --------------------------------------------
-    # # Checks
-    # deployment_split = deployment.split("-")
-    # if len(deployment_split[1]) != 8:
-    #     _log.error(
-    #         "The deployment must be the glider name followed by the deployment date",
-    #     )
-    #     raise ValueError("Unsuccessful deployment_split")
-    # else:
-    #     glider = deployment_split[0]
-    #     year = utils.year_path(project, deployment)
-
     # --------------------------------------------
     # Create sfmc directory structure, if needed
-    _log.info(f"Making sfmc deployment dirs at {sfmc_path}")
+    _log.info("Making sfmc deployment dirs at %s", sfmc_path)
     
     # Path construction and directory creation via pathlib
     sfmc_local_path = Path(sfmc_path) / f"sfmc-{deployment_name}"
     sfmc_local_path.mkdir(parents=True, exist_ok=True)
-
-    # sfmc_pwd_file = os.path.join(sfmc_local_path, ".sfmcpwd.txt")
-    # _log.debug(f'SFMC ssh password written to {sfmc_pwd_file}')
-    # if not os.path.isfile(sfmc_pwd_file):
-    #     _log.info('Writing SFMC ssh pwd to file')
-    #     file = open(sfmc_pwd_file, 'w+')
-    #     file.write(gcp.access_secret_version(gcpproject_id, secret_id))
-    #     file.close()
-    #     os.chmod(sfmc_pwd_file, stat.S_IREAD)
-
-    
+   
     # Secret retrieval
     sfmc_password = gcp.access_secret_version(gcpproject_id, secret_id)
 
@@ -142,39 +142,59 @@ def scrape_sfmc(deployment_name, bucket, sfmc_path, gcpproject_id, secret_id):
     # --------------------------------------------
     # Copy files to subfolders, and rsync with bucket
     _log.info("Starting file management")
-    # bucket_deployment = f"gs://{bucket}/{year}/{deployment_name}"
 
-    # TODO: cache files to standard-glider-files
-    # # For now - copy to repo folder
-    # name_cac = "cac"
-    # utils.mkdir_pass(os.path.join(sfmc_local_path, name_cac))
-    # rt_file_mgmt(
-    #     sfmc_file_ext,
-    #     ".[Cc][Aa][Cc]",
-    #     name_cac,
-    #     sfmc_local_path,
-    #     f"gs://{bucket}/cache",
-    #     rsync_delete=False,
-    # )
+    ### cache files ------------------------------
+    # cache files to standard-glider-files repo folder
+    cache_path = Path(cache_path)
+    pattern = re.compile(r"\.[Cc][AaCc][Cc]$")
 
-    # sbd/tbd files
-    # name_stbd = "stbd"
-    # bucket_stbd = os.path.join(bucket_deployment, "binary", "rt")
-    # utils.mkdir_pass(os.path.join(sfmc_local_path, name_stbd))
-    # rt_file_mgmt(sfmc_file_ext, ".[SsTt]bd", name_stbd, sfmc_local_path, bucket_stbd)
+    # Ensure the cache destination directory exists
+    if not cache_path.exists():
+        _log.error("Cache path does not exist: %s", cache_path)
+        return
+
+    _log.info(
+        "Performing real-time file management for cache files "
+        "matching regex: %s in sfmc local path", 
+        pattern, 
+    )
+
+    # Process matching files
+    for item in sfmc_local_path.iterdir():
+        if item.is_file() and pattern.search(item.name):
+            destination = cache_path / item.name
+
+            # Only copy if the file does not already exist in cache_path
+            if not destination.exists():
+                shutil.copy(str(item), str(destination))
+                _log.info("Copied cache file %s to %s", item.name, destination)
+            else:
+                _log.debug("Skipped cache file (already exists): %s", item.name)
+
     
-    # Organize & Sync STBD files
+    ### sbd/tbd files ---------------------------
+    # Do not bother with compressed files, because the SFMC uncompresses them
     bucket_stbd_prefix = (PurePosixPath(year) / deployment_name / "binary/rt").as_posix()
-    rt_file_mgmt(
+    transfer_files_to_gcs(
         sfmc_ext_all=sfmc_file_ext,
         ext_regex=r"\.[SsTt]bd$",
         subdir_name="stbd",
         local_path=sfmc_local_path,
-        bucket_name=bucket,
+        bucket_name=bucket_name,
         gcs_prefix=bucket_stbd_prefix,
     )
 
-    # Do not bother with compressed files, because the SFMC uncompresses them
+    
+
+    ### ad2 files -------------------------------
+    # # TODO ad2 files
+    # name_ad2 = "ad2"
+    # bucket_ad2 = (
+    #     f"gs://amlr-gliders-acoustics-dev/{project}/{year}/{deployment}/data/rt/"
+    # )
+    # utils.mkdir_pass(os.path.join(sfmc_local_path, name_ad2))
+    # rt_file_mgmt(sfmc_file_ext, ".ad2", name_ad2, sfmc_local_path, bucket_ad2)
+
 
     # name_ccc  = 'ccc'
     # putils.mkdir_pass(os.path.join(sfmc_local_path, name_ccc))
@@ -188,14 +208,6 @@ def scrape_sfmc(deployment_name, bucket, sfmc_path, gcpproject_id, secret_id):
     # rt_file_mgmt(
     #     sfmc_file_ext, '.[SsTt]cd', name_stcd, sfmc_local_path, bucket_stcd)
 
-    # # TODO ad2 files
-    # name_ad2 = "ad2"
-    # bucket_ad2 = (
-    #     f"gs://amlr-gliders-acoustics-dev/{project}/{year}/{deployment}/data/rt/"
-    # )
-    # utils.mkdir_pass(os.path.join(sfmc_local_path, name_ad2))
-    # rt_file_mgmt(sfmc_file_ext, ".ad2", name_ad2, sfmc_local_path, bucket_ad2)
-
     # # cam files TODO
     # name_cam  = 'cam'
     # putils.mkdir_pass(os.path.join(sfmc_local_path, name_cam))
@@ -205,7 +217,7 @@ def scrape_sfmc(deployment_name, bucket, sfmc_path, gcpproject_id, secret_id):
     return 0
 
 
-def rt_file_mgmt(
+def transfer_files_to_gcs(
     sfmc_ext_all: set,
     ext_regex: str,
     subdir_name: str,
@@ -214,7 +226,23 @@ def rt_file_mgmt(
     gcs_prefix: str,
     rsync_delete: bool = True,
 ):
-    """Sorts local files matching extension patterns and uploads them to GCS natively."""
+    """
+    Sorts local files matching extension patterns and uploads them to GCS natively.
+    Moves files matching the given extension regex from the local path to a subdirectory,
+    and then syncs that subdirectory to the specified GCS bucket location.
+
+    Parameters:
+    - sfmc_ext_all: Set of all file extensions present in the local SFMC directory.
+    - ext_regex: Regular expression pattern to match specific file extensions.
+    - subdir_name: Name of the subdirectory to move matching files into.
+    - local_path: Path to the local SFMC directory.
+    - bucket_name: Name of the GCS bucket to sync files to.
+    - gcs_prefix: Prefix path within the GCS bucket.
+    - rsync_delete: Whether to delete unmatched files in the GCS destination.
+
+    Returns:
+    - 0 if the operation completes successfully.
+    """
     pattern = re.compile(ext_regex)
     _log.info(
         "Performing real-time file management for files matching regex: %s in local path: %s", 

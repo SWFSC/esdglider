@@ -36,7 +36,7 @@ def main(args):
     rt.scrape_sfmc(
         deployment_name=args.deployment_name,
         # deployment_info=deployment_info,
-        bucket=args.bucket,
+        bucket_name=args.bucket,
         sfmc_path=args.sfmc_path,
         gcpproject_id=args.gcpproject_id,
         secret_id=args.secret_id,
