@@ -825,7 +825,7 @@ def update_dynamic_thresholds(
             if suspect is not None and fail is not None:
                 qartod["spike_test"]["suspect_threshold"] = float(suspect)
                 qartod["spike_test"]["fail_threshold"] = float(fail)
-                _log.info(
+                _log.debug(
                     "Updated spike thresholds for %s",
                     var_name,
                 )
@@ -842,7 +842,7 @@ def update_dynamic_thresholds(
 
             if threshold is not None:
                 qartod["rate_of_change_test"]["threshold"] = float(threshold)
-                _log.info(
+                _log.debug(
                     "Updated rate_of_change threshold for %s",
                     var_name,
                 )

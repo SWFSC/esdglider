@@ -109,7 +109,7 @@ def get_path_glider(
         Must be either 'rt', for real-time, or 'delayed', for delayed mode.
     home_path : str
         The (local) path to the home directory; defaults to '/home/user'.
-    cac_path : str
+    cache_path : str
         The (local) path to the folder with the cache files. 
         If not provided, defaults to '<home_path>/standard-glider-files/Cache'.
     config_path : str
@@ -137,7 +137,7 @@ def get_path_glider(
     data_in_path = _resolve_path(data_in_path, home_path, "data-in")
     data_out_path = _resolve_path(data_out_path, home_path, "data-out")
 
-    cache_path = _resolve_path(cache_path, home_path, "cac")
+    cache_path = _resolve_path(cache_path, home_path, "cache")
     _check_dir_exists(cache_path, "provided cache")
 
     # Deployment yaml
@@ -421,7 +421,7 @@ def _resolve_path(p: str | Path, home: Path, type: str):
         end_path = mnt_path / data_in_bucket_name
     elif type == "data-out":
         end_path = mnt_path / data_out_bucket_name
-    elif type == "cac":
+    elif type == "cache":
         end_path = Path("standard-glider-files") / "Cache"
     # elif type == "config":
     #     end_path = Path("glider-processing") / "deployment-configs"

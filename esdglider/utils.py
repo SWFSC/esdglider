@@ -1284,10 +1284,8 @@ def update_ngdac_profile_attributes(
     ----------
     ds : xarray.Dataset
         Profile dataset created by pyglider.
-
     deployment : dict
         Deployment configuration loaded from the deployment YAML.
-
     trajectory : str
         Deployment trajectory ID from the science timeseries NetCDF.
 
@@ -1384,13 +1382,10 @@ def create_ngdac_profiles(
     ----------
     inname : str or Path
         Science timeseries NetCDF file to break into profiles.
-
     outdir : str or Path
         Directory where final profile NetCDF files are written.
-
     deploymentyaml : str or Path
         Deployment YAML file used to create the timeseries NetCDF.
-
     force : bool, default False
         Force overwriting existing profile NetCDF files.
 

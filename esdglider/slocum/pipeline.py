@@ -561,19 +561,6 @@ def postproc_attrs(
 
     # Other ESD-specific updates
     ds.attrs["title"] = ds.attrs["id"]
-    ds.attrs["disclaimer"] = (
-        "This data may be redistributed and used without restriction.  "
-        "Data provided as is with no expressed or implied assurance "
-        "of quality assurance or quality control"
-    )
-    ds.attrs["license"] = (
-        "These data were produced by NOAA and are not "
-        "subject to copyright protection in the United States. "
-        "NOAA waives any potential copyright and related rights in thse data "
-        "worldwide through the Creative Commons Zero 1.0 Universal Public "
-        "Domain Dedication "
-        "(CC0-1.0, https://creativecommons.org/publicdomain/zero/1.0/)."
-    )
     
     if file_info is None:
         file_info = "netCDF files created using"

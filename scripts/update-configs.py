@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 
 # Directory containing your glider YAML config files
-CONFIG_DIR = Path("/home/user/glider-processing/deployment-configs/2018")
+CONFIG_DIR = Path("/home/user/glider-processing/deployment-configs")
 # CONFIG_DIR = Path("/home/user/tests/amlr08-20220513")
 # CONFIG_DIR = Path("/home/user/tests/calanus-20241019")
 
