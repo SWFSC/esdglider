@@ -46,6 +46,9 @@ optional-dependencies.imagery = [
 optional-dependencies.db = [
   "sqlalchemy",
 ]
+optional-dependencies.misc = [
+  "pillow",
+]
 urls.Homepage = "https://swfsc.github.io/glider-lab-manual"
 urls.Issues = "http://github.com/SWFSC/esdglider/issues"
 urls.Repository = "http://github.com/SWFSC/esdglider.git"

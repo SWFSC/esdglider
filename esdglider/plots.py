@@ -21,6 +21,12 @@ from numpy.typing import NDArray
 
 from esdglider import utils
 
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+
 _log = logging.getLogger(__name__)
 
 """Constants used throughout plotting functions
@@ -228,6 +234,7 @@ def esd_all_plots(
     base_path: str | None = None,
     crs: str | None = None,
     bar_file: str | None = None,
+    combine_pdf: bool = True,
 ):
     """
     Wrapper to run all of the ESD plotting loop functions
@@ -253,6 +260,10 @@ def esd_all_plots(
     bar_file : str or None (default None)
         Path to the ETOPO nc file to use for contour lines.
         If None (default), then contour lines will not be drawn
+    combine_pdf : bool (default True)
+        If True, searches all subdirectories in base_path for generated PNGs 
+        and combines them into a single multi-page PDF.
+        Ignored if base_path is None
 
     Returns
     -------
@@ -268,6 +279,8 @@ def esd_all_plots(
     ds_sci = xr.load_dataset(ds_paths["outname_tssci"])
     # ds_sci_qc = xr.load_dataset(ds_paths["outname_tssciqc"])
     ds_gr5m = xr.load_dataset(ds_paths["outname_gr5m"])
+
+    deployment_name = ds_sci.attrs['deployment_name']
 
     # Delete old plots
     if base_path is not None:
@@ -298,7 +311,7 @@ def esd_all_plots(
             ds_sci,
             plot_file=os.path.join(
                 plot_qc_path, 
-                f"{ds_sci.attrs['deployment_name']}_qc_summary.png"
+                f"{deployment_name}_qc_summary.png"
             ),
         )
         plot_qc_timeseries(ds_sci, output_dir=plot_qc_path)
@@ -323,6 +336,14 @@ def esd_all_plots(
         )
     else:
         _log.info("crs is None - skipping surface maps")
+
+    # Combine into single PDF if requested
+    if base_path is not None and combine_pdf:
+        _log.info("Combining output plots into a single PDF")
+        png_files = sorted(Path(base_path).rglob("*.png"))
+        pdf_path = Path(base_path) / f"{deployment_name}_all_plots.pdf"
+
+        combine_images_to_pdf(png_files, pdf_path)
 
 
 def sci_gridded_loop(
@@ -2092,3 +2113,49 @@ def plot_qc_timeseries(
             output_dir / f"{data_var}_qc_timeseries.png",
         )
         plt.close(fig)
+
+
+def combine_images_to_pdf(
+    image_paths: typing.Iterable[str | Path],
+    output_pdf_path: str | Path,
+) -> None:
+    """
+    Combine multiple image files into a single multi-page PDF document.
+
+    Parameters
+    ----------
+    image_paths : iterable of str or Path
+        Paths to the image files to combine.
+    output_pdf_path : str or Path
+        Destination path for the output PDF.
+    """
+    if not HAS_PIL:
+        _log.warning(
+            "Pillow (PIL) is not installed. Skipping combined PDF creation. "
+            "To enable this feature, install Pillow (`pip install Pillow`)."
+        )
+        return
+    
+    images: list[Image.Image] = [] # type: ignore
+    for img_path in image_paths:
+        try:
+            with Image.open(img_path) as img: # type: ignore
+                # Convert RGBA/palette images to RGB for PDF compatibility
+                images.append(img.convert("RGB"))
+        except Exception as e:  # noqa: BLE001
+            _log.warning(f"Could not open image '{img_path}' for PDF: {e}")
+
+    if not images:
+        _log.warning("No valid images found to compile into PDF.")
+        return
+
+    output_pdf_path = Path(output_pdf_path)
+    output_pdf_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save all images into a single PDF
+    images[0].save(
+        output_pdf_path,
+        save_all=True,
+        append_images=images[1:],
+    )
+    _log.info(f"Successfully created summary PDF: {output_pdf_path}")
