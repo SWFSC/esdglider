@@ -2,17 +2,17 @@ import logging
 import os
 from importlib.resources import as_file, files
 
-import numpy as np
 import pandas as pd
-from sqlalchemy.engine import Connectable
 import yaml
 from google.cloud import storage
+from sqlalchemy.engine import Connectable
 
 # from esdglider.acoustics import get_path_acoustics_deployment
-from esdglider.gcp import check_gcs_file_exists, check_gcs_directory_exists
-from esdglider.paths import get_path_glider, get_path_imagery 
+from esdglider.gcp import check_gcs_directory_exists, check_gcs_file_exists
+from esdglider.paths import get_path_glider, get_path_imagery
+
 # from esdglider.imagery import get_path_imagery_deployment
-from esdglider.utils import get_glider_name, get_path_year, dataframe_col_reorder
+from esdglider.utils import dataframe_col_reorder, get_glider_name, get_path_year
 
 _log = logging.getLogger(__name__)
 
@@ -243,8 +243,9 @@ def make_deployment_yaml(
     #     metadata["sea_name"] = "<sea name>"
 
     deployment_yaml = {
-        "metadata": dict(sorted(metadata.items(), key=lambda v: v[0].upper())),
-        "glider_devices": instruments,
+        # "metadata": dict(sorted(metadata.items(), key=lambda v: v[0].upper())),
+        "metadata": dict(sorted(metadata.items())),
+        "glider_devices": dict(sorted(instruments.items())),
         "netcdf_variables": netcdf_vars,
         "profile_variables": prof_vars,
     }

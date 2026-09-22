@@ -9,6 +9,9 @@ contributor_role: 'Principal Investigator, Principal Investigator, Glider Pilot,
 creator_email: nmfs.swfsc.esd-gliders@noaa.gov
 creator_name: 'Christian Reiss'
 creator_url: https://www.fisheries.noaa.gov/about/southwest-fisheries-science-center
+disclaimer: 'This data may be redistributed and used without restriction. 
+    Data provided as is with no expressed or implied 
+    assurance of quality assurance or quality control'
 format_version: IOOS_Glider_NetCDF_v2.0.nc
 glider_name: <glider name>
 glider_serial: <glider serial>
@@ -24,8 +27,11 @@ keywords: 'AUVS > Autonomous Underwater Vehicles,
             In Situ Ocean-based platforms > Seaglider,
             glider, Slocum, trajectory, underwater glider, water, wmo'
 keywords_vocabulary: GCMD Science Keywords
-license: 'This data may be redistributed and used without restriction.
-          Data provided as is with no expressed or implied assurance of quality assurance or quality control.'
+license: 'These data were produced by NOAA and are not subject to copyright 
+    protection in the United States. NOAA waives any potential copyright 
+    and related rights in thse data worldwide through the 
+    Creative Commons Zero 1.0 Universal Public Domain Dedication 
+    (CC0-1.0, https://creativecommons.org/publicdomain/zero/1.0/).'
 Metadata_Conventions: Unidata Dataset Discovery v1.0, COARDS, CF-1.8
 metadata_link: 'https://swfsc.github.io/glider-lab-manual/'
 naming_authority: gov.noaa.fisheries
