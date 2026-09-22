@@ -29,6 +29,9 @@ dependencies:
   - timezonefinder
   - ioos_qc
 
+  - rsync
+  - sshpass
+
   - pip:
     - dbdreader
     - python-dateutil
