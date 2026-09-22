@@ -126,12 +126,12 @@ def imagery_timeseries(ds, img_paths):
         DataFrame: pd.DataFrame of imagery timeseries
     """
 
-    deployment = ds.attrs["deployment_name"]
+    deployment_name = ds.attrs["deployment_name"]
     # imagedir = img_paths["imagedir"]
     metadir = img_paths["metadir"]
     ancdir = img_paths["ancdir"]
     
-    _log.info(f"Creating imagery ancillary data file for {deployment}")
+    _log.info("Creating imagery ancillary data file for %s", deployment_name)
     # _log.info(f"Using images directory {imagedir}")
     _log.info(f"Using image metadata directory {metadir}")
 

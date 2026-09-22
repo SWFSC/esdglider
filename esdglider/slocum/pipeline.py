@@ -561,6 +561,29 @@ def postproc_attrs(
 
     # Other ESD-specific updates
     ds.attrs["title"] = ds.attrs["id"]
+
+    attrs_z = [
+        "date_created", 
+        "date_issued", 
+        "time_coverage_end", 
+        "time_coverage_start", 
+    ]
+    for attr in attrs_z:
+        _log.debug("Checking attribute %s for Z suffix", attr)
+        if ds.attrs[attr].endswith("Z"):
+            _log.debug("The attribute string ends with Z")
+        else:
+            _log.debug("The attribute string does not end with Z")
+            dt = utils.parse_iso8601(ds.attrs[attr])
+            if dt:
+                ds.attrs[attr] = (dt.isoformat() + "Z")
+            else:
+                _log.error(
+                    "The attribute %s (%s) is not in a valid ISO 8601 format",
+                    attr,
+                    ds.attrs[attr], 
+                )
+
     
     if file_info is None:
         file_info = "netCDF files created using"
@@ -568,9 +591,9 @@ def postproc_attrs(
         [
             f"deployment_name={ds.deployment_name}",
             f"mode={mode}",
-            f"dbdreader v{metadata.version('dbdreader')}",
-            f"pyglider v{metadata.version('pyglider')}",
             f"esdglider v{metadata.version('esdglider')}",
+            f"pyglider v{metadata.version('pyglider')}",
+            f"dbdreader v{metadata.version('dbdreader')}",
         ],
     )
 

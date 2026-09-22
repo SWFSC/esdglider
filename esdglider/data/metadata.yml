@@ -17,7 +17,7 @@ glider_name: <glider name>
 glider_serial: <glider serial>
 glider_model: 'Teledyne Webb Research Slocum G3 glider'
 glider_instrument_name: slocum
-institution: 'NOAA SWFSC Ecosystem Science Division'
+institution: 'NOAA National Marine Fisheries Service Southwest Fisheries Science Center'
 keywords: 'AUVS > Autonomous Underwater Vehicles,
             Earth Science > Oceans > Ocean Pressure > Water Pressure,
             Earth Science > Oceans > Ocean Temperature > Water Temperature,

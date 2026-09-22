@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 
 # Directory containing your glider YAML config files
-CONFIG_DIR = Path("/home/user/glider-processing/deployment-configs/2026")
+CONFIG_DIR = Path("/home/user/glider-processing/deployment-configs")
 # CONFIG_DIR = Path("/home/user/tests/amlr08-20220513")
 # CONFIG_DIR = Path("/home/user/tests/calanus-20241019")
 
@@ -38,11 +38,12 @@ NEW_BOUNDS = {
 
 NEW_METADATA = {
     "metadata": {
-        "creator_name": "NOAA SWFSC Ecosystem Science Division Glider Team",
-        "creator_email": "nmfs.swfsc.esd-gliders@noaa.gov",
-        "publisher_email": "nmfs.swfsc.esd-gliders@noaa.gov",
-        "contributor_name": "Heidi Taylor, Jennifer Walsh, Anthony Cossio, Tegan Murray, Kourtney Burger, Cara Wilson, Samuel Woodman",
-        "contributor_role": "Principal Investigator, Glider Pilot, Glider Pilot, Glider Pilot, Glider Pilot, Glider Pilot, Data Manager"
+        # "creator_name": "NOAA SWFSC Ecosystem Science Division Glider Team",
+        # "creator_email": "nmfs.swfsc.esd-gliders@noaa.gov",
+        "institution": "NOAA National Marine Fisheries Service Southwest Fisheries Science Center", 
+        # "publisher_email": "nmfs.swfsc.esd-gliders@noaa.gov",
+        # "contributor_name": "Heidi Taylor, Jennifer Walsh, Anthony Cossio, Tegan Murray, Kourtney Burger, Cara Wilson, Samuel Woodman",
+        # "contributor_role": "Principal Investigator, Glider Pilot, Glider Pilot, Glider Pilot, Glider Pilot, Glider Pilot, Data Manager"
     }, 
 }
 
@@ -135,12 +136,12 @@ def update_glider_configs(config_directory: Path, new_bounds: dict, new_metadata
             continue
 
         # Pipeline transformations
-        data = add_profile_variables(data)
-        data = add_disclaimer_and_license(data)
-        data = update_bounds(data, new_bounds)
+        # data = add_profile_variables(data)
+        # data = add_disclaimer_and_license(data)
+        # data = update_bounds(data, new_bounds)
         data = update_metadata(data, new_metadata)
-        data = remove_deployment_id(data)
-        data = rename_deployment_min_dt(data)
+        # data = remove_deployment_id(data)
+        # data = rename_deployment_min_dt(data)
 
         
         # Sort the keys within the metadata dictionary alphabetically
