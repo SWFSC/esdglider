@@ -49,9 +49,11 @@ def _read_esdglider_yaml(yaml_name):
     """
     Safely and consistently read a yaml file from the esdglider data folder
     """
-    with as_file(files("esdglider.data") / yaml_name) as path:
-        with open(str(path), "r") as fin:
-            return yaml.safe_load(fin)
+    with (
+        as_file(files("esdglider.data") / yaml_name) as path,
+        open(path, "r") as fin,
+    ):
+        return yaml.safe_load(fin)
 
 
 def _get_instrument_attrs(
@@ -182,7 +184,7 @@ def make_deployment_yaml(
     sea_name = db_depl["Sea_Name"].values[0]
 
     # Get metadata info
-    metadata["deployment_id"] = str(glider_depl_id)
+    # metadata["deployment_id"] = str(glider_depl_id)
 
     # Filter the Devices table for this deployment
     db_devices = Deployment_Device[

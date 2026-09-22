@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 
 # Directory containing your glider YAML config files
-CONFIG_DIR = Path("/home/user/glider-processing/deployment-configs")
+CONFIG_DIR = Path("/home/user/glider-processing/deployment-configs/2026")
 # CONFIG_DIR = Path("/home/user/tests/amlr08-20220513")
 # CONFIG_DIR = Path("/home/user/tests/calanus-20241019")
 
@@ -33,28 +33,17 @@ NEW_BOUNDS = {
         "instrument_dmon": {"long_name": "WHOI Digital Acoustic Monitoring Instrument DMON"},
         "instrument_wispr": {"long_name": "WISPR Passive Acoustic Monitoring System "},
         "instrument_hydrophone": {"long_name": "Hydrophone for WISPR"},
-    }
+    }, 
 }
 
-NEW_CONFIG = {    
-    "profile_variables": {
-        "instrument_ctd": {"comment": "placeholder for pyglider profile extraction"},
-    },
+NEW_METADATA = {
     "metadata": {
-        "disclaimer": (
-            "This data may be redistributed and used without restriction.  "
-            "Data provided as is with no expressed or implied assurance "
-            "of quality assurance or quality control"
-        ), 
-        "license": (
-            "These data were produced by NOAA and are not "
-            "subject to copyright protection in the United States. "
-            "NOAA waives any potential copyright and related rights in thse data "
-            "worldwide through the Creative Commons Zero 1.0 Universal Public "
-            "Domain Dedication "
-            "(CC0-1.0, https://creativecommons.org/publicdomain/zero/1.0/)."
-        )
-    },
+        "creator_name": "NOAA SWFSC Ecosystem Science Division Glider Team",
+        "creator_email": "nmfs.swfsc.esd-gliders@noaa.gov",
+        "publisher_email": "nmfs.swfsc.esd-gliders@noaa.gov",
+        "contributor_name": "Heidi Taylor, Jennifer Walsh, Anthony Cossio, Tegan Murray, Kourtney Burger, Cara Wilson, Samuel Woodman",
+        "contributor_role": "Principal Investigator, Glider Pilot, Glider Pilot, Glider Pilot, Glider Pilot, Glider Pilot, Data Manager"
+    }, 
 }
 
 
@@ -79,7 +68,7 @@ def add_disclaimer_and_license(data: dict) -> dict:
         print("WARNING: 'metadata' section not found in data.")
     else:
         data["metadata"]["disclaimer"] = (
-            "This data may be redistributed and used without restriction.  "
+            "This data may be redistributed and used without restriction. "
             "Data provided as is with no expressed or implied assurance "
             "of quality assurance or quality control"
         )
@@ -92,6 +81,16 @@ def add_disclaimer_and_license(data: dict) -> dict:
             "(CC0-1.0, https://creativecommons.org/publicdomain/zero/1.0/)."
         )
 
+    return data
+
+
+def update_metadata(data: dict, updates: dict) -> dict:
+    """Updates key/value attributes for specific sections and returns data."""
+    print("Updating bounds for given sections and variables.")
+    for section_name, var_updates in updates.items():
+        if section_name in data and isinstance(data[section_name], dict):
+            # for var_name, bounds in var_updates.items():
+            data[section_name].update(var_updates)  
     return data
 
 
@@ -124,7 +123,7 @@ def rename_deployment_min_dt(data: dict) -> dict:
     return data
 
 
-def update_glider_configs(config_directory: Path, updates: dict):
+def update_glider_configs(config_directory: Path, new_bounds: dict, new_metadata: dict):
     yaml_files = find_yaml_files(config_directory)
 
     for file_path in yaml_files:
@@ -138,7 +137,8 @@ def update_glider_configs(config_directory: Path, updates: dict):
         # Pipeline transformations
         data = add_profile_variables(data)
         data = add_disclaimer_and_license(data)
-        data = update_bounds(data, updates)
+        data = update_bounds(data, new_bounds)
+        data = update_metadata(data, new_metadata)
         data = remove_deployment_id(data)
         data = rename_deployment_min_dt(data)
 
@@ -155,5 +155,5 @@ def update_glider_configs(config_directory: Path, updates: dict):
 
 
 if __name__ == "__main__":
-    update_glider_configs(CONFIG_DIR, NEW_BOUNDS)
+    update_glider_configs(CONFIG_DIR, NEW_BOUNDS, NEW_METADATA)
     
