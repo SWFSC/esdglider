@@ -6,7 +6,9 @@ import ast
 import logging
 import math
 import os
+from pathlib import Path
 import tempfile
+from datetime import datetime
 from importlib import metadata
 
 import numpy as np
@@ -117,6 +119,26 @@ def generate_timeseries(
     ancdir = glider_paths["ancillarydir"]
 
     deployment = pgutils._get_deployment(deploymentyaml)
+    start_date = deployment["metadata"].get("start_date", None)
+    if start_date is None:
+        _log.warning(
+            "start_date is not specified in deployment metadata. "
+            "All valid timestamps will be kept"
+        )
+    elif isinstance(start_date, datetime):
+        _log.debug("start_date read as datetime object - convert back to str")
+        start_date = (start_date.replace(tzinfo=None).isoformat() + "Z")
+    else:
+        if utils.parse_iso8601(start_date) is None:
+            _log.error(
+                "start_date (%s) is not in a valid ISO 8601 format in "
+                "deployment metadata",
+                start_date
+            )
+            raise ValueError(
+                "start_date is provided, but is not in a "
+                "valid ISO 8601 format in deployment metadata"
+            )
 
     # Check mode, set binary_search regex. Use uncompressed by default
     if mode == "delayed":
@@ -146,8 +168,14 @@ def generate_timeseries(
     if write_sci and sci_use_m_depth: 
         deployment = pgutils._get_deployment(deploymentyaml)
         if not "m_depth" in deployment['netcdf_variables']:
-            _log.error("If using sci_use_m_depth, m_depth variable must be in deployment netcdf_variables")
-            raise ValueError("m_depth variable is required in deployment netcdf_variables for sci_use_m_depth")
+            _log.error(
+                "If using sci_use_m_depth, m_depth variable "
+                "must be in deployment netcdf_variables"
+            )
+            raise ValueError(
+                "m_depth variable is required in deployment "
+                "netcdf_variables for sci_use_m_depth"
+            )
 
     # If writing any, remove plots
     if write_raw or write_eng or write_sci:
@@ -189,21 +217,22 @@ def generate_timeseries(
             prof_args=prof_args,
         )
 
-        # Run postprocessing
-        _log.info(f"Post-processing raw timeseries: {outname_tsraw}")
+        _log.info("Post-processing raw timeseries: %s", outname_tsraw)
         tsraw = xr.load_dataset(outname_tsraw)
 
+        # Attributes
         tsraw = postproc_attrs(
             tsraw, 
             mode, 
             file_info=file_info,
+            start_date=start_date, 
         )
         tsraw.attrs["comment"] = utils.append_string(
             tsraw.attrs["comment"], 
             (
                 "The variable names for this raw dataset are the glider "
-                + "sensor names. See the relevant masterdata file "
-                + "for sensor name details"
+                "sensor names. See the relevant masterdata file "
+                "for sensor name details"
             ), 
         )
 
@@ -288,6 +317,7 @@ def generate_timeseries(
             mode, 
             maxgap, 
             file_info=file_info,
+            start_date=start_date, 
             prof_summ=prof_summ,
             prof_index_attrs=prof_index_attrs,
         )
@@ -367,6 +397,7 @@ def generate_timeseries(
             maxgap, 
             sci_use_m_depth=sci_use_m_depth,
             file_info=file_info,
+            start_date=start_date, 
             drop_vars=drop_vars, 
             prof_summ=prof_summ,
             prof_index_attrs=prof_index_attrs,
@@ -421,20 +452,17 @@ def generate_timeseries(
     else:
         _log.info("Not writing timeseries nc")
 
-    if write_sci and run_checks:
-        _log.info("Checking flbbcd autoexec values, and cdom status")
-        check_flbbcd_autoexec(
-            xr.load_dataset(outname_tsraw)
-            # glider_paths["binarydir"], 
-            # glider_paths["cacdir"], 
-            # deploymentyaml,
-            # search=binary_search,
-        )
+    if run_checks:
+        _log.info("Checking cdom status, and flbbcd autoexec and PAR values")
 
-        tssci = xr.load_dataset(outname_tssci)
-        utils.check_cdom_date(tssci) #cdom_status = 
+        with xr.open_dataset(outname_tsraw) as tsraw:
+            check_flbbcd_autoexec(tsraw)
+
+        with xr.open_dataset(outname_tssci) as tssci:
+            utils.check_cdom_date(tssci)
+            utils.check_par(tssci)
             
-        _log.info("Done checks for flbbcd autoexec values and cdom status")
+        _log.info("Done checks")
 
     # --------------------------------------------
     return {
@@ -449,12 +477,13 @@ def postproc_attrs(
         mode: str, 
         *, 
         file_info: str | None = None,
+        start_date: str |None = None
     ) -> xr.Dataset:
     """
     Update attributes of xarray Dataset ds, including:
         - running pyglider's utils.fill_metadata
         - determining glider ID. The datetime is extracted from either 
-          'deployment_min_dt' attribute if it exists, 
+          'start_date' attribute if it exists, 
           or the first glider timestamp
         - setting 'title' as equivalent to 'id'
         - setting other ESD-specific attributes (e.g., license, file, history)
@@ -469,6 +498,8 @@ def postproc_attrs(
         Deployment mode, either 'rt' or 'delayed'
     file_info : str | None, optional
         Information about the processing file, by default None.
+    start_date : str | None, optional
+        The start date of the deployment in ISO 8601 format, by default None.
 
     Returns
     -------
@@ -477,40 +508,87 @@ def postproc_attrs(
     """
 
     # Rerun pyglider metadata functions, now that drop_bogus has been run,
-    # for the sake of times
-    # metadata and device info have already been added, so not needed here
-    ds = pgutils.fill_metadata(ds, {}, {})
+    # for the sake of times. 
+    # Metadata and device info have already been added, so not needed here
+    ds = pgutils.fill_metadata(ds, {}, {})    
 
-    # Determine the glider ID using min_dt, and check vs ID from time
-    time_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M")
-    if "deployment_min_dt" in ds.attrs:
-        min_dt64 = np.datetime64(ds.deployment_min_dt)
-        min_dt_str = min_dt64.item().strftime("%Y%m%dT%H%M")
-        if min_dt_str != time_str:
-            _log.warning(
-                "The dataset ID generated from the metadata (%s) "
-                + "is different from that generated from the time (%s)."
-                + "Using the ID from the metadata",
-                min_dt_str,
-                time_str,
-            )
+    # # Determine the glider ID using min_dt, and check vs ID from time
+    # time0_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M%S")
+    # if "start_date" in ds.attrs:
+    #     # min_dt64 = np.datetime64(ds.attrs["start_date"])
+    #     min_dt64 = utils.parse_iso8601(ds.attrs["start_date"])
+    #     min_dt_str = min_dt64.strftime("%Y%m%dT%H%M")
+    #     if min_dt_str != time0_str:
+    #         _log.warning(
+    #             "The dataset ID generated from the metadata (%s) "
+    #             "is different from that generated from the time (%s). "
+    #             "Using the ID from the metadata",
+    #             min_dt_str,
+    #             time0_str,
+    #         )
+    # else:
+    #     _log.info(
+    #         "There is no start_date attribute in the dataset. "
+    #         "Using the first time value for the ID."
+    #     )
+    #     min_dt_str = time0_str   
+
+    # Drop some attributes from pyglider we don't want to keep
+    attrs_to_drop = [
+        "deployment_start", 
+        "deployment_end", 
+    ]
+
+    time0_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M%S")
+    if start_date is None:
+        attrs_to_drop.append("start_date")
+        min_dt_str = time0_str
+
     else:
-        _log.info(
-            "There is no deployment_min_dt attribute in the dataset. "
-            + "Using the first time value for the ID."
-        )
-        min_dt_str = time_str
-        
+        ds.attrs["start_date"] = start_date
+        # Check glider ID with start_date vs ID from time0
+        min_dt64 = utils.parse_iso8601(start_date)
+        min_dt_str = min_dt64.strftime("%Y%m%dT%H%M%S")  # type: ignore
+        if min_dt_str != time0_str:
+            _log.warning(
+                "The time component of the dataset ID "
+                "generated from the metadata (%s) is demostrably "
+                "different from that generated from the time (%s). "
+                "Using the ID from the metadata",
+                min_dt_str,
+                time0_str,
+            )
+
+    for attr in attrs_to_drop:
+        ds.attrs.pop(attr, None)
+
     ds.attrs["id"] = f"{ds.attrs['glider_name']}-{min_dt_str}"
 
     # Other ESD-specific updates
-    # ds.attrs["id"] = utils.get_file_id_esd(ds)
     ds.attrs["title"] = ds.attrs["id"]
-    ds.attrs["license"] = (
-        "This data may be redistributed and used without restriction.  "
-        + "Data provided as is with no expressed or implied assurance "
-        + "of quality assurance or quality control"
-    )
+
+    attrs_z = [
+        "date_created", 
+        "date_issued", 
+        "time_coverage_end", 
+        "time_coverage_start", 
+    ]
+    for attr in attrs_z:
+        _log.debug("Checking attribute %s for Z suffix", attr)
+        if ds.attrs[attr].endswith("Z"):
+            _log.debug("The attribute string ends with Z")
+        else:
+            _log.debug("The attribute string does not end with Z")
+            dt = utils.parse_iso8601(ds.attrs[attr])
+            if dt:
+                ds.attrs[attr] = (dt.isoformat() + "Z")
+            else:
+                _log.error(
+                    "The attribute %s (%s) is not in a valid ISO 8601 format",
+                    attr,
+                    ds.attrs[attr], 
+                )
+
     
     if file_info is None:
         file_info = "netCDF files created using"
@@ -518,9 +596,9 @@ def postproc_attrs(
         [
             f"deployment_name={ds.deployment_name}",
             f"mode={mode}",
-            f"dbdreader v{metadata.version('dbdreader')}",
-            f"pyglider v{metadata.version('pyglider')}",
             f"esdglider v{metadata.version('esdglider')}",
+            f"pyglider v{metadata.version('pyglider')}",
+            f"dbdreader v{metadata.version('dbdreader')}",
         ],
     )
 
@@ -533,6 +611,7 @@ def postproc_tsl1(
     maxgap: int, 
     *, 
     file_info: str | None = None,
+    start_date: str | None = None,
     drop_vars: list | None = None,
     prof_summ: pd.DataFrame | None = None,
     prof_index_attrs: dict | None = None,
@@ -541,7 +620,7 @@ def postproc_tsl1(
     Post-processing steps shared by both the L1 timeseries (sci and eng):
         - dropping bogus times, meaning times:
             - before 1970-01-01
-            - before the deployment start (if specified via attr 'deployment_min_dt')
+            - before the deployment start (if specified via attr 'start_date')
             - after the current time
         - dropping bogus values (utils.drop_bogus)
         - dropping data 'rows' where a variable specified in 'drop_vars'
@@ -564,6 +643,8 @@ def postproc_tsl1(
         The maximum allowed gap (in seconds) for interpolation.
     file_info : str | None, optional
         Information about the processing file, by default None.
+    start_date : str | None, optional
+        Passed to postproc_attrs
     drop_vars : list | None, optional
         List of variables for which to drop the whole timestamp 
         if they contain NaN values, by default None
@@ -581,11 +662,11 @@ def postproc_tsl1(
     # DROP BOGUS VALUES
     # Remove times that are nan / <min_dt / >current time, and drop other bogus values
     _log.info("The given timeseries has %s data points", ds.time.shape[0])
-    if "deployment_min_dt" in ds.attrs:
-        min_dt = ds.deployment_min_dt
-    else:
-        min_dt = "1970-01-01"
-    ds = utils.drop_bogus(ds, min_dt=min_dt, max_drop=True)
+    ds = utils.drop_bogus(
+        ds, 
+        min_dt=start_date or "1970-01-01", #1970-01-01 if None
+        max_drop=True
+    )
 
     # Check for and verbosely remove any duplicated timestamps
     ds_index = ds.get_index("time")
@@ -593,8 +674,8 @@ def postproc_tsl1(
         df_dup = ds_index.duplicated()
         _log.warning(
             "There are %d duplicated timestamps in the current dataset. "
-            + "The second of the duplicated timestamps will be dropped. "
-            + "Indexes, of the original dataset: %s",
+            "The second of the duplicated timestamps will be dropped. "
+            "Indexes, of the original dataset: %s",
             df_dup.sum(),
             ", ".join([str(i[0]) for i in np.argwhere(df_dup)]),  # type: ignore
         )
@@ -616,7 +697,7 @@ def postproc_tsl1(
                 if any(ds.depth.values[var_nan] >= 5):
                     _log.warning(
                         "Some nan %s values that will be "
-                        + "dropped have a depth >=5",
+                        "dropped have a depth >=5",
                         var
                     )
                 ds = ds.where(~np.isnan(ds[var]), drop=True)
@@ -638,14 +719,14 @@ def postproc_tsl1(
         _log.debug("Profile info not provided - skipping profiles")
 
     # ATTRIBUTES
-    ds = postproc_attrs(ds, mode, file_info=file_info)
+    ds = postproc_attrs(ds, mode, file_info=file_info, start_date=start_date)
 
     # Update attribute specific to eng and sci timeseries
     ds.attrs["processing_level"] = (
         "Level 1 (L1) processed data timeseries. "
-        + "Values have been interpolated via linear fill, "
-        + f"with a maxgap of {maxgap} seconds. "
-        + "Minimal data screening."
+        "Values have been interpolated via linear fill, "
+        f"with a maxgap of {maxgap} seconds. "
+        "Minimal data screening."
     )
 
     return ds
@@ -657,6 +738,7 @@ def postproc_tsl1_eng(
     maxgap: int, 
     *, 
     file_info: str | None = None,
+    start_date: str | None = None,
     prof_summ: pd.DataFrame | None = None,
     prof_index_attrs: dict | None = None,
 ) -> xr.Dataset:
@@ -676,6 +758,8 @@ def postproc_tsl1_eng(
         The maximum allowed gap (in seconds) for interpolation.
     file_info : str | None, optional
         Information about the processing file, by default None
+    start_date : str | None, optional
+        Passed through to postproc_attrs
     prof_summ : pd.DataFrame | None, optional
         Profile summary DataFrame, by default None
     prof_index_attrs : dict | None, optional
@@ -706,6 +790,7 @@ def postproc_tsl1_eng(
         mode=mode, 
         maxgap=maxgap, 
         file_info=file_info,
+        start_date=start_date, 
         prof_summ=prof_summ,
         prof_index_attrs=prof_index_attrs,
     )
@@ -726,6 +811,7 @@ def postproc_tsl1_sci(
         sci_use_m_depth: bool,
         *,
         file_info: str | None = None,
+        start_date: str | None = None,
         drop_vars: list | None = None,
         prof_summ: pd.DataFrame | None = None,
         prof_index_attrs: dict | None = None,
@@ -746,6 +832,8 @@ def postproc_tsl1_sci(
         The maximum allowed gap (in seconds) for interpolation.
     file_info : str | None, optional
         Information about the processing file, by default None.
+    start_date : str | None, optional
+        Passed through to postproc_attrs
     drop_vars : list | None, optional
         List of variables for which to drop the whole timestamp 
         if they contain NaN values, by default None
@@ -785,6 +873,7 @@ def postproc_tsl1_sci(
         mode=mode,
         maxgap=maxgap,
         file_info=file_info,
+        start_date=start_date,
         drop_vars=drop_vars,
         prof_summ=prof_summ,
         prof_index_attrs=prof_index_attrs,
@@ -902,13 +991,7 @@ def _run_pyglider_gridding(inname, glider_paths) -> dict:
     return outnames
 
 
-def check_flbbcd_autoexec(
-    ds
-    # binarydir, 
-    # cacdir, 
-    # deploymentyaml,
-    # search="*.[Dd|Ee][Bb][Dd]",
-):
+def check_flbbcd_autoexec(ds: xr.Dataset):
     """
     Check...
 
@@ -971,6 +1054,13 @@ def check_flbbcd_autoexec(
  
     #         sensor_data = dbd.get(*flbbcd_cal_names, return_nans=False)
     #         cal_values = [np.unique(i[1]) for i in sensor_data]
+            if not all(key in ds for key in flbbcd_cal_names):
+                _log.warning(
+                    "Not all required FLBBCD calibration keys are present "
+                    + "in the dataset. Ending check"
+                )
+                return 
+
             cal_values = [np.unique(ds[i].values) for i in flbbcd_cal_names]
             cal_values = [arr[~np.isnan(arr)] for arr in cal_values]
             if not all(len(item) == 1 for item in cal_values):
@@ -1382,3 +1472,199 @@ def complete_profile_correction(
             encoding={'time': time_encoding}
         )
         _log.info("Wrote science timeseries with new profiles to %s", glider_paths["tsscipath"])
+
+
+def update_ngdac_profile_attributes(
+    ds,
+    deployment,
+    trajectory,
+):
+    """
+    Apply ESD-specific metadata updates to a pyglider NGDAC profile.
+
+    Updates the trajectory, platform, and instrument metadata and removes
+    instrument metadata stored as global attributes. Returns the updated
+    xarray Dataset without modifying the source NetCDF file in place.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Profile dataset created by pyglider.
+    deployment : dict
+        Deployment configuration loaded from the deployment YAML.
+    trajectory : str
+        Deployment trajectory ID from the science timeseries NetCDF.
+
+    Returns
+    -------
+    xarray.Dataset
+        Updated profile dataset containing ESD-specific metadata.
+    """
+
+    # # COPY DATASET BEFORE MODIFYING
+    # ds = ds.copy()
+
+    # LOAD DEPLOYMENT METADATA
+    meta = deployment["metadata"]
+    instrument_meta = deployment["glider_devices"]
+
+    # TRAJECTORY
+    # ESD USES THE DEPLOYMENT ID FROM THE SCIENCE TIMESERIES
+    ds["trajectory"] = xr.DataArray(
+        np.bytes_(trajectory)
+    )
+
+    ds["trajectory"].attrs.update(
+        {
+            "cf_role": "trajectory_id",
+            "comment": (
+                "A trajectory is a single deployment of a glider "
+                "and may span multiple data files."
+            ),
+            "long_name": "Trajectory/Deployment Name",
+        }
+    )
+
+    # PLATFORM
+    ds["platform"].attrs["id"] = meta["glider_name"]
+
+    # LIST ALL INSTRUMENTS DEFINED IN glider_devices
+    instrument_str = ", ".join(
+        instrument_meta.keys()
+    )
+
+    ds["platform"].attrs["instrument"] = instrument_str
+
+    ds["platform"].attrs["long_name"] = (
+        f"{meta['glider_model']} "
+        f"{meta['glider_name']}"
+    )
+
+    # REMOVE INSTRUMENT GLOBAL ATTRIBUTES
+    # Instrument metadata are stored on instrument variables instead.
+    for attr_name in list(ds.attrs):
+        if attr_name.startswith("instrument_"):
+            del ds.attrs[attr_name]
+
+    # INSTRUMENTS
+    for name, attrs in instrument_meta.items():
+
+        # pyglider ALREADY CREATES instrument_ctd
+        # CREATE ADDITIONAL ESD INSTRUMENT VARIABLES
+        if name not in ds.variables:
+            ds[name] = xr.DataArray(
+                np.int32(1)
+            )
+
+        # APPLY INSTRUMENT METADATA FROM glider_devices
+        for attr_name, attr_value in attrs.items():
+
+            # _FillValue IS HANDLED THROUGH NETCDF ENCODING
+            if attr_name == "_FillValue":
+                continue
+
+            ds[name].attrs[attr_name] = attr_value
+
+    return ds
+
+
+def create_ngdac_profiles(
+    inname,
+    outdir,
+    deploymentyaml,
+    force=False,
+):
+    """
+    Create NGDAC profile NetCDF files from a science timeseries NetCDF.
+
+    Individual profiles are created using pyglider's
+    ``extract_timeseries_profiles`` function in a temporary directory.
+    Each profile is updated with ESD-specific NGDAC metadata and written
+    as a new NetCDF file using the glider name and profile timestamp.
+    The input science NetCDF is expected to have already undergone QARTOD
+    quality control.
+
+    Parameters
+    ----------
+    inname : str or Path
+        Science timeseries NetCDF file to break into profiles.
+    outdir : str or Path
+        Directory where final profile NetCDF files are written.
+    deploymentyaml : str or Path
+        Deployment YAML file used to create the timeseries NetCDF.
+    force : bool, default False
+        Force overwriting existing profile NetCDF files.
+
+    Returns
+    -------
+    None
+    """
+
+    # READ DEPLOYMENT CONFIGURATION
+    with open(deploymentyaml) as fin:
+        deployment = yaml.safe_load(fin)
+
+    # GET GLIDER NAME FOR PROFILE FILENAMES
+    glider_name = deployment["metadata"]["glider_name"]
+
+    # GET DEPLOYMENT TRAJECTORY ID FROM SCIENCE NETCDF
+    with xr.open_dataset(inname) as ds:
+        trajectory = ds.attrs["id"]
+
+    # CREATE OUTPUT DIRECTORY
+    outdir = Path(outdir)
+    outdir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    # CREATE A TEMPORARY DIRECTORY FOR pyglider OUTPUT
+    with tempfile.TemporaryDirectory() as temp_dir:
+
+        # CREATE INDIVIDUAL PROFILE NETCDF FILES USING pyglider
+        pgncprocess.extract_timeseries_profiles(
+            str(inname),
+            temp_dir,
+            [str(deploymentyaml)],
+            force=True,
+        )
+
+        # FIND THE PROFILE FILES CREATED BY pyglider
+        profile_files = sorted(
+            Path(temp_dir).glob("*.nc")
+        )
+
+        # PROCESS EACH PROFILE
+        _log.info("Processing %d profile files generated by pyglider", len(profile_files))
+        for profile_file in profile_files:
+            _log.debug("Processing profile file: %s", profile_file)
+            # GET PROFILE TIMESTAMP FROM pyglider FILENAME
+            profile_timestamp = profile_file.stem.split("-", 1)[1]
+
+            # CREATE FINAL ESD FILENAME
+            outname = outdir / f"{glider_name}-{profile_timestamp}.nc"
+            _log.debug("ESD filename: %s", outname)
+
+            # CHECK WHETHER FINAL FILE ALREADY EXISTS
+            if outname.exists() and not force:
+                _log.warning(
+                    "%s already exists. Use force=True to overwrite.",
+                    outname,
+                )
+                continue
+            
+            # APPLY ESD-SPECIFIC METADATA
+            with xr.open_dataset(
+                profile_file,
+                decode_times=False,
+            ) as ds:
+                ds_new = update_ngdac_profile_attributes(
+                    ds,
+                    deployment,
+                    trajectory,
+                )
+
+                ds_new.to_netcdf(
+                    outname,
+                    mode="w",
+                )

@@ -1,15 +1,15 @@
 # import datetime
 from datetime import datetime
+import json
 import logging
-import os
 from PIL import Image
 from PIL.ExifTags import TAGS
-import json
+import os
 
 import numpy as np
 import pandas as pd
 
-import esdglider.utils as utils
+from esdglider import utils
 
 # from glidertools.optics import sunset_sunrise
 # from timezonefinder import TimezoneFinder
@@ -127,40 +127,29 @@ def imagery_timeseries(ds, img_paths):
         DataFrame: pd.DataFrame of imagery timeseries
     """
 
-    deployment = ds.attrs["deployment_name"]
+    deployment_name = ds.attrs["deployment_name"]
     # imagedir = img_paths["imagedir"]
     metadir = img_paths["metadir"]
     ancdir = img_paths["ancdir"]
     
-    _log.info(f"Creating imagery ancillary data file for {deployment}")
+    _log.info("Creating imagery ancillary data file for %s", deployment_name)
     # _log.info(f"Using images directory {imagedir}")
-    _log.info(f"Using image metadata directory {metadir}")
+    _log.info("Using image metadata directory %s", metadir)
 
     csv_file =  img_paths["imgcsv"]
     if os.path.isfile(csv_file):
-        _log.info(f"Deleting old imagery ancillary data file: {csv_file}")
+        _log.info("Deleting old imagery ancillary data file: %s", csv_file)
         os.remove(csv_file)
 
-    # # --------------------------------------------
-    # # Checks
-    # if not os.path.isdir(imagedir):
-    #     raise FileNotFoundError(f"{imagedir} does not exist")
-    # else:
-    #     # NOTE: this should probably be a separate function, and return a tuple
-    #     filepaths = glob.glob(f"{imagedir}/**/*.{ext}", recursive=True)
-    #     _log.debug(f"Found {len(filepaths)} files with the extension {ext}")
-    #     if len(filepaths) == 0:
-    #         _log.error(
-    #             "Zero image files were found. Did you provide "
-    #             + "the right path, and use the right file extension?",
-    #         )
-    #         raise ValueError("No files for which to generate ancillary data")
-    #     imagery_files = [os.path.basename(path) for path in filepaths]
-    #     imagery_dirs = [os.path.basename(os.path.dirname(path)) for path in filepaths]
 
     # --------------------------------------------
     # Extract info from imagery file names
     _log.debug("Processing imagery file names")
+    if not os.path.isfile(img_paths["imgmetapath"]):
+        _log.error("Image metadata file not found: %s", img_paths['imgmetapath'])
+        _log.error("Exiting function")
+        return
+    
     df = get_solocam_dt(img_paths["imgmetapath"])
 
 
@@ -200,8 +189,6 @@ def imagery_timeseries(ds, img_paths):
     #     [solocam_filename_dt(i, dt_idx_start) for i in imagery_files],
     # )
 
-    # # TODO: filter for dates after deployment_min_dt?
-
     # df = pd.DataFrame(
     #     data={
     #         "img_file": imagery_files,
@@ -213,92 +200,88 @@ def imagery_timeseries(ds, img_paths):
     # --------------------------------------------
     # Create ancillary data file
     _log.info("Interpolating glider data to image timestamps")
-    ds_prof = ds[["profile_index", "profile_direction"]]
-
-    # Must filter df.time for times >= start of ds_prof.time
-    img_times = df.time[df.time >= min(ds_prof.time.values)].values
-    ds_sel = ds_prof.reindex(time=img_times, method="pad")
-    df = df.join(ds_sel.to_pandas(), on="time", how="left")
-
-    # For each variable that exists, extract interpolated values to df
-    ds_interp = ds.interp(time=df.time.values)
-    # NOTE: ds.interp 'account for' nans, meaning if nans are the previous
-    # timestamp they are interpolated through. This is what we want,
-    # because the timeseries has had max_gap applied
-
     vars_toignore = [
-        # handled above
         "profile_index",
         "profile_direction",
-        # in standard ESD datasets, but not necessary here
+        "trajectory", 
         "distance_over_ground",
         "waypoint_latitude",
         "waypoint_longitude",
         "water_velocity_eastward",
         "water_velocity_northward",
     ]
-    vars_list = [var for var in list(ds.data_vars) if var not in vars_toignore]
+    vars_list = [var for var in ds.data_vars if var not in vars_toignore]
+    qc_vars = [var for var in vars_list if var.endswith("_qc")]
+    linear_vars = [var for var in vars_list if not var.endswith("_qc")]
 
-    for var in vars_list:
-        _log.debug(f"Interpolating var {var}")
-        if var not in list(ds_interp.keys()):
-            _log.debug(f"{var} not present in ds - skipping interp")
-            continue
-        df[var] = ds_interp[var].values
+    ds_prof = ds[["profile_index", "profile_direction"]]
+    # ds_interp = ds.interp(time=df.time.values)
+
+    # Must filter df.time for times >= start of ds_prof.time
+    img_times = df.time[df.time >= min(ds_prof.time.values)].values
+    ds_sel = ds_prof.reindex(time=img_times, method="pad")
+    df = df.join(ds_sel.to_pandas(), on="time", how="left")
+    target_times = df.time.values
+
+    # Perform linear interpolation for continuous variables
+    # This natively returns NaN for any point surrounded by or adjacent to NaN
+    # This is what we want, because the timeseries has had max_gap applied
+    _log.info("Interpolating continuous environmental data (linear)")
+    ds_linear = ds[linear_vars].interp(
+        time=target_times,
+        method="linear",
+        kwargs={"fill_value": np.nan},
+    )
+    for var in linear_vars:
+        df[var] = ds_linear[var].values
+
+    # Perform nearest-neighbor interpolation for QC flags
+    if qc_vars:
+        _log.info("Interpolating QC flags (nearest-neighbor)")
+        ds_qc = ds[qc_vars].interp(
+            time=target_times,
+            method="nearest",
+            kwargs={"fill_value": np.nan},
+        )
+        for var in qc_vars:
+            df[var] = ds_qc[var].values
+    # _log.info("Interpolating QC flags (nearest-neighbor)")
+    # ds_nearest = ds.interp(
+    #     time=df.time.values,
+    #     method="nearest",
+    #     kwargs={"fill_value": np.nan},
+    # )
+
+    # # Add variables to output data frame
+    # for var in vars_list:
+    #     _log.debug(f"Interpolating var {var}")
+    #     if var not in list(ds_linear.keys()):
+    #         _log.debug(f"{var} not present in ds - skipping interp")
+    #         continue
+    #     if var.endswith("_qc"):
+    #         df[var] = ds_nearest[var].values
+    #     else:
+    #         df[var] = ds_linear[var].values
+
 
     _log.info("Determining mask for invalid values")
     time_mask = (
-        ~np.isnan(ds_interp["time"])
-        & ~np.isnan(ds_interp["latitude"])
-        & ~np.isnan(ds_interp["longitude"])
+        ~np.isnan(ds_linear["time"])
+        & ~np.isnan(ds_linear["latitude"])
+        & ~np.isnan(ds_linear["longitude"])
     )
-    ds_interp_ll = ds_interp.where(time_mask, drop=True)
-
-    # su, sd = sunset_sunrise(
-    #     ds_interp_ll.time.values,
-    #     ds_interp_ll.latitude.values,
-    #     ds_interp_ll.longitude.values,
-    # )
-    # su_full = np.full(ds_interp.time.shape[0], np.nan, dtype='datetime64[us]')
-    # su_full[ll_mask] = su
-    # df["sunrise_utc"] = su_full
-    # sd_full = np.full(ds_interp.time.shape[0], np.nan, dtype='datetime64[us]')
-    # sd_full[ll_mask] = sd
-    # df["sunset_utc"] = sd_full
-
-    # # Calculate local timezone, based on lat/lon
-    # _log.info("Calculating local timezone string")
-    # tf = TimezoneFinder()
-    # tz = [
-    #     tf.timezone_at(lat=i.item(), lng=j.item())
-    #     for i, j in zip(ds_interp_ll['latitude'], ds_interp_ll['longitude'])
-    # ]
-
-    # tz_full = np.full(ds_interp.time.shape[0], np.nan, dtype='object')
-    # tz_full[time_mask] = tz
-    # df["tz"] = tz_full
-
-    # # Calculate utc offset as an integer, based on date and local tz
-    # _log.info("Calculating local utc offset as an integer")
-    # utc_offset = np.array([
-    #     utils.get_utc_offset_integer(i, j.astype(datetime.datetime))
-    #     for i, j in zip(tz, ds_interp_ll['time'].values)
-    # ])
-
-    # utc_offset_full = np.full(ds_interp.time.shape[0], np.nan, dtype='object')
-    # utc_offset_full[time_mask] = utc_offset
-    # df["tz_utc_offset"] = utc_offset_full
+    ds_linear_ll = ds_linear.where(time_mask, drop=True)
 
     # Calculate sunrise and sunset
     su, sd, tl = utils.get_sunrise_sunset(
-        time=ds_interp_ll["time"].values,
-        lat=ds_interp_ll["latitude"].values,
-        lon=ds_interp_ll["longitude"].values,
+        time=ds_linear_ll["time"].values,
+        lat=ds_linear_ll["latitude"].values,
+        lon=ds_linear_ll["longitude"].values,
     )
 
-    su_full = np.full(ds_interp.time.shape[0], np.nan, dtype="datetime64[us]")
-    sd_full = np.full(ds_interp.time.shape[0], np.nan, dtype="datetime64[us]")
-    tl_full = np.full(ds_interp.time.shape[0], np.nan, dtype="datetime64[us]")
+    su_full = np.full(ds_linear.time.shape[0], np.nan, dtype="datetime64[us]")
+    sd_full = np.full(ds_linear.time.shape[0], np.nan, dtype="datetime64[us]")
+    tl_full = np.full(ds_linear.time.shape[0], np.nan, dtype="datetime64[us]")
 
     su_full[time_mask] = su
     sd_full[time_mask] = sd

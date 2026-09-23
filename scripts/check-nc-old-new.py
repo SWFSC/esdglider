@@ -25,21 +25,18 @@ mounts = ["amlr-gliders-deployments-dev", "swfscesd-glider-deployments-data-out"
 for i in mounts:
     gcp.gcs_mount_bucket(i, str(home / f"mnt-gcs/{i}/"), ro=True)
 
-# deployment_name = "calanus-20241019"
-deployment_name = "amlr08-20220513"
+deployment_name = "calanus-20241019"; year = "2024"; project="ECOSWIM"
+# deployment_name = "amlr08-20220513"; year = "2022"; project="SANDIEGO"
 # deployment_name = "stenella-20250414"
-year = "2022"
-project="SANDIEGO"
 
 # NOTE: OLD DIR expects old dir structure (.../data/processed-L1/...)
-OLD_USE_NEW = True  # Set to True if the old directory structure is the new one (e.g., processed-L0, processed-L1, processed-L3, ancillary-products)
-OLD_BASE_DIR = (
-    home / f"tests/{deployment_name}"
-    # home / "mnt-gcs" / "amlr-gliders-deployments-dev" / project
-    / year / deployment_name
-)
+# Set to True if the old directory structure is the new one (e.g., processed-L0, processed-L1, processed-L3, ancillary-products)
+OLD_USE_NEW = True; OBD_PRE=home / f"tests/{deployment_name}"
+# OLD_USE_NEW = False; OBD_PRE=home / "mnt-gcs" / "amlr-gliders-deployments-dev" / project
+OLD_BASE_DIR = OBD_PRE / year / deployment_name
+
 NEW_BASE_DIR = (
-    home / ("mnt-gcs/swfscesd-glider-deployments-data-out")
+    home / "mnt-gcs" / "swfscesd-glider-deployments-data-out"
     # home / f"tests/{deployment_name}"
     / year / deployment_name
 )
@@ -56,6 +53,15 @@ DATASETS = [
     f"{deployment_name}_grid-delayed-1m.nc",
     f"{deployment_name}_grid-delayed-5m.nc",
     f"{deployment_name}-delayed-profiles.csv", 
+    f"{deployment_name}-delayed-profiles.csv", 
+    f"{deployment_name}-imagery-ancillary.csv", 
+    f"echoview/{deployment_name}-climb-regions.evr",
+    f"echoview/{deployment_name}-regions.csv",
+    f"echoview/{deployment_name}.gps.csv",
+    f"echoview/{deployment_name}.roll.csv",
+    f"echoview/{deployment_name}-dive-regions.evr",
+    f"echoview/{deployment_name}.depth.evl",
+    f"echoview/{deployment_name}.pitch.csv", 
 ]
 
 # Print non-unioned timestamps if the time dimension differs
@@ -79,34 +85,25 @@ CHECK_ATTRIBUTES = True  # Compare global and variable metadata
 def get_old_path(dataset_id: str, use_new: bool = False) -> Path | None:
     """Returns absolute path to OLD file given a dataset identifier."""
     if use_new:        
-        if "raw" in dataset_id:
-            path_out = OLD_BASE_DIR / "processed-L0" / dataset_id
-        elif "eng" in dataset_id or "sci" in dataset_id:
-            path_out = OLD_BASE_DIR / "processed-L1" / dataset_id
-        elif "grid" in dataset_id:
-            path_out = OLD_BASE_DIR / "processed-L3" / dataset_id
-        elif ".csv" in dataset_id:
-            path_out = OLD_BASE_DIR / "ancillary-products" / dataset_id
-        else:
-            print("dataset_id syntax not recognized")
-            path_out = None
-
+        path_out = get_new_path(dataset_id, OLD_BASE_DIR)
     else:
         path_out = OLD_BASE_DIR / "data" / "processed-L1" / dataset_id
 
     return path_out
 
 
-def get_new_path(dataset_id: str) -> Path | None:
+def get_new_path(dataset_id: str, base_dir: Path) -> Path | None:
     """Returns absolute path to NEW file given a dataset identifier."""
     if "raw" in dataset_id:
-        path_out = NEW_BASE_DIR / "processed-L0" / dataset_id
+        path_out = base_dir / "processed-L0" / dataset_id
     elif "eng" in dataset_id or "sci" in dataset_id:
-        path_out = NEW_BASE_DIR / "processed-L1" / dataset_id
+        path_out = base_dir / "processed-L1" / dataset_id
     elif "grid" in dataset_id:
-        path_out = NEW_BASE_DIR / "processed-L3" / dataset_id
-    elif ".csv" in dataset_id:
-        path_out = NEW_BASE_DIR / "ancillary-products" / dataset_id
+        path_out = base_dir / "processed-L3" / dataset_id
+    # elif "echoview" in dataset_id:
+    #     path_out = NEW_BASE_DIR / "ancillary-products" / dataset_id
+    elif ".csv" in dataset_id or "echoview" in dataset_id:
+        path_out = base_dir / "ancillary-products" / dataset_id
     else:
         print("dataset_id syntax not recognized")
         path_out = None
@@ -412,10 +409,70 @@ def compare_csv_files(
     return meta_diffs, struct_diffs, value_diffs
 
 
+def compare_text_files(
+    old_path: Path,
+    new_path: Path,
+    max_line_diffs_to_print: int = 10,
+) -> tuple[list[str], list[str], list[str]]:
+    """Compares two text files (.evl, .evr, etc.) line-by-line and returns (meta_diffs, struct_diffs, value_diffs)."""
+    meta_diffs = []
+    struct_diffs = []
+    value_diffs = []
+
+    try:
+        with open(old_path, "r", encoding="utf-8", errors="replace") as f_old:
+            lines_old = f_old.readlines()
+        with open(new_path, "r", encoding="utf-8", errors="replace") as f_new:
+            lines_new = f_new.readlines()
+    except Exception as e:
+        struct_diffs.append(f"Error reading text files: {e}")
+        return meta_diffs, struct_diffs, value_diffs
+
+    # 1. Line count check (Structural)
+    if len(lines_old) != len(lines_new):
+        struct_diffs.append(
+            f"Line count mismatch: OLD has {len(lines_old)} lines, NEW has {len(lines_new)} lines."
+        )
+
+    # 2. Line-by-line comparison (Data Values)
+    mismatches = []
+    min_len = min(len(lines_old), len(lines_new))
+
+    for idx in range(min_len):
+        l_old = lines_old[idx].rstrip("\r\n")
+        l_new = lines_new[idx].rstrip("\r\n")
+        if l_old != l_new:
+            mismatches.append(
+                f"Line {idx + 1}:\n        OLD: {l_old}\n        NEW: {l_new}"
+            )
+
+    if mismatches:
+        diff_msg = [
+            f"Content mismatches found across {len(mismatches)} line(s):"
+        ]
+        limit = (
+            min(max_line_diffs_to_print, len(mismatches))
+            if max_line_diffs_to_print
+            else len(mismatches)
+        )
+
+        for m in mismatches[:limit]:
+            diff_msg.append(f"      - {m}")
+
+        if max_line_diffs_to_print and len(mismatches) > max_line_diffs_to_print:
+            diff_msg.append(
+                f"      - ... (+{len(mismatches) - max_line_diffs_to_print} more line mismatches)"
+            )
+
+        value_diffs.append("\n".join(diff_msg))
+
+    return meta_diffs, struct_diffs, value_diffs
+
+
 def process_dataset(dataset_id: str, old_use_new: bool = False) -> str:
     """Identifies file extension, opens files with the appropriate library, and compares them."""
     old_file = get_old_path(dataset_id, use_new=old_use_new)
-    new_file = get_new_path(dataset_id)
+    new_file = get_new_path(dataset_id, NEW_BASE_DIR)
 
     if old_file is None or new_file is None:
         return "MISSING"
@@ -456,6 +513,12 @@ def process_dataset(dataset_id: str, old_use_new: bool = False) -> str:
             new_file,
             atol=ATOL,
             rtol=RTOL,
+        )
+    elif file_ext in (".evl", ".evr"):
+        print(f"Analyzing text file ({file_ext}) line-by-line...")
+        meta_diffs, struct_diffs, value_diffs = compare_text_files(
+            old_file,
+            new_file,
         )
     else:
         print(f"ERROR: Unsupported file format '{file_ext}' for {dataset_id}")

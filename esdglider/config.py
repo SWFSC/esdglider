@@ -2,17 +2,17 @@ import logging
 import os
 from importlib.resources import as_file, files
 
-import numpy as np
 import pandas as pd
-from sqlalchemy.engine import Connectable
 import yaml
 from google.cloud import storage
+from sqlalchemy.engine import Connectable
 
 # from esdglider.acoustics import get_path_acoustics_deployment
-from esdglider.gcp import check_gcs_file_exists, check_gcs_directory_exists
-from esdglider.paths import get_path_glider, get_path_imagery 
+from esdglider.gcp import check_gcs_directory_exists, check_gcs_file_exists
+from esdglider.paths import get_path_glider, get_path_imagery
+
 # from esdglider.imagery import get_path_imagery_deployment
-from esdglider.utils import split_deployment, year_path, dataframe_col_reorder
+from esdglider.utils import dataframe_col_reorder, get_glider_name, get_path_year
 
 _log = logging.getLogger(__name__)
 
@@ -49,9 +49,11 @@ def _read_esdglider_yaml(yaml_name):
     """
     Safely and consistently read a yaml file from the esdglider data folder
     """
-    with as_file(files("esdglider.data") / yaml_name) as path:
-        with open(str(path), "r") as fin:
-            return yaml.safe_load(fin)
+    with (
+        as_file(files("esdglider.data") / yaml_name) as path,
+        open(path, "r") as fin,
+    ):
+        return yaml.safe_load(fin)
 
 
 def _get_instrument_attrs(
@@ -182,7 +184,7 @@ def make_deployment_yaml(
     sea_name = db_depl["Sea_Name"].values[0]
 
     # Get metadata info
-    metadata["deployment_id"] = str(glider_depl_id)
+    # metadata["deployment_id"] = str(glider_depl_id)
 
     # Filter the Devices table for this deployment
     db_devices = Deployment_Device[
@@ -221,12 +223,11 @@ def make_deployment_yaml(
             if key == "par":
                 netcdf_vars.pop("par", None)
 
-    deployment_split = split_deployment(deployment_name)
     metadata["deployment_name"] = deployment_name
     metadata["os_version"] = str(db_depl["Software_Version"].values[0])
     metadata["project"] = project
     metadata["sea_name"] = sea_name
-    metadata["glider_name"] = deployment_split[0]
+    metadata["glider_name"] = get_glider_name(deployment_name)
     if not any(db_devices["Device_Type"] == "Teledyne Glider Slocum G3"):
         raise ValueError(
             "No device 'Teledyne Glider Slocum G3'. Please add to the build",
@@ -244,8 +245,9 @@ def make_deployment_yaml(
     #     metadata["sea_name"] = "<sea name>"
 
     deployment_yaml = {
-        "metadata": dict(sorted(metadata.items(), key=lambda v: v[0].upper())),
-        "glider_devices": instruments,
+        # "metadata": dict(sorted(metadata.items(), key=lambda v: v[0].upper())),
+        "metadata": dict(sorted(metadata.items())),
+        "glider_devices": dict(sorted(instruments.items())),
         "netcdf_variables": netcdf_vars,
         "profile_variables": prof_vars,
     }
@@ -335,7 +337,7 @@ def make_website_yaml(
         deployment_name = d["Deployment_Name"]
         _log.info("Working on deployment %s", deployment_name)
         # project = d["Project"]
-        year = year_path(deployment_name)
+        year = get_path_year(deployment_name)
         mode = "delayed"
         path_pre = os.path.join(year, deployment_name).replace("\\", "/")
         # paths_acoustics = get_path_acoustics_deployment(path_pre, deployment_name, mode)

@@ -8,24 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Module and function restructuring
 - Changed the name of the module `glider` to `slocum`, to reflect that this module is specific to slocum data (#39). Also, split the slocum module into submodules: `core`, `pipeline`, and `rt`. `core` contains functions that may be generally applicable to others processing slocum data, `pipeline` contains functions that are specific to ESD pipelines, and `rt` contains functions specific to slocum rt data efforts. (#46)
-- Changed `slocum.pipline.binary_to_nc` to be split into separate functions for generating timeseries (`genertate_timeseries`) and gridded (`generate_gridded`) netcdf files. This allows for timeseries corrections to more easily be performed before gridding.
-- Added the arguments `sci_use_m_depth` and `run_qc` to `generate_timeseries`. Respectively, these indicate whether the science dataset's 'depth' variable will come from pressure-calculated depth (False) or the glider's m_depth (True), and if the qartod module functionality should be run on the science timeseries as part of `generate_timeseries`. 
+    - Changed `slocum.pipline.binary_to_nc` to be split into separate functions for generating timeseries (`genertate_timeseries`) and gridded (`generate_gridded`) netcdf files. This allows for timeseries corrections to more easily be performed before gridding.
+    - Added the arguments `sci_use_m_depth` and `run_qc` to `generate_timeseries`. Respectively, these indicate whether the science dataset's 'depth' variable will come from pressure-calculated depth (False) or the glider's m_depth (True), and if the qartod module functionality should be run on the science timeseries as part of `generate_timeseries`. 
+    - Changed the ESD pipeline flow and variable naming to be more consistent. (#50)
+    - Changed `postproc_` functions in `slocum.pipeline` to take in arguments directly, rather than a nebulus `pp` dictionary.
+    - Changed `generate_timeseries` so that the engineering timeseries does not contain the variable 'profile_direction'. The science timeseries currently still needs to have this variable, as it is required by pyglider's gridding function.
+    - Changed raw dataset variables and netCDF generation such that the variable names are the same as the source sensor names (#54).
 - Changed the name of the module `acoustics` to `aa`, to reflect that this module is specific to active acoustic data.
-- Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and updated these path functions to use the new ESD prod directory structure. 
+- Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and changed these functions to align with the new ESD prod directory structure. The modulte functions use defaults that align with ESD glider workstation setup. 
 - Added a `profiles` module for all functions related to profiles: calculating, checking, summarizing, etc. These functions all were previously in the `utils` module. (#46)
 - Changed `gcp` module, using Gemini to follow a "Fail-Fast" module design. 
-- Added a qartod module, for generating qartod flags using the `ioos_qc` package for the science dataset.
-- Added dynamic QARTOD threshold calculation utilities to the `qartod` module and added create_qc_summary_table() for generating profile-level deployment QC summary tables.
-- Added `combine_datasets()` to the `utils` for combining profile NetCDF files into a deployment dataset.
+
+### QC Flags
+- Added a qartod module, for generating qartod flags using the `ioos_qc` package for the science dataset. Full functionality is run via `run_qartod_qc`
+- Added dynamic QARTOD threshold calculation utilities to the `qartod` module and added create_qc_summary_table for generating profile-level deployment QC summary tables.
+- Changed  `add_missing_variables_to_config` to use the 'valid_min' and 'valid_max' attributes from 'density' and 'temperature' as fallback gross-range limits when those attributes are unavailable for 'potential_density' and 'potential_temperature'.
+- Changed `create_qc_variables` and `create_placeholder_qc_variables` to explicitly store the 'valid_min' and 'valid_max' QC attributes as 'int8'.
+- Changed QARTOD flag aggregation to use `ioos_qc.qartod_compare` instead of `np.maximum.reduce`, ensuring aggregate QC flags follow the QARTOD-defined flag precedence.
 - Added deployment QC plotting utilities in `plots`, including stacked QC flag summary plots and variable-specific QC flag time-series plots.
-- Changed the ESD pipeline flow and variable naming to be more consistent. (#50)
-- Added `update_ngdac_profile_attributes()` and `create_ngdac_profiles()` in `utils` to use pyglider's `extract_timeseries_profiles()` to write profile netcdf files and update metadata for ESD and NGDAC standards.
-- Updated `create_ngdac_profiles()` in `utils` to run `pgncprocess.extract_timeseries_profiles()` and write files to a temporary directory, have the wrapper function read the files out of the temporary directory for post-processing, and then write files to desired output directory with the correct filenames (Ex: "amlr08-20220515T0644.nc")
-- Updated `add_missing_variables_to_config()` to use the 'valid_min' and 'valid_max' attributes from 'density' and 'temperature' as fallback gross-range limits when those attributes are unavailable for 'potential_density' and 'potential_temperature'.
-- Updated `create_qc_variables()` and `create_placeholder_qc_variables()` to explicitly store the 'valid_min' and 'valid_max' QC attributes as 'int8'.
-- Updated QARTOD flag aggregation to use `ioos_qc.qartod_compare()` instead of `np.maximum.reduce()`, ensuring aggregate QC flags follow the QARTOD-defined flag precedence.
-- Updated `create_ngdac_profiles()` to open temporary `pyglider` profiles as xarray Datasets, apply ESD-specific metadata updates, and write new final NetCDF files rather than modifying temporary files in place.
-- Updated `update_ngdac_profile_attributes()` to accept and return an xarray Dataset, apply trajectory, platform, and instrument metadata, and remove redundant instrument_* global attributes.
+- Changed `run_qartod_tests` to process and aggregate individual QARTOD tests sequentially, reducing memory use for large deployments. Added `run_flat_line_chunked` to process the flat-line test in overlapping chunks, and updated `run_qartod_qc` to use lazy dataset loading and support a configurable flat-line chunk size. Additionally, changed `run_qartod_qc` to support safe file overwriting and `run_qartod_tests` and `create_qc_variables` to improve logging, QC flag metadata, and ancillary variable handling when overwriting existing QC variables.
+
+### Timeseries profiles
+- Added `update_ngdac_profile_attributes` and `create_ngdac_profiles` in `pipeline` to use pyglider's `extract_timeseries_profiles` to write profile netcdf files and update metadata for ESD and NGDAC standards.
+- Updated `create_ngdac_profiles` to run `pgncprocess.extract_timeseries_profiles` and write files to a temporary directory, have the wrapper function read the files out of the temporary directory for post-processing, and then write files to desired output directory with the correct filenames (Ex: "amlr08-20220515T0644.nc")
 
 ### Imagery
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
@@ -39,28 +44,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added several functions and a data file for checking and correcting ecopuck data:
     - data file `deployment-raw-flbbcd-vars.yml`, to add flbbcd signal values to the raw netCDF file. (#49) 
     - data file 'flbbcd-calibrations.yml', which contains flbbcd calibration values, transcribed from calibration sheets
-    - `check_flbbcd_autoexec` checks the flbbcd calibration values from the calibration yml against the values from the binary files (i.e., from the autoexec). 
+    - `check_flbbcd_autoexec` checks the flbbcd calibration values from the calibration yaml against the values from the binary files (i.e., from the autoexec). 
     - `calc_flbbcd` calculates correct output values the signal and calibration values, for chlorophyll, cdom, and backscatter_700
     - `correct_flbbcd_raw_sci` recalculates the flbbcd output values, and updates the raw and science timeseries
-- Added several functions for checking and correcting CDOM values, based on data notices from Seabird Scientific:
+- Added several functions to for checking and correcting CDOM values, based on data notices from Seabird Scientific:
     - `check_cdom_date` determines the status of the CDOM data (e.g., is it out-of-tolerance)
     - `correct_cdom` depending on status of the CDOM data, removes CDOM data, or applies correction factor
     - `correct_cdom_raw_sci` removes or corrects CDOM data, for the raw and science timeseries
+- Added `check_par` for checking a dataset for negative PAR values
 
-### Misc
+### Other
 - Removed `utils.to_netcdf_esd`, and switched to using either pyglider's `utils._save_dataset` (for L1 timeseries) or `ds.to_netcdf`. 
-- Added a `time_encoding` variable to `slcoum.core`, for consistent and CF-compliant time encoding when saving NetCDFs. 
-- Changed `binary_to_raw_timeseries` so that the ESD-specific post-processing happens outside of this function.
+- Added a `time_encoding` variable to `slocum.core`, for consistent and CF-compliant time encoding when saving NetCDFs. 
+- Changed `binary_to_raw_timeseries` such that:
+    - variables that aren't in the binary files are ignored and thus the package doesn't need insturment-specific yamls (#54, #45)
+    - ESD-specific post-processing happens outside of this function.
 - Changed assorted functions to take in the deployment name and mode directly, rather than a `deployment_info` dictionary.
-- Changed `postproc_` functions in `slocum.pipeline` to take in arguments directly, rather than a nebulus `pp` dictionary.
 - Added `get_instrument_sn_date` to `utils`, for extracting the serial number and calibration date for the given instrument.
-- Added data file `deployment-raw-solocam-vars.yml`, to add 'sci_solocam_free_disk_space' and 'sci_solocam_image_files' to the raw netCDF file. (#45) 
-- Changed so paths to package yaml files are not included in glider path output. 
+- Changed glider path output so paths to package yaml files are not included. 
 - Added `complete_profile_correction` to `slocum.pipeline`, to handle consistent steps that occur if profile indices need to be adjusted by hand in the processing script.
 - Added a `check-nc-old-new.py` script for comparing sets of old and new processed glider deployment files and plots. Useful to make sure code cleanup don't affect output files. 
 - Changed multiple functions so optional arguments, for `esdglider.profiles.findProfiles`, are passed into functions as a dictionary with the named arguments, rather than kwargs.
 - Added valid_min and valid_max values for several variables to the `data/netcdf-variables-sci.yml` file.
-- Changed `generate_timeseries` so that the engineering timeseries does not contain the variable 'profile_direction'. The science timeseries currently still needs to have this variable, as it is required by pyglider's gridding function.
+- Changed applicable functions to now check the deployment metadata for a 'start_date' attribute (rather than 'deployment_min_dt') for the deployment start time, for instance to filter for values after this start datetime.
+- Changed license to CC0-1.0, to align with NOAA guidelines.
 
 ## [0.4.0] - 2026-04-17
 

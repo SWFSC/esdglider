@@ -1,27 +1,31 @@
-import concurrent.futures
-import functools
 import logging
 import os
 import typing
+from pathlib import Path
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import cmocean.cm as cmo
 import matplotlib
 import matplotlib.dates as mdates
-import matplotlib.lines as mlines
 import matplotlib.figure
+import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
 import pandas as pd
+import xarray as xr
 from cartopy.mpl.geoaxes import GeoAxes
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
-from pathlib import Path
 from numpy.typing import NDArray
 
 from esdglider import utils
+
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 _log = logging.getLogger(__name__)
 
@@ -29,6 +33,7 @@ _log = logging.getLogger(__name__)
 """
 label_size = 11
 title_size = 13
+xaxis_format = "%d %b %H:%M" #"%m/%d %H:%M"
 
 # Folder names
 scatter_path = "pointMaps"
@@ -61,7 +66,7 @@ var: str
 
 def adj_var(ds, var):
     """Get the adjusted var values for the plot. Eg, take the log"""
-    if var not in adjustments.keys():
+    if var not in adjustments:
         return ds[var]
     if adjustments[var] == np.log10:
         return adjustments[var](ds[var])
@@ -84,7 +89,7 @@ def adj_var_label(ds, var):
     # else:
     #     return f"{var} [{u}]"
 
-    if var not in adjustments.keys():
+    if var not in adjustments:
         return f"{var} [{u}]"
     elif adjustments[var] == np.log10:
         return "$log_{10}$" + f"({var} [{u}])"
@@ -229,7 +234,7 @@ def esd_all_plots(
     base_path: str | None = None,
     crs: str | None = None,
     bar_file: str | None = None,
-    max_workers: int | None = 1,
+    combine_pdf: bool = True,
 ):
     """
     Wrapper to run all of the ESD plotting loop functions
@@ -255,11 +260,10 @@ def esd_all_plots(
     bar_file : str or None (default None)
         Path to the ETOPO nc file to use for contour lines.
         If None (default), then contour lines will not be drawn
-    max_workers : int | None
-        Number of workers with which to make the plots.
-        If 1, a normal for loop is used.
-        If None, all cores are used, as determined by os.cpu_count()
-        Else, max_workers is the number of cores used
+    combine_pdf : bool (default True)
+        If True, searches all subdirectories in base_path for generated PNGs 
+        and combines them into a single multi-page PDF.
+        Ignored if base_path is None
 
     Returns
     -------
@@ -276,6 +280,8 @@ def esd_all_plots(
     # ds_sci_qc = xr.load_dataset(ds_paths["outname_tssciqc"])
     ds_gr5m = xr.load_dataset(ds_paths["outname_gr5m"])
 
+    deployment_name = ds_sci.attrs['deployment_name']
+
     # Delete old plots
     if base_path is not None:
         utils.rmtree(os.path.join(base_path))
@@ -288,16 +294,15 @@ def esd_all_plots(
     scatter_plot(ds_raw, "raw", base_path)
 
     # Sci/eng loops
-    sci_gridded_loop(ds_gr5m, base_path, max_workers=max_workers)
+    sci_gridded_loop(ds_gr5m, base_path)
     sci_timeseries_loop(
         ds_sci,
         depth_var=sci_depth_var,
         base_path=base_path,
-        max_workers=max_workers,
     )
-    eng_timeseries_loop(ds_eng, base_path, max_workers=max_workers)
-    eng_tvt_loop(ds_raw, base_path, max_workers=max_workers)
-    # sci_ts_loop(ds_sci, base_path, max_workers=max_workers)
+    eng_timeseries_loop(ds_eng, base_path)
+    eng_tvt_loop(ds_raw, base_path)
+    # sci_ts_loop(ds_sci, base_path)
 
     # QC PLOTS
     if base_path is not None:
@@ -306,10 +311,10 @@ def esd_all_plots(
             ds_sci,
             plot_file=os.path.join(
                 plot_qc_path, 
-                f"{ds_sci.attrs['deployment_name']}_qc_summary.png"
+                f"{deployment_name}_qc_summary.png"
             ),
         )
-        plot_qc_timeseries(ds_sci,output_dir=plot_qc_path)
+        plot_qc_timeseries(ds_sci, output_dir=plot_qc_path)
 
     # Surface map logic
     if bar_file is not None:
@@ -328,34 +333,23 @@ def esd_all_plots(
             crs=crs,
             base_path=base_path,
             bar=bar,
-            max_workers=max_workers,
         )
     else:
         _log.info("crs is None - skipping surface maps")
 
+    # Combine into single PDF if requested
+    if base_path is not None and combine_pdf:
+        _log.info("Combining output plots into a single PDF")
+        png_files = sorted(Path(base_path).rglob("*.png"))
+        pdf_path = Path(base_path) / f"{deployment_name}_all_plots.pdf"
 
-def sci_gridded_loop_helper(
-    var,
-    ds: xr.Dataset,
-    base_path: str | None = None,
-    show: bool = False,
-):
-    """
-    See sci_gridded_loop for variables
-    In short, a small wrapper function that can be passed to
-    concurrent.futures.ProcessPoolExecutor
-    """
-    _log.debug(f"var {var}")
-    sci_timesection_plot(var, ds, base_path=base_path, show=show)
-    sci_spatialsection_plot(var, ds, base_path=base_path, show=show)
-    sci_spatialgrid_plot(var, ds, base_path=base_path, show=show)
+        combine_images_to_pdf(png_files, pdf_path)
 
 
 def sci_gridded_loop(
     ds: xr.Dataset,
     base_path: str | None = None,
     show: bool = False,
-    max_workers: int | None = 1,
 ):
     """
     A loop/wrapper function to use a gridded science dataset to make plots
@@ -374,11 +368,6 @@ def sci_gridded_loop(
         Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
-    max_workers : int | None
-        Number of workers with which to make the plots.
-        If 1, a normal for loop is used.
-        If None, all cores are used, as determined by os.cpu_count()
-        Else, max_workers is the number of cores used
 
     Returns
     -------
@@ -393,27 +382,11 @@ def sci_gridded_loop(
         utils.rmtree(os.path.join(base_path, spatialgrid_path))
 
     vars_toloop = sci_vars
-    if max_workers == 1:
-        _log.info("Plotting with one worker, not in parallel")
-        for var in vars_toloop:
-            _log.debug(f"var {var}")
-            sci_timesection_plot(var, ds, base_path=base_path, show=show)
-            sci_spatialsection_plot(var, ds, base_path=base_path, show=show)
-            sci_spatialgrid_plot(var, ds, base_path=base_path, show=show)
-    else:
-        if max_workers is None:
-            max_workers = max(1, os.cpu_count())  # type: ignore
-        _log.info("Starting parallel plotting with %s workers", max_workers)
-        task_function = functools.partial(
-            sci_gridded_loop_helper,
-            ds=ds,
-            base_path=base_path,
-            show=show,
-        )
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers,
-        ) as executor:
-            executor.map(task_function, vars_toloop)
+    for var in vars_toloop:
+        _log.debug(f"var {var}")
+        sci_timesection_plot(var, ds, base_path=base_path, show=show)
+        sci_spatialsection_plot(var, ds, base_path=base_path, show=show)
+        sci_spatialgrid_plot(var, ds, base_path=base_path, show=show)
 
     _log.info("Completed gridded science plots")
 
@@ -422,7 +395,6 @@ def eng_tvt_loop(
     ds: xr.Dataset,
     base_path: str | None = None,
     show: bool = False,
-    max_workers: int | None = 1,
 ):
     """
     A loop/wrapper function to:
@@ -440,11 +412,6 @@ def eng_tvt_loop(
         Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
-    max_workers : int | None
-        Number of workers with which to make the plots.
-        If 1, a normal for loop is used.
-        If None, all cores are used, as determined by os.cpu_count()
-        Else, max_workers is the number of cores used
 
     Returns
     -------
@@ -458,53 +425,14 @@ def eng_tvt_loop(
 
     eng_dict = eng_plots_to_make(ds)
     vars_toloop = eng_dict.keys()
-    if max_workers == 1:
-        _log.info("Plotting with one worker, not in parallel")
-        for key in vars_toloop:
+    for key in vars_toloop:
+        try:
             eng_tvt_plot(key, ds, eng_dict, base_path=base_path, show=show)
-    else:
-        if max_workers is None:
-            max_workers = max(1, os.cpu_count())  # type: ignore
-        _log.info("Starting parallel plotting with %s workers", max_workers)
-        task_function = functools.partial(
-            eng_tvt_plot,
-            ds=ds,
-            eng_dict=eng_dict,
-            base_path=base_path,
-            show=show,
-        )
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers,
-        ) as executor:
-            executor.map(task_function, vars_toloop)
+        except Exception as e:  # noqa: BLE001
+            _log.error(f"Failed to generate plot for key '{key}': {e}", exc_info=True)
+            continue
 
     _log.info("Completed engineering tvt plots")
-
-
-def sci_timeseries_loop_helper(
-    var: str,
-    ds: xr.Dataset,
-    depth_var: str,
-    base_path: str | None = None,
-    show: bool = False,
-):
-    """
-    See sci_timeseries_loop for variables
-    In short, a small wrapper function that can be passed to
-    concurrent.futures.ProcessPoolExecutor
-    """
-    _log.debug(f"var {var}")
-    sci_timeseries_plot(
-        var, ds, depth_var=depth_var, base_path=base_path, show=show
-    )
-    sci_timesection_gt_plot(
-        var,
-        ds,
-        depth_var=depth_var,
-        base_path=base_path,
-        show=show,
-    )
-    ts_plot(var, ds, base_path=base_path, show=show)
 
 
 def sci_timeseries_loop(
@@ -513,7 +441,6 @@ def sci_timeseries_loop(
     depth_var: str = "depth",
     base_path: str | None = None,
     show: bool = False,
-    max_workers: int | None = 1,
 ):
     """
     A loop/wrapper function to use a timeseries science dataset to make plots
@@ -536,11 +463,6 @@ def sci_timeseries_loop(
         Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
-    max_workers : int | None
-        Number of workers with which to make the plots.
-        If 1, a normal for loop is used.
-        If None, all cores are used, as determined by os.cpu_count()
-        Else, max_workers is the number of cores used
 
     Returns
     -------
@@ -555,40 +477,23 @@ def sci_timeseries_loop(
         utils.rmtree(os.path.join(base_path, ts_path))
 
     vars_toloop = sci_vars
-    if max_workers == 1:
-        _log.info("Plotting with one worker, not in parallel")
-        for var in vars_toloop:
-            _log.debug(f"var {var}")
-            sci_timeseries_plot(
-                var,
-                ds,
-                depth_var=depth_var,
-                base_path=base_path,
-                show=show,
-            )
-            sci_timesection_gt_plot(
-                var,
-                ds,
-                depth_var=depth_var,
-                base_path=base_path,
-                show=show,
-            )
-            ts_plot(var, ds, base_path=base_path, show=show)
-    else:
-        if max_workers is None:
-            max_workers = max(1, os.cpu_count())  # type: ignore
-        _log.info("Starting parallel plotting with %s workers", max_workers)
-        task_function = functools.partial(
-            sci_timeseries_loop_helper,
-            ds=ds,
+    for var in vars_toloop:
+        _log.debug(f"var {var}")
+        sci_timeseries_plot(
+            var,
+            ds,
             depth_var=depth_var,
             base_path=base_path,
             show=show,
         )
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers,
-        ) as executor:
-            executor.map(task_function, vars_toloop)
+        sci_timesection_gt_plot(
+            var,
+            ds,
+            depth_var=depth_var,
+            base_path=base_path,
+            show=show,
+        )
+        ts_plot(var, ds, base_path=base_path, show=show)
 
     _log.info("Completed science timeseries plots")
 
@@ -597,7 +502,6 @@ def eng_timeseries_loop(
     ds: xr.Dataset,
     base_path: str | None = None,
     show: bool = False,
-    max_workers: int | None = 1,
 ):
     """
     A loop/wrapper function to use a timeseries engineering dataset to make plots
@@ -616,11 +520,6 @@ def eng_timeseries_loop(
         Intended to be the 'plotdir' output of glider.get_path_glider
     show : bool
         Boolean indicating if the plots should be shown before being closed
-    max_workers : int | None
-        Number of workers with which to make the plots.
-        If 1, a normal for loop is used.
-        If None, all cores are used, as determined by os.cpu_count()
-        Else, max_workers is the number of cores used
 
     Returns
     -------
@@ -633,25 +532,9 @@ def eng_timeseries_loop(
         utils.rmtree(os.path.join(base_path, timeseries_eng_path))
 
     vars_toloop = eng_vars
-    if max_workers == 1:
-        _log.info("Plotting with one worker, not in parallel")
-        for var in vars_toloop:
-            _log.debug(f"var {var}")
-            eng_timeseries_plot(var, ds, base_path=base_path, show=show)
-    else:
-        if max_workers is None:
-            max_workers = max(1, os.cpu_count())  # type: ignore
-        _log.info("Starting parallel plotting with %s workers", max_workers)
-        task_function = functools.partial(
-            eng_timeseries_plot,
-            ds=ds,
-            base_path=base_path,
-            show=show,
-        )
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers,
-        ) as executor:
-            executor.map(task_function, vars_toloop)
+    for var in vars_toloop:
+        _log.debug(f"var {var}")
+        eng_timeseries_plot(var, ds, base_path=base_path, show=show)
 
     _log.info("Completed engineering timeseries plots")
 
@@ -725,7 +608,6 @@ def sci_surface_map_loop(
     bar: xr.Dataset | None = None,
     figsize_x: float = 8.5,
     figsize_y: float = 11,
-    max_workers: int | None = 1,
 ):
     """
     A loop/wrapper function to use a timeseries science dataset to make plots
@@ -748,11 +630,6 @@ def sci_surface_map_loop(
         Boolean indicating if the plots should be shown before being closed
     bar : xarray Dataset
         ETOPO dataset with which to make contour lines
-    max_workers : int | None
-        Number of workers with which to make the plots.
-        If 1, a normal for loop is used.
-        If None, all cores are used, as determined by os.cpu_count()
-        Else, max_workers is the number of cores used
 
     Returns
     -------
@@ -765,26 +642,10 @@ def sci_surface_map_loop(
         utils.rmtree(os.path.join(base_path, surfacemap_sci_path))
 
     vars_toloop = sci_vars
-    if max_workers == 1:
-        _log.info("Plotting with one worker, not in parallel")
-        for var in vars_toloop:
-            _log.debug(f"var {var}")
-            sci_surface_map(
-                var=var,
-                ds=ds,
-                crs=crs,
-                base_path=base_path,
-                show=show,
-                bar=bar,
-                figsize_x=figsize_x,
-                figsize_y=figsize_y,
-            )
-    else:
-        if max_workers is None:
-            max_workers = max(1, os.cpu_count())  # type: ignore
-        _log.info("Starting parallel plotting with %s workers", max_workers)
-        task_function = functools.partial(
-            sci_surface_map,
+    for var in vars_toloop:
+        _log.debug(f"var {var}")
+        sci_surface_map(
+            var=var,
             ds=ds,
             crs=crs,
             base_path=base_path,
@@ -793,10 +654,6 @@ def sci_surface_map_loop(
             figsize_x=figsize_x,
             figsize_y=figsize_y,
         )
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers,
-        ) as executor:
-            executor.map(task_function, vars_toloop)
 
     _log.info("Completed surface maps")
 
@@ -1016,6 +873,7 @@ def sci_timesection_plot(
 
     # for label in ax.get_xticklabels(which='major'):
     #     label.set(rotation=15, horizontalalignment='center')
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
     fig.autofmt_xdate()
     # fig_cnt += 1
 
@@ -1283,11 +1141,18 @@ def eng_plots_to_make(ds: xr.Dataset):
     """
 
     da_c_tdepth = ds["c_dive_target_depth"].dropna(dim="time")
-    da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
+    try:
+        da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
+    except ValueError:
+        da_c_mdepth = None
 
     da_ctd_depth = ds["depth_ctd"].dropna(dim="time")
-    da_ctd_mdepth = ds["m_depth"].interp(time=da_ctd_depth.time)
-    da_ctd_diff = da_ctd_depth - da_ctd_mdepth
+    try:
+        da_ctd_mdepth = ds["m_depth"].interp(time=da_ctd_depth.time)
+        da_ctd_diff = da_ctd_depth - da_ctd_mdepth 
+    except ValueError:
+        da_ctd_mdepth = None
+        da_ctd_diff = None
 
     plots_to_make = {
         "oilVol": {
@@ -1478,8 +1343,7 @@ def eng_timeseries_plot(
     )
 
     ax.scatter(ds.time, ds[var], s=3)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
-    # fig.colorbar(p, location="right").set_label(adj_var_label(ds, var), size=label_size)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
     fig.autofmt_xdate()
 
     if base_path is not None:
@@ -1551,10 +1415,11 @@ def sci_timeseries_plot(
     p = ax.scatter(
         ds.time, ds[depth_var], c=adj_var(ds, var), cmap=sci_vars[var], s=3
     )
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
     fig.colorbar(p, location="right").set_label(
         adj_var_label(ds, var), size=label_size
     )
+
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
     fig.autofmt_xdate()
 
     if base_path is not None:
@@ -1701,8 +1566,7 @@ def ts_plot(
 
     _log.info(f"Making ts plot for variable {var}")
     deployment = ds.deployment_name
-    start = ds.deployment_start[0:10]
-    end = ds.deployment_end[0:10]
+    start, end = utils.get_date_start_end(ds)
 
     Sg, Tg, sigma = utils.calc_ts(ds)
 
@@ -1808,8 +1672,7 @@ def sci_surface_map(
 
     _log.info(f"Making surface map for variable {var}")
     deployment = ds.deployment_name
-    start = ds.deployment_start[0:10]
-    end = ds.deployment_end[0:10]
+    start, end = utils.get_date_start_end(ds)
 
     map_lon_border = 0.1
     map_lat_border = 0.2
@@ -1945,7 +1808,7 @@ def plot_qc_summary(
         "v",
     }
 
-    deployment_name = ds_qc.attrs.get("deployment_name", "unknown")
+    # deployment_name = ds_qc.attrs.get("deployment_name", "unknown")
     _log.info(f"Making QC summary plot for dataset {ds_qc.attrs['deployment_name']}")
 
     # IDENTIFY VARIABLES FOR SUMMARY
@@ -1995,13 +1858,13 @@ def plot_qc_summary(
     bottom = np.zeros(len(summary_df))
 
     # PLOT STACKED BAR SEGMENTS
-    for flag in QC_FLAG_NAMES:
+    for flag, col in QC_FLAG_NAMES.items():
         heights = summary_df[flag]
         ax.bar(
             summary_df["variable"],
             heights,
             bottom=bottom,
-            color=QC_FLAG_NAMES[flag],
+            color=col,
             width=0.7,
             label=flag,
         )
@@ -2204,8 +2067,8 @@ def plot_qc_timeseries(
                 )
 
         ax.invert_yaxis()
-        ax.set_xlabel("Time")
-        ax.set_ylabel("Depth (m)")
+        ax.set_xlabel("Time", size=label_size)
+        ax.set_ylabel("Depth (m)", size=label_size)
 
         # BUILD FIGURE TITLE
         if deployment_name is None:
@@ -2220,8 +2083,7 @@ def plot_qc_timeseries(
         ax.set_title(title)
 
         # FORMAT X-AXIS AS MM/DD HH:MM
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
-
+        ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
         fig.autofmt_xdate()
 
         # MAKE CUSTOM LEGEND
@@ -2251,3 +2113,49 @@ def plot_qc_timeseries(
             output_dir / f"{data_var}_qc_timeseries.png",
         )
         plt.close(fig)
+
+
+def combine_images_to_pdf(
+    image_paths: typing.Iterable[str | Path],
+    output_pdf_path: str | Path,
+) -> None:
+    """
+    Combine multiple image files into a single multi-page PDF document.
+
+    Parameters
+    ----------
+    image_paths : iterable of str or Path
+        Paths to the image files to combine.
+    output_pdf_path : str or Path
+        Destination path for the output PDF.
+    """
+    if not HAS_PIL:
+        _log.warning(
+            "Pillow (PIL) is not installed. Skipping combined PDF creation. "
+            "To enable this feature, install Pillow (`pip install Pillow`)."
+        )
+        return
+    
+    images: list[Image.Image] = [] # type: ignore
+    for img_path in image_paths:
+        try:
+            with Image.open(img_path) as img: # type: ignore
+                # Convert RGBA/palette images to RGB for PDF compatibility
+                images.append(img.convert("RGB"))
+        except Exception as e:  # noqa: BLE001
+            _log.warning(f"Could not open image '{img_path}' for PDF: {e}")
+
+    if not images:
+        _log.warning("No valid images found to compile into PDF.")
+        return
+
+    output_pdf_path = Path(output_pdf_path)
+    output_pdf_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save all images into a single PDF
+    images[0].save(
+        output_pdf_path,
+        save_all=True,
+        append_images=images[1:],
+    )
+    _log.info(f"Successfully created summary PDF: {output_pdf_path}")

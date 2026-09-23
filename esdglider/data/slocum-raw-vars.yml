@@ -248,14 +248,66 @@ netcdf_variables:
     reference_datum: "sea-surface"
     observation_type: "measured"
 
-  # # TODO: RBR CTD
-  # sci_rbrctd_timestamp:
-  #   long_name: sci_rbrctd_timestamp
-  #   source: sci_rbrctd_timestamp
-  #   standard_name: time
-  #   time_origin: "01-JAN-1970 00:00:00"
-  #   units: seconds since 1970-01-01T00:00:00Z
- 
+  # RBR CTD
+  sci_rbrctd_timestamp:
+    long_name: sci_rbrctd_timestamp
+    source: sci_rbrctd_timestamp
+    standard_name: time
+    time_origin: "01-JAN-1970 00:00:00"
+    units: seconds since 1970-01-01T00:00:00Z
+  sci_rbrctd_conductivity_00:
+    source: sci_rbrctd_conductivity_00
+    long_name: sci_rbrctd_conductivity_00
+    standard_name: sea_water_electrical_conductivity
+    units: mS cm-1
+    observation_type: "measured"
+  sci_rbrctd_temperature_00:
+    source: sci_rbrctd_temperature_00
+    long_name: sci_rbrctd_temperature_00
+    standard_name: sea_water_temperature
+    units: degrees_C
+    observation_type: "measured"
+  sci_rbrctd_pressure_00:
+    source: sci_rbrctd_pressure_00
+    long_name: sci_rbrctd_pressure_00
+    standard_name: sea_water_pressure
+    units: dbar
+    positive: "down"
+    reference_datum: "sea-surface"
+    observation_type: "measured"
+  sci_rbrctd_seapressure_00:
+    source: sci_rbrctd_seapressure_00
+    long_name: sci_rbrctd_seapressure_00
+    standard_name: sea_water_pressure_due_to_sea_water
+    units: dbar
+    positive: "down"
+    reference_datum: "sea-surface"
+    observation_type: "measured"
+  sci_rbrctd_depth_00:
+    source: sci_rbrctd_depth_00
+    long_name: sci_rbrctd_depth_00
+    standard_name: depth
+    units: m
+    positive: "down"
+    observation_type: "measured"
+  sci_rbrctd_salinity_00:
+    source: sci_rbrctd_salinity_00
+    long_name: sci_rbrctd_salinity_00
+    standard_name: sea_water_practical_salinity
+    units: psu
+    observation_type: "measured"
+  sci_rbrctd_count_00:
+    source: sci_rbrctd_count_00
+    long_name: sci_rbrctd_count_00
+    units: counts
+    observation_type: "measured"
+  sci_rbrctd_cond_cell_temp_00:
+    source: sci_rbrctd_cond_cell_temp_00
+    long_name: sci_rbrctd_cond_cell_temp_00
+    standard_name: temperature
+    units: degrees_C
+    observation_type: "measured"
+
   # Oxygen
   sci_oxy4_timestamp:
     long_name: sci_oxy4_timestamp
@@ -355,6 +407,15 @@ netcdf_variables:
     standard_name: downwelling_photosynthetic_photon_spherical_irradiance_in_sea_water
     units: uE m-2 s-1
     observation_type: "measured"
+  sci_bsipar_sensor_volts:
+    source: sci_bsipar_sensor_volts
+    long_name: sci_bsipar_sensor_volts
+    units: volts
+  sci_bsipar_supply_volts:
+    source: sci_bsipar_supply_volts
+    long_name: sci_bsipar_supply_volts
+    units: volts
+
 
   # Solocam
   sci_solocam_free_disk_space:

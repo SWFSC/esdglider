@@ -7,14 +7,17 @@ comment: ' '
 contributor_name: 'Christian Reiss, George Watters, Jennifer Walsh, Anthony Cossio, Tegan Murray, Samuel Woodman'
 contributor_role: 'Principal Investigator, Principal Investigator, Glider Pilot, Glider Pilot, Glider Pilot, Data Manager'
 creator_email: nmfs.swfsc.esd-gliders@noaa.gov
-creator_name: 'Christian Reiss'
+creator_name: 'NOAA SWFSC Ecosystem Science Division Glider Team'
 creator_url: https://www.fisheries.noaa.gov/about/southwest-fisheries-science-center
+disclaimer: 'This data may be redistributed and used without restriction. 
+    Data provided as is with no expressed or implied 
+    assurance of quality assurance or quality control'
 format_version: IOOS_Glider_NetCDF_v2.0.nc
 glider_name: <glider name>
 glider_serial: <glider serial>
 glider_model: 'Teledyne Webb Research Slocum G3 glider'
 glider_instrument_name: slocum
-institution: 'NOAA SWFSC Ecosystem Science Division'
+institution: 'NOAA National Marine Fisheries Service Southwest Fisheries Science Center'
 keywords: 'AUVS > Autonomous Underwater Vehicles,
             Earth Science > Oceans > Ocean Pressure > Water Pressure,
             Earth Science > Oceans > Ocean Temperature > Water Temperature,
@@ -23,15 +26,18 @@ keywords: 'AUVS > Autonomous Underwater Vehicles,
             Earth Science > Oceans > Salinity/Density > Salinity,
             In Situ Ocean-based platforms > Seaglider,
             glider, Slocum, trajectory, underwater glider, water, wmo'
-keywords_vocabulary: GCMD Science Keywords
-license: 'This data may be redistributed and used without restriction.
-          Data provided as is with no expressed or implied assurance of quality assurance or quality control.'
+keywords_vocabulary: GCMD Science Keywordsp.
+license: 'These data were produced by NOAA and are not subject to copyright 
+    protection in the United States. NOAA waives any potential copyright 
+    and related rights in thse data worldwide through the 
+    Creative Commons Zero 1.0 Universal Public Domain Dedication 
+    (CC0-1.0, https://creativecommons.org/publicdomain/zero/1.0/).'
 Metadata_Conventions: Unidata Dataset Discovery v1.0, COARDS, CF-1.8
 metadata_link: 'https://swfsc.github.io/glider-lab-manual/'
 naming_authority: gov.noaa.fisheries
 platform_type: 'Slocum Glider'
 project: <project name>
-publisher_email: sam.woodman@noaa.gov
+publisher_email: nmfs.swfsc.esd-gliders@noaa.gov
 publisher_name: Sam Woodman
 publisher_url: https://www.fisheries.noaa.gov/about/southwest-fisheries-science-center
 references: 'https://swfsc.github.io/glider-lab-manual/, https://github.com/c-proof/pyglider, https://github.com/SWFSC/esdglider'

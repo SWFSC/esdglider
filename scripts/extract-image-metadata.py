@@ -149,7 +149,7 @@ if __name__ == "__main__":
             # run(f"gcloud storage mv {str(img_meta_file)} gs://{img_paths["imgmetapath"]}")
 
             meta_dir = home / "tmp-meta" / deployment_name
-            cmd_str = f"gcloud storage mv {meta_dir} gs://{imagery_meta_bucket_name}/{utils.year_path(deployment_name)}/"
+            cmd_str = f"gcloud storage mv {meta_dir} gs://{imagery_meta_bucket_name}/{utils.get_path_year(deployment_name)}/"
             logging.info(f"Running command: {cmd_str}")
             run(cmd_str, shell = True)
 
