@@ -498,3 +498,38 @@ def generate_osi_manifest(
     except Exception as e:
         _log.error(f"An unexpected error occurred on line {total_lines:,}: {str(e)}")
         raise
+
+def get_unique_directories(jsonl_path: str) -> list[str]:
+    """
+    Extracts unique directory names ('p' key) from a JSONL file.
+
+    Parameters
+    ----------
+        jsonl_path (str): Path to the input JSONL file.
+
+    Returns
+    -------
+        list[str]: A list of unique directory names extracted from the JSONL file.
+    """
+    unique_dirs = set()
+    _log.info(f"Processing JSONL file: {jsonl_path}")
+
+    try:
+        with open(jsonl_path, 'r', encoding='utf-8') as f:
+            for line_number, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    if 'p' in data:
+                        unique_dirs.add(data['p'])
+                except json.JSONDecodeError as e:
+                    _log.warning(f"Skipping invalid JSON on line {line_number}: {e}")
+
+        _log.info(f"Successfully extracted {len(unique_dirs)} unique directory name(s).")
+    except Exception as e:
+        _log.error(f"Failed to read file at {jsonl_path}: {e}")
+        raise
+
+    return sorted(unique_dirs)
