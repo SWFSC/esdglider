@@ -1,19 +1,24 @@
 # This script was written by Gemini, and adapted by Sam Woodman
  
 import json
-from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor
-from tqdm import tqdm
 import logging
 import os
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 from subprocess import run
-from esdglider import gcp, imagery, paths, utils # type: ignore
 
-deployment_name = "amlr03-20231128"
+from tqdm import tqdm
+
+from esdglider import gcp, imagery, paths, utils
+
+logger = logging.getLogger(__name__)
+
+
+deployment_name = "amlr08-20220513"
 run_pipeline_bool = True
 
 home = Path.home()
-mnt_path = home / "gcs-mnt"
+mnt_path = home / "mnt-gcs"
 
 imagery_in_bucket_name = "swfscesd-glider-imagery-data-in"
 imagery_meta_bucket_name = "swfscesd-glider-imagery-metadata"
@@ -53,24 +58,24 @@ def run_pipeline(files, deployment_name, depl_meta_file, img_meta_file, num_core
         num_cores = os.cpu_count()
 
     if depl_meta_file.is_file():
-        logging.error(f"depl_meta_file file ({depl_meta_file}) already exists")
+        logger.error(f"depl_meta_file file ({depl_meta_file}) already exists")
         return  
 
     if img_meta_file.is_file():
-        logging.error(f"img_meta_file file ({img_meta_file}) already exists")
+        logger.error(f"img_meta_file file ({img_meta_file}) already exists")
         return
 
     # Generate Manifest (from first valid image)
     depl_metadata = imagery.extract_deployment_metadata(files[0], deployment_name)
-    logging.info("Writing deployment-level metadata to %s", depl_meta_file)
+    logger.info("Writing deployment-level metadata to %s", depl_meta_file)
     depl_meta_file.parent.mkdir(parents=True, exist_ok=True)
     with depl_meta_file.open("w") as f:
         json.dump(depl_metadata, f, indent=4)
 
     # Generate Index via Multiprocessing
-    logging.info("Extracting file-level metadata, and writing to %s", img_meta_file)
+    logger.info("Extracting file-level metadata, and writing to %s", img_meta_file)
     img_meta_file.parent.mkdir(parents=True, exist_ok=True)
-    logging.info("Using %s cores", num_cores)
+    logger.info("Using %s cores", num_cores)
     with img_meta_file.open("a", encoding="utf-8") as f:
         with ProcessPoolExecutor(max_workers=num_cores) as executor:
             for result in tqdm(executor.map(imagery.extract_image_metadata, files), total=len(files)):
@@ -104,27 +109,27 @@ if __name__ == "__main__":
     extensions = {'.jpg', '.jpeg', '.png'}
     
     # Gather all files that match the extension set
-    logging.info("Getting all file paths")
+    logger.info("Getting all file paths")
     files = [
         p for p in Path(img_paths["imagedir"]).rglob('*') 
         if p.suffix.lower() in extensions
     ]
     if not files:
-        logging.error("No files")
+        logger.error("No files")
     else:
-        logging.info("There are %s files", len(files))
+        logger.info("There are %s files", len(files))
 
         # Check method 1 - substring
-        logging.info("Checking for any questionable paths via substring check")
+        logger.info("Checking for any questionable paths via substring check")
         sub_check = 'checkpoint'
         file_check = [i for i in files if sub_check in str(i)]
         if file_check:
-            logging.warning(f"The substring '{sub_check}' is in the following paths:")
+            logger.warning(f"The substring '{sub_check}' is in the following paths:")
             for f in file_check:
-                logging.warning("path: %s", f)
+                logger.warning("path: %s", f)
 
         # Check method 2 - length
-        logging.info("Checking for any questionable paths via length check")
+        logger.info("Checking for any questionable paths via length check")
         utils.check_string_length([str(i.name) for i in files])
 
         tmp_folder = home / "tmp-meta" / deployment_name
@@ -148,10 +153,10 @@ if __name__ == "__main__":
             # run(f"gcloud storage mv {str(depl_meta_file)} gs://{img_paths["deplmetapath"]}")
             # run(f"gcloud storage mv {str(img_meta_file)} gs://{img_paths["imgmetapath"]}")
 
-            meta_dir = home / "tmp-meta" / deployment_name
-            cmd_str = f"gcloud storage mv {meta_dir} gs://{imagery_meta_bucket_name}/{utils.get_path_year(deployment_name)}/"
-            logging.info(f"Running command: {cmd_str}")
-            run(cmd_str, shell = True)
+            # meta_dir = home / "tmp-meta" / deployment_name
+            # cmd_str = f"gcloud storage mv {meta_dir} gs://{imagery_meta_bucket_name}/{utils.get_path_year(deployment_name)}/"
+            # logger.info(f"Running command: {cmd_str}")
+            # run(cmd_str, shell = True)
 
-            meta_dir.rmdir()
+            # meta_dir.rmdir()
         
