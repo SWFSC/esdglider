@@ -133,33 +133,22 @@ def imagery_timeseries(ds, img_paths):
     
     _log.info("Creating imagery ancillary data file for %s", deployment_name)
     # _log.info(f"Using images directory {imagedir}")
-    _log.info(f"Using image metadata directory {metadir}")
+    _log.info("Using image metadata directory %s", metadir)
 
     csv_file =  img_paths["imgcsv"]
     if os.path.isfile(csv_file):
-        _log.info(f"Deleting old imagery ancillary data file: {csv_file}")
+        _log.info("Deleting old imagery ancillary data file: %s", csv_file)
         os.remove(csv_file)
 
-    # # --------------------------------------------
-    # # Checks
-    # if not os.path.isdir(imagedir):
-    #     raise FileNotFoundError(f"{imagedir} does not exist")
-    # else:
-    #     # NOTE: this should probably be a separate function, and return a tuple
-    #     filepaths = glob.glob(f"{imagedir}/**/*.{ext}", recursive=True)
-    #     _log.debug(f"Found {len(filepaths)} files with the extension {ext}")
-    #     if len(filepaths) == 0:
-    #         _log.error(
-    #             "Zero image files were found. Did you provide "
-    #             + "the right path, and use the right file extension?",
-    #         )
-    #         raise ValueError("No files for which to generate ancillary data")
-    #     imagery_files = [os.path.basename(path) for path in filepaths]
-    #     imagery_dirs = [os.path.basename(os.path.dirname(path)) for path in filepaths]
 
     # --------------------------------------------
     # Extract info from imagery file names
     _log.debug("Processing imagery file names")
+    if not os.path.isfile(img_paths["imgmetapath"]):
+        _log.error("Image metadata file not found: %s", img_paths['imgmetapath'])
+        _log.error("Exiting function")
+        return
+    
     df = get_solocam_dt(img_paths["imgmetapath"])
 
 

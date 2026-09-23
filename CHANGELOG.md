@@ -29,8 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed `run_qartod_tests` to process and aggregate individual QARTOD tests sequentially, reducing memory use for large deployments. Added `run_flat_line_chunked` to process the flat-line test in overlapping chunks, and updated `run_qartod_qc` to use lazy dataset loading and support a configurable flat-line chunk size. Additionally, changed `run_qartod_qc` to support safe file overwriting and `run_qartod_tests` and `create_qc_variables` to improve logging, QC flag metadata, and ancillary variable handling when overwriting existing QC variables.
 
 ### Timeseries profiles
-- Added `update_ngdac_profile_attributes` and `create_ngdac_profiles` in `utils` to use pyglider's `extract_timeseries_profiles` to write profile netcdf files and update metadata for ESD and NGDAC standards.
-- Updated `create_ngdac_profiles` in `utils` to run `pgncprocess.extract_timeseries_profiles` and write files to a temporary directory, have the wrapper function read the files out of the temporary directory for post-processing, and then write files to desired output directory with the correct filenames (Ex: "amlr08-20220515T0644.nc")
+- Added `update_ngdac_profile_attributes` and `create_ngdac_profiles` in `pipeline` to use pyglider's `extract_timeseries_profiles` to write profile netcdf files and update metadata for ESD and NGDAC standards.
+- Updated `create_ngdac_profiles` to run `pgncprocess.extract_timeseries_profiles` and write files to a temporary directory, have the wrapper function read the files out of the temporary directory for post-processing, and then write files to desired output directory with the correct filenames (Ex: "amlr08-20220515T0644.nc")
 
 ### Imagery
 - Changed to extracting the date extracting EXIF metadata from the imagery files, rather than deriving image datetimes from the filenames. This included writing relevant metadata to a metadata-specific bucket, and reading the datetimes from the metadata files. Specifically:
