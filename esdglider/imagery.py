@@ -413,7 +413,7 @@ def generate_osi_manifest(
     """
     _log.info(f"Starting processing for file: '{jsonl_filepath}'")
 
-    yr = utils.year_path(deployment_name)
+    yr = utils.get_path_year(deployment_name)
     base_uri = f"gs://swfscesd-glider-imagery-data-in/{yr}/{deployment_name}/images"
     target_dirs_set = set(target_dirs)
     _log.info(f"Target directories to filter: {target_dirs_set}")

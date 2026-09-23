@@ -16,7 +16,7 @@ mode = "delayed"
 
 home = Path.home()
 
-mnt_path = home / "gcs-mnt"
+mnt_path = home / "mnt-gcs"
 config_path = home / "glider-lab" / "deployment-configs"
 cac_path = home / "standard-glider-files" / "Cache"
 
