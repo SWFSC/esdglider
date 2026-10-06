@@ -20,6 +20,20 @@ aa_in_bucket_name = "swfscesd-glider-active-acoustics-data-in"
 
 
 def _check_dir_exists(dir_path, description):
+    """
+    Check if a directory exists, and log a debug message if it does not.
+
+    Parameters
+    ----------
+    dir_path : str
+        The path to the directory to check.
+    description : str
+        A description of the directory, used in the debug message.
+    
+    Returns
+    ------
+    Nothing
+    """
     if not os.path.isdir(dir_path):
         _log.debug("The %s path ('%s') does not exist", description, dir_path)
 

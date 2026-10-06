@@ -196,7 +196,7 @@ def generate_timeseries(
 
     if write_raw:
         # Remove relevant files
-        _purge_raw(mode, glider_paths)
+        _clear_raw_ts(mode, glider_paths)
 
         # Make directories, if necessary
         utils.makedirs_pass(rawdir)
@@ -337,7 +337,7 @@ def generate_timeseries(
     # Sci Timeseries
     if write_sci:
         # Remove relevant files
-        _purge_sci(mode, glider_paths)
+        _clear_sci_ts(mode, glider_paths)
 
         # Make directories, if necessary
         utils.makedirs_pass(tsdir)
@@ -476,7 +476,7 @@ def generate_timeseries(
     }
 
 
-def _purge_raw(mode: str, glider_paths: dict):
+def _clear_raw_ts(mode: str, glider_paths: dict):
     """
     Remove (purge) relevant files if rewriting the raw timeseries
     Returns nothing
@@ -494,7 +494,7 @@ def _purge_raw(mode: str, glider_paths: dict):
             utils.remove_file(f)
 
 
-def _purge_sci(mode: str, glider_paths: dict):
+def _clear_sci_ts(mode: str, glider_paths: dict):
     """
     Remove (purge) relevant files if rewriting the science timeseries
     Returns nothing
