@@ -5,6 +5,8 @@ These functions are intended to be general enough for use outside ESD.
 
 import logging
 import os
+import subprocess
+from pathlib import Path
 
 # import netCDF4
 import numpy as np
@@ -628,3 +630,64 @@ def decompress_dir(binarydir):
     binarydir_files = os.listdir(binarydir)
     _log.info("There are now %s files in %s", len(binarydir_files), binarydir)
 
+
+def decompress_compex(fin: str | Path, compex_path):
+    """
+    Decompress a single file using the Compex tool.
+
+    Parameters
+    ----------
+    fin : str or Path
+        The path to the compressed file. 
+        Must be a *[dest]cd (or *.[DEST]CD) file. 
+    compex_path : str
+        The path to the compex executable.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the Compex executable is not found at the specified path.
+    ValueError
+        If the file has an unsupported extension for Compex decompression.
+    subprocess.CalledProcessError
+        If the Compex command fails.
+    """
+
+    if not os.path.exists(compex_path):
+        raise FileNotFoundError(f"Compex executable not found at {compex_path}")
+    _log.debug(
+        "Decompressing file %s with compex using executable at %s", 
+        fin, 
+        compex_path
+    )
+
+    # Implement the actual decompression logic here
+    fin = Path(fin)
+    if fin.suffix in [".ecd", ".ECD"]:
+        fout = fin.with_suffix(".ebd")
+    elif fin.suffix in [".dcd", ".DCD"]:
+        fout = fin.with_suffix(".dbd")
+    elif fin.suffix in [".scd", ".SCD"]:
+        fout = fin.with_suffix(".sbd")
+    elif fin.suffix in [".tcd", ".TCD"]:
+        fout = fin.with_suffix(".tbd")
+    else:
+        raise ValueError(f"Unsupported file extension for compex decompression: {fin}")
+
+    try:
+        run_args = [compex_path, "x", str(fin), str(fout)]
+        _log.debug("Running compex with arguments: %s", run_args)
+        result = subprocess.run(
+            run_args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # Combines stderr into stdout stream
+            text=True,                 # Decodes output as string (Python 3.7+)
+            check=True
+        )
+        if result.stdout:
+            _log.debug("Process output:\n%s", result.stdout.strip())
+
+    except subprocess.CalledProcessError as e:
+        if e.stdout:
+            _log.error("Process failed with output:\n%s", e.stdout.strip())
+        raise

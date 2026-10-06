@@ -68,6 +68,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added valid_min and valid_max values for several variables to the `data/netcdf-variables-sci.yml` file.
 - Changed applicable functions to now check the deployment metadata for a 'start_date' attribute (rather than 'deployment_min_dt') for the deployment start time, for instance to filter for values after this start datetime.
 - Changed license to CC0-1.0, to align with NOAA guidelines.
+- Changed `decompress.py` script to let the user specify 'dbdreader' or 'compex' as decompression methods. 
+- Added function `decompress_compex` to `slocum.core`, for using a user-specified compex file (from Teledyne) for decompressing binary files. 
+- Added function `count_binary_files` to `utils`, for counting and logging the number of binary files in a given directory. 
 
 ## [0.4.0] - 2026-04-17
 

@@ -3,41 +3,52 @@ import os
 from pathlib import Path
 
 from dbdreader.decompress import decompress_file, is_compressed
+from esdglider.slocum.core import decompress_compex
 
-from esdglider import gcp, paths
+from esdglider import gcp, paths, utils
+
+logger = logging.getLogger(__name__)
 
 """
 This script is intended to help users quickly generate decompressed
 binary files, as a light wrapper around dbdreader functions.
+
+
+Potentially relevant command line samples:
+
+# Copy binary files to local, for testing
+gcloud storage cp \
+    gs://swfscesd-glider-deployments-data-in/2026/calanus-20260824/binary/delayed/* \
+    tmp-binary/calanus-20260824-delayed/
+
+# Delete any existing decompressed files to start fresh
+find tmp-binary/calanus-20260824-delayed \
+    -type f -regextype posix-extended \
+    -regex ".*.[de][bc]d" \
+    -delete
+
+
+rclone check calanus-20260824-delayed calanus-20260824-delayed-compex
 """
 
-deployment_name = "amlr30-20260114"
+### User-supplied variables
+deployment_name = "calanus-20260824"
 mode = "delayed"
+decompress_tool = "dbdreader" #dbdreader, compex
 
+# Ignored unless `decompress_tool` is "compex"
+compex_exe_path = "" # "/home/user/compexp.exe" 
+
+### Consistent variables
 home = Path.home()
-
-mnt_path = home / "mnt-gcs"
-config_path = home / "glider-lab" / "deployment-configs"
-cac_path = home / "standard-glider-files" / "Cache"
-
 logs_bucket_name = "swfscesd-glider-logs"
-data_in_bucket_name = "swfscesd-glider-deployments-data-in"
+logs_path = home / "mnt-gcs" / logs_bucket_name
+# logs_path = home / "tmp-binary"
+log_file_name = f"{deployment_name}-{mode}-decompress-{decompress_tool}.log"
 
-logs_path = mnt_path / logs_bucket_name
-data_in_path = mnt_path / data_in_bucket_name
-
-# deployment_info = {
-#     "deployment_name": deployment_name,
-#     "deploymentyaml": os.path.join(config_path, f"{deployment_name}.yml"),
-#     "mode": "delayed",
-# }
-log_file_name = f"{deployment_name}-{mode}-decompress.log"
 
 if __name__ == "__main__":
-    # bucket_name = "amlr-gliders-deployments-dev"
-    # deployments_path = os.path.join("/home/sam_woodman_noaa_gov", bucket_name)
     gcp.gcs_mount_bucket(logs_bucket_name, logs_path, ro=False)
-    gcp.gcs_mount_bucket(data_in_bucket_name, data_in_path, ro=False)
 
     logging.basicConfig(
         filename=logs_path / log_file_name,
@@ -46,36 +57,40 @@ if __name__ == "__main__":
         level=logging.INFO,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    
+    print(f"Writing logs to {logs_path / log_file_name}")
+
     glider_paths = paths.get_path_glider(
         deployment_name = deployment_name, 
         mode = mode, 
-        config_path = config_path, 
-        data_in_path = data_in_path, 
-        cache_path = cac_path, 
+        home_path = home,
     )
+    gcp.gcs_mount_bucket(paths.data_in_bucket_name, glider_paths["data_in_path"], ro=False)
 
-    binarydir = glider_paths["binarydir"]
-    # binarydir = "/home/user/amlr30-20260114-compressed/delayed"
-    binarydir_files = os.listdir(binarydir)
-    logging.info("There are %s total files in %s", len(binarydir_files), binarydir)
 
-    dcd_files = list(Path(binarydir).glob("*.dcd"))
-    ecd_files = list(Path(binarydir).glob("*.ecd"))
-    logging.info("There are %s dcd files", len(dcd_files))
-    logging.info("There are %s ecd files", len(ecd_files))
+    binary_dir = glider_paths["binarydir"]
+    # binary_dir = "/home/user/tmp-binary/calanus-20260824-delayed-compex"
+    binary_dir_files = os.listdir(binary_dir)
 
-    # FileDecompressor.decompress(dcd1)
-    logging.info("decompressing all files in %s", binarydir)
-    for fin in binarydir_files:
-        logging.debug("Working on %s", fin)
+    utils.count_binary_files(binary_dir, "Start: ")
+
+    logger.info("decompressing all files in %s", binary_dir)
+    for fin in binary_dir_files:
+        logger.debug("Working on %s", fin)
+
         if is_compressed(fin):
+            fin_path = os.path.join(binary_dir, fin)
             try:
-                decompress_file(os.path.join(binarydir, fin))
-            except Exception as e:
-                logging.error("Error decompressing %s: %s", fin, e)
+                if decompress_tool == "dbdreader":
+                    decompress_file(fin_path)
+                elif decompress_tool == "compex":
+                    decompress_compex(fin_path, compex_exe_path)
+                else:
+                    raise NotImplementedError("Only decompression tools 'dbdreader' or 'compex' are currently supported")
+            except Exception as e:  # noqa: BLE001
+                logger.error("Error decompressing %s: %s", fin, e)
         else:
-            logging.debug("skipping %s", fin)
+            logger.debug("skipping %s", fin)
 
-    binarydir_files = os.listdir(binarydir)
-    logging.info("There are now %s files in %s", len(binarydir_files), binarydir)
+    utils.count_binary_files(binary_dir, "End: ")
+    logger.info("Decompression efforts complete for all files in %s", binary_dir)
+    

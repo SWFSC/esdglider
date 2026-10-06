@@ -506,6 +506,47 @@ def line_prepender(filename, line):
         f.write(line.rstrip("\r\n") + "\n" + content)
 
 
+def count_binary_files(dir: str | Path, log_pre: str = ""):
+    """
+    Count the number of total, dcd, ecd, dbd, and ebd files 
+    in the given directory.
+
+    Parameters
+    ----------
+    dir (str | Path): The path to the (binary) directory.
+
+    log_pre (str, optional): A prefix for log messages. Defaults to "".
+
+    Returns
+    -------
+    tuple: A tuple containing the counts of: 
+    total files, dcd files, ecd files, dbd files, and ebd files.
+    """
+    dir = Path(dir)
+    total_files = len(os.listdir(dir))
+    _log.info("%s: There are %d total files in %s", log_pre, total_files, dir)
+
+    dcd_files = len(list(dir.glob("*.dcd")))
+    ecd_files = len(list(dir.glob("*.ecd")))
+    _log.info(
+        "%s: There are %d/%d dcd/ecd files",
+        log_pre,
+        dcd_files, 
+        ecd_files
+    )
+
+    dbd_files = len(list(dir.glob("*.dbd")))
+    ebd_files = len(list(dir.glob("*.ebd")))
+    _log.info(
+        "%sThere are %d/%d dbd/ebd files",
+        log_pre,
+        dbd_files, 
+        ebd_files
+    )
+
+    return total_files, dcd_files, ecd_files, dbd_files, ebd_files
+
+
 def calc_ts(ds):
     """
     Calculate variables for temperature/salinity plots
