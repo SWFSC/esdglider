@@ -435,7 +435,7 @@ def mkdir_pass(dir):
     Convenience wrapper to try to make a directory path,
     and pass if it already exists
     """
-    _log.debug(f"Trying to make directory {dir}")
+    _log.debug("Trying to make directory %s", dir)
     try:
         os.mkdir(dir)
     except FileExistsError:
@@ -447,7 +447,7 @@ def makedirs_pass(dir):
     Convenience wrapper to try to make a directory path,
     and pass if it already exists
     """
-    _log.debug(f"Trying to make directory {dir}")
+    _log.debug("Trying to make directory %s", dir)
     if not os.path.exists(dir):
         os.makedirs(dir)
 
@@ -458,8 +458,13 @@ def rmtree(dir, ignore_errors=False):
     Checks if directory exists before deleting
     """
     if os.path.isdir(dir):
-        _log.info(f"Removing the following directory and all files in it: {dir}")
+        _log.info(
+            "Removing the following directory and all files in it: %s", 
+            dir,
+        )
         shutil.rmtree(dir, ignore_errors=ignore_errors)
+    else:
+        _log.debug("No directory to remove at: %s", dir)
 
 
 def remove_file(file_path):
@@ -468,10 +473,10 @@ def remove_file(file_path):
     and to remove it if so
     """
     if os.path.exists(file_path):
-        _log.info(f"Removing file: {file_path}")
+        _log.info("Removing file: %s", file_path)
         os.remove(file_path)
     else:
-        _log.debug(f"No file to remove at: {file_path}")
+        _log.debug("No file to remove at: %s", file_path)
 
 
 def find_extensions(dir_path):  # ,  excluded = ['', '.txt', '.lnk']):

@@ -6,10 +6,10 @@ import ast
 import logging
 import math
 import os
-from pathlib import Path
 import tempfile
 from datetime import datetime
 from importlib import metadata
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -195,7 +195,10 @@ def generate_timeseries(
     prof_summ_path = glider_paths["profsummpath"]
 
     if write_raw:
-        utils.rmtree(glider_paths["outdir"]) #raw: remove all
+        # Remove relevant files
+        _purge_raw(mode, glider_paths)
+
+        # Make directories, if necessary
         utils.makedirs_pass(rawdir)
         utils.makedirs_pass(ancdir)
 
@@ -333,9 +336,10 @@ def generate_timeseries(
     # --------------------------------------------
     # Sci Timeseries
     if write_sci:
-        # Since gridded depend on ts, also delete gridded
-        utils.remove_file(outname_tssci)
-        utils.rmtree(glider_paths["griddir"]) #sci: remove gridded
+        # Remove relevant files
+        _purge_sci(mode, glider_paths)
+
+        # Make directories, if necessary
         utils.makedirs_pass(tsdir)
 
         if sci_use_m_depth: 
@@ -472,6 +476,45 @@ def generate_timeseries(
     }
 
 
+def _purge_raw(mode: str, glider_paths: dict):
+    """
+    Remove (purge) relevant files if rewriting the raw timeseries
+    Returns nothing
+    """
+    utils.rmtree(glider_paths["ngdacdir"])
+    utils.rmtree(glider_paths["plotdir"])
+
+    for dir_key in ["rawdir", "tsdir", "griddir", "ancillarydir"]:
+        dir = Path(glider_paths[dir_key])
+        regex = f"*-{mode}-*"
+        _log.debug("Removing files with regex %s from directory: %s", regex, dir)
+
+        matching_files = [str(f) for f in dir.glob(regex) if f.is_file()]
+        for f in matching_files:
+            utils.remove_file(f)
+
+
+def _purge_sci(mode: str, glider_paths: dict):
+    """
+    Remove (purge) relevant files if rewriting the science timeseries
+    Returns nothing
+    """
+    utils.rmtree(glider_paths["ngdacdir"])
+    utils.rmtree(glider_paths["plotdir"])
+
+    utils.remove_file(glider_paths["tsscipath"])
+
+    for dir_key in ["griddir", "ancillarydir"]:
+        dir = Path(glider_paths[dir_key])
+        regex = f"*-{mode}-*"
+        _log.debug("Removing files with regex %s from directory: %s", regex, dir)
+
+        matching_files = [str(f) for f in dir.glob(regex) if f.is_file()]
+        for f in matching_files:
+            utils.remove_file(f)
+
+
+
 def postproc_attrs(
         ds: xr.Dataset, 
         mode: str, 
@@ -510,28 +553,7 @@ def postproc_attrs(
     # Rerun pyglider metadata functions, now that drop_bogus has been run,
     # for the sake of times. 
     # Metadata and device info have already been added, so not needed here
-    ds = pgutils.fill_metadata(ds, {}, {})    
-
-    # # Determine the glider ID using min_dt, and check vs ID from time
-    # time0_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M%S")
-    # if "start_date" in ds.attrs:
-    #     # min_dt64 = np.datetime64(ds.attrs["start_date"])
-    #     min_dt64 = utils.parse_iso8601(ds.attrs["start_date"])
-    #     min_dt_str = min_dt64.strftime("%Y%m%dT%H%M")
-    #     if min_dt_str != time0_str:
-    #         _log.warning(
-    #             "The dataset ID generated from the metadata (%s) "
-    #             "is different from that generated from the time (%s). "
-    #             "Using the ID from the metadata",
-    #             min_dt_str,
-    #             time0_str,
-    #         )
-    # else:
-    #     _log.info(
-    #         "There is no start_date attribute in the dataset. "
-    #         "Using the first time value for the ID."
-    #     )
-    #     min_dt_str = time0_str   
+    ds = pgutils.fill_metadata(ds, {}, {})
 
     # Drop some attributes from pyglider we don't want to keep
     attrs_to_drop = [
@@ -539,16 +561,17 @@ def postproc_attrs(
         "deployment_end", 
     ]
 
-    time0_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M%S")
+    # Check glider ID with start_date vs ID from time0, as applicable
+    # Use "%Y%m%dT%H%M" because this is what IOOS wants
+    time0_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M")
     if start_date is None:
         attrs_to_drop.append("start_date")
         min_dt_str = time0_str
 
     else:
         ds.attrs["start_date"] = start_date
-        # Check glider ID with start_date vs ID from time0
         min_dt64 = utils.parse_iso8601(start_date)
-        min_dt_str = min_dt64.strftime("%Y%m%dT%H%M%S")  # type: ignore
+        min_dt_str = min_dt64.strftime("%Y%m%dT%H%M")  # type: ignore
         if min_dt_str != time0_str:
             _log.warning(
                 "The time component of the dataset ID "
@@ -904,48 +927,31 @@ def generate_gridded(
         A dictionary containing the paths to the gridded netCDF files.
     """
     
-    outname_tssci = glider_paths["tsscipath"]
     if bin_size != [1, 5]:
         _log.warning(
             "The bin_size variable is not the default [1, 5]. "
             "The output paths may be different than expected."
         )
+    
+    keys_to_extract = [f"gr{i}path" for i in bin_size]
+    keys_to_return = [f"outname_gr{i}m" for i in bin_size]
+    outname_tssci = glider_paths["tsscipath"]
 
     if write_gridded:
         if not os.path.isfile(outname_tssci):
             _log.error("Could not find %s", outname_tssci)
             raise FileNotFoundError(f"Could not find {outname_tssci}")
         
-        utils.rmtree(glider_paths["griddir"])
         utils.rmtree(glider_paths["plotdir"])
+        for ke in keys_to_extract:
+            utils.remove_file(glider_paths[ke])
 
-        # if use_m_depth:
-        #     _log.info("Gridding science data using glider measured depth (depth_measured)")
-        #     with tempfile.TemporaryDirectory() as temp_dir:
-        #         temp_file = os.path.join(temp_dir, os.path.basename(outname_tssci))
-        #         _log.debug("Creating temporary science dataset with measured depth as depth: %s", temp_file)
-                
-        #         with xr.open_dataset(outname_tssci) as ds_sci:
-        #             ds_sci_tmp = (
-        #                 ds_sci.drop_vars(["depth"])
-        #                 .rename({"depth_measured": "depth"})
-        #             )
-        #             # Add a comment that the bins were created using depth_measured
-        #             tmp_comment = "Glider data was gridded using the glider measured depth (depth_measured)"
-        #             ds_sci_tmp.attrs["comment"] = utils.append_string(
-        #                 ds_sci_tmp.attrs.get("comment", ""), tmp_comment)
-        #             ds_sci_tmp.to_netcdf(temp_file, encoding={'time': time_encoding})
-                
-        #         outnames = _run_pyglider_gridding(temp_file, glider_paths)
-        # else:
         _log.info("Gridding science data using given 'depth' var")
         outnames = _run_pyglider_gridding(outname_tssci, glider_paths)
         _log.debug("gridded outnames %s", "; ".join(outnames))
 
     else:
         _log.info("Not writing gridded nc")
-        keys_to_return = [f"outname_gr{i}m" for i in bin_size]
-        keys_to_extract = [f"gr{i}path" for i in bin_size]
         outnames = {}
         for kr, ke in zip(keys_to_return, keys_to_extract):
             outnames |= {kr: glider_paths[ke]}
@@ -1510,10 +1516,7 @@ def update_ngdac_profile_attributes(
 
     # TRAJECTORY
     # ESD USES THE DEPLOYMENT ID FROM THE SCIENCE TIMESERIES
-    ds["trajectory"] = xr.DataArray(
-        np.bytes_(trajectory)
-    )
-
+    ds["trajectory"] = trajectory.encode()
     ds["trajectory"].attrs.update(
         {
             "cf_role": "trajectory_id",
@@ -1534,11 +1537,11 @@ def update_ngdac_profile_attributes(
     )
 
     ds["platform"].attrs["instrument"] = instrument_str
-
     ds["platform"].attrs["long_name"] = (
         f"{meta['glider_model']} "
         f"{meta['glider_name']}"
     )
+   
 
     # REMOVE INSTRUMENT GLOBAL ATTRIBUTES
     # Instrument metadata are stored on instrument variables instead.
