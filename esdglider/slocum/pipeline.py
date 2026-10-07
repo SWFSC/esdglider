@@ -224,25 +224,24 @@ def generate_timeseries(
         tsraw = xr.load_dataset(outname_tsraw)
 
         # Attributes
+        processing_level_l0 = (
+            "Raw Slocum glider time-series dataset from the native "
+            "data file format. "
+            "Level 0 (L0) processed data timeseries; no corrections, "
+            "data screening, or quality control provided."
+        )
         tsraw = postproc_attrs(
             tsraw, 
             mode, 
             file_info=file_info,
             start_date=start_date, 
-        )
-        tsraw.attrs["comment"] = utils.append_string(
-            tsraw.attrs["comment"], 
-            (
-                "The variable names for this raw dataset are the glider "
-                "sensor names. See the relevant masterdata file "
-                "for sensor name details"
-            ), 
+            processing_level=processing_level_l0,
         )
 
         tsraw.to_netcdf(
             outname_tsraw, 
             mode="w", 
-            encoding={'time': time_encoding}
+            encoding={'time': time_encoding}, 
         )
 
         # Save profile summary, get profile index attributes
@@ -520,7 +519,8 @@ def postproc_attrs(
         mode: str, 
         *, 
         file_info: str | None = None,
-        start_date: str |None = None
+        start_date: str |None = None, 
+        processing_level: str | None = None,
     ) -> xr.Dataset:
     """
     Update attributes of xarray Dataset ds, including:
@@ -543,6 +543,10 @@ def postproc_attrs(
         Information about the processing file, by default None.
     start_date : str | None, optional
         The start date of the deployment in ISO 8601 format, by default None.
+    processing_level : str | None, optional
+        A string to be written to the 'processing_level' attribute of the 
+        dataset. 
+        If None, then attribute is not written or modified.
 
     Returns
     -------
@@ -624,6 +628,9 @@ def postproc_attrs(
             f"dbdreader v{metadata.version('dbdreader')}",
         ],
     )
+
+    if processing_level is not None:
+        ds.attrs["processing_level"] = processing_level
 
     return ds
 
@@ -742,14 +749,18 @@ def postproc_tsl1(
         _log.debug("Profile info not provided - skipping profiles")
 
     # ATTRIBUTES
-    ds = postproc_attrs(ds, mode, file_info=file_info, start_date=start_date)
-
-    # Update attribute specific to eng and sci timeseries
-    ds.attrs["processing_level"] = (
+    processing_level_l1 = (
         "Level 1 (L1) processed data timeseries. "
         "Values have been interpolated via linear fill, "
         f"with a maxgap of {maxgap} seconds. "
         "Minimal data screening."
+    )
+    ds = postproc_attrs(
+        ds, 
+        mode, 
+        file_info=file_info, 
+        start_date=start_date, 
+        processing_level=processing_level_l1,
     )
 
     return ds
@@ -1506,9 +1517,6 @@ def update_ngdac_profile_attributes(
     xarray.Dataset
         Updated profile dataset containing ESD-specific metadata.
     """
-
-    # # COPY DATASET BEFORE MODIFYING
-    # ds = ds.copy()
 
     # LOAD DEPLOYMENT METADATA
     meta = deployment["metadata"]

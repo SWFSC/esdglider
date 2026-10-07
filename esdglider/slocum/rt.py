@@ -95,37 +95,6 @@ def scrape_sfmc(
         raise ValueError("Unsuccessful rsync with SFMC dockserver")
 
     _log.info("Successfully completed rsync from SFMC.")
-    
-   
-    # rsync_args = [
-    #     "sshpass",
-    #     "-p",
-    #     gcp.access_secret_version(gcpproject_id, secret_id),
-    #     "rsync",
-    #     "-aP",
-    #     "--delete",
-    #     sfmc_server_path,
-    #     sfmc_local_path,
-    # ]
-    # NOTE: sshpass via file does not currently work. Unsure why
-    # rsync_args = ['sshpass', '-f', sfmc_pwd_file,
-    #               'rsync', "-aP", "--delete", sfmc_server_path, sfmc_local_path]
-    # os.remove(sfmc_pwd_file) #delete sfmc_pwd_file
-    # _log.debug(f'Removed SFMC ssh password file')
-
-    # _log.debug(rsync_args)
-    # retcode = subprocess.run(rsync_args, capture_output=True)
-    # _log.debug(retcode.args)
-
-    # if retcode.returncode != 0:
-    #     _log.error("Error rsyncing with SFMC dockserver")
-    #     _log.error(f"Args: {retcode.args}")
-    #     _log.error(f"stderr: {retcode.stderr}")
-    #     raise ValueError("Unsuccessful rsync with SFMC dockserver")
-    # else:
-    #     _log.info(f"Successfully completed rsync with SFMC dockerver for {glider}")
-    #     _log.debug(f"Args: {retcode.args}")
-    #     _log.debug(f"stderr: {retcode.stdout}")
 
     # Check for unexpected file extensions
     sfmc_file_ext = utils.find_extensions(sfmc_local_path)
@@ -268,65 +237,3 @@ def transfer_files_to_gcs(
         )
     else:
         _log.info(f"No {subdir_name} files found to process.")
-
-
-# def rt_file_mgmt(
-#     sfmc_ext_all,
-#     ext_regex,
-#     subdir_name,
-#     local_path,
-#     bucket_path,
-#     rsync_delete=True,
-# ):
-#     """
-#     Move real-time files from the local sfmc folder (local_path)
-#     to their subdirectory (subdir_path).
-#     Then uses gcloud to rsync to their place in the bucket (bucket_path)
-
-#     The rsync_delete flag indicates if the --delete-unmatched-destination-objects
-#     flag is used in the command
-
-#     ext_regex_path does include * for copying files (eg is '.[st]bd')
-#     """
-
-#     if any(re.search(ext_regex, i) for i in sfmc_ext_all):
-#         # Check paths
-#         if not os.path.isdir(local_path):
-#             _log.error(f"Necessary path ({local_path}) does not exist")
-#             raise FileNotFoundError(f"Could not find {local_path}")
-
-#         subdir_path = os.path.join(local_path, subdir_name)
-#         if not os.path.isdir(subdir_path):
-#             _log.error(f"Necessary path ({subdir_path}) does not exist")
-#             raise FileNotFoundError(f"Could not find {subdir_path}")
-
-#         # Move files so as to do rsync later
-#         _log.info(f"Moving {subdir_name} files to their local subdirectory")
-#         mv_cmd = f"mv {os.path.join(local_path, f'*{ext_regex}')} {subdir_path}"
-#         _log.debug(mv_cmd)
-#         retcode_tmp = subprocess.call(mv_cmd, shell=True)
-#         _log.debug(retcode_tmp)
-
-#         # Do rsync
-#         _log.info(f"Rsyncing {subdir_name} subdirectory with bucket directory")
-#         rsync_args = ["gcloud", "storage", "rsync", "-r"]
-#         if rsync_delete:
-#             rsync_args.append("--delete-unmatched-destination-objects")
-#         rsync_args.extend([subdir_path, bucket_path])
-
-#         _log.debug(rsync_args)
-#         retcode = subprocess.run(rsync_args, capture_output=True)
-
-#         if retcode.returncode != 0:
-#             _log.error(f"Error rsyncing {subdir_name} files to bucket")
-#             _log.error(f"Args: {retcode.args}")
-#             _log.error(f"stderr: {retcode.stderr}")
-#             raise ValueError("Unsuccessful rsync to bucket")
-#         else:
-#             _log.info(f"Rsynced {subdir_name} files to {bucket_path}")
-#             _log.debug(f"Args: {retcode.args}")
-#             _log.debug(f"stderr: {retcode.stdout}")
-#     else:
-#         _log.info(f"No {subdir_name} files to copy")
-
-#     return 0
