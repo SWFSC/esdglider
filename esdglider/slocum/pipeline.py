@@ -504,7 +504,7 @@ def _clear_sci_ts(mode: str, glider_paths: dict):
 
     utils.remove_file(glider_paths["tsscipath"])
 
-    for dir_key in ["griddir", "ancillarydir"]:
+    for dir_key in ["griddir"]:
         dir = Path(glider_paths[dir_key])
         regex = f"*-{mode}-*"
         _log.debug("Removing files with regex %s from directory: %s", regex, dir)
