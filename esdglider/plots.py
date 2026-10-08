@@ -1125,7 +1125,7 @@ def sci_spatialgrid_plot(
     return fig
 
 
-def eng_plots_to_make(ds: xr.Dataset):
+def eng_plots_to_make(ds: xr.Dataset) -> dict:
     """
     Create dictionary used to make engineering plots.
     This output is intended to be passed to eng_tvt_plot()
@@ -1137,78 +1137,128 @@ def eng_plots_to_make(ds: xr.Dataset):
 
     Returns
     -------
-    Dictionary used by eng_tvt_plot to make plots
+    dict
+        Dictionary used by eng_tvt_plot to make plots.
     """
+    plots_to_make = {}
 
-    da_c_tdepth = ds["c_dive_target_depth"].dropna(dim="time")
-    try:
-        da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
-    except ValueError:
-        da_c_mdepth = None
-
-    da_ctd_depth = ds["depth_ctd"].dropna(dim="time")
-    try:
-        da_ctd_mdepth = ds["m_depth"].interp(time=da_ctd_depth.time)
-        da_ctd_diff = da_ctd_depth - da_ctd_mdepth 
-    except ValueError:
-        da_ctd_mdepth = None
-        da_ctd_diff = None
-
-    plots_to_make = {
-        "oilVol": {
+    # 1. oilVol
+    req_oil = ["c_de_oil_vol", "m_de_oil_vol"]
+    if all(v in ds for v in req_oil):
+        plots_to_make["oilVol"] = {
             "X": ds["c_de_oil_vol"],
             "Y": [ds["m_de_oil_vol"]],
             "C": ["C0"],
             "cb": None,
-        },
-        "diveEnergy": {
+        }
+    else:
+        missing = [v for v in req_oil if v not in ds]
+        _log.warning("Skipping 'oilVol' plot: missing variable(s) %s in dataset", missing)
+
+    # 2. diveEnergy
+    req_energy = ["m_tot_num_inflections", "m_coulomb_amphr", "m_coulomb_amphr_total"]
+    if all(v in ds for v in req_energy):
+        plots_to_make["diveEnergy"] = {
             "X": ds["m_tot_num_inflections"],
             "Y": [ds["m_coulomb_amphr"], ds["m_coulomb_amphr_total"]],
             "C": ["C0", "C1"],
             "cb": None,
-        },
-        "diveDepth": {
-            "X": da_c_tdepth,
-            "Y": [da_c_mdepth],
-            "C": ["C0"],
-            "cb": None,
-        },
-        "diveDepthComp": {
-            "X": da_ctd_depth,
-            "Y": [da_ctd_mdepth],
-            "C": [da_ctd_diff],
-            "cb": "depth diff (ctd minus measured)",
-            # "cb": "diff(depth_ctd, depth_measured)",
-            # "C": ["C0"],
-            # "cb": None,
-        },
-        "diveAmpHr": {
+        }
+    else:
+        missing = [v for v in req_energy if v not in ds]
+        _log.warning("Skipping 'diveEnergy' plot: missing variable(s) %s in dataset", missing)
+
+    # 3. diveDepth
+    req_divedepth = ["c_dive_target_depth", "m_depth"]
+    if all(v in ds for v in req_divedepth):
+        try:
+            da_c_tdepth = ds["c_dive_target_depth"].dropna(dim="time")
+            da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
+            plots_to_make["diveDepth"] = {
+                "X": da_c_tdepth,
+                "Y": [da_c_mdepth],
+                "C": ["C0"],
+                "cb": None,
+            }
+        except Exception as e:
+            _log.warning("Skipping 'diveDepth' plot due to processing error: %s", e)
+    else:
+        missing = [v for v in req_divedepth if v not in ds]
+        _log.warning("Skipping 'diveDepth' plot: missing variable(s) %s in dataset", missing)
+
+    # 4. diveDepthComp
+    req_comp = ["depth_ctd", "m_depth"]
+    if all(v in ds for v in req_comp):
+        try:
+            da_ctd_depth = ds["depth_ctd"].dropna(dim="time")
+            da_ctd_mdepth = ds["m_depth"].interp(time=da_ctd_depth.time)
+            da_ctd_diff = da_ctd_depth - da_ctd_mdepth
+            plots_to_make["diveDepthComp"] = {
+                "X": da_ctd_depth,
+                "Y": [da_ctd_mdepth],
+                "C": [da_ctd_diff],
+                "cb": "depth diff (ctd minus measured)",
+            }
+        except Exception as e:
+            _log.warning("Skipping 'diveDepthComp' plot due to processing error: %s", e)
+    else:
+        missing = [v for v in req_comp if v not in ds]
+        _log.warning("Skipping 'diveDepthComp' plot: missing variable(s) %s in dataset", missing)
+
+    # 5. diveAmpHr
+    req_amphr = ["m_depth", "m_coulomb_amphr"]
+    if all(v in ds for v in req_amphr):
+        plots_to_make["diveAmpHr"] = {
             "X": ds["m_depth"],
             "Y": [ds["m_coulomb_amphr"]],
             "C": ["C0"],
             "cb": None,
-        },
-        "leakDetect": {
-            "X": ds["time"],
-            "Y": [
-                ds["m_leakdetect_voltage"].rolling(time=900, min_periods=10).mean(),
-                ds["m_leakdetect_voltage_forward"]
-                .rolling(time=900, min_periods=10)
-                .mean(),
-                ds["m_leakdetect_voltage_science"]
-                .rolling(time=900, min_periods=10)
-                .mean(),
-            ],
-            "C": ["C0", "C1", "C2"],
-            "cb": None,
-        },
-        "vacuumDepth": {
+        }
+    else:
+        missing = [v for v in req_amphr if v not in ds]
+        _log.warning("Skipping 'diveAmpHr' plot: missing variable(s) %s in dataset", missing)
+
+    # 6. leakDetect (constructs plot using whichever voltage variables exist)
+    leak_vars = [
+        "m_leakdetect_voltage",
+        "m_leakdetect_voltage_forward",
+        "m_leakdetect_voltage_science",
+    ]
+    if "time" in ds:
+        y_list = []
+        c_list = []
+        colors = ["C0", "C1", "C2"]
+        for i, var in enumerate(leak_vars):
+            if var in ds:
+                y_list.append(ds[var].rolling(time=900, min_periods=10).mean())
+                c_list.append(colors[i])
+            else:
+                _log.warning("Variable '%s' missing for 'leakDetect' plot", var)
+
+        if y_list:
+            plots_to_make["leakDetect"] = {
+                "X": ds["time"],
+                "Y": y_list,
+                "C": c_list,
+                "cb": None,
+            }
+        else:
+            _log.warning("Skipping 'leakDetect' plot: no leak detect voltage variables present in dataset")
+    else:
+        _log.warning("Skipping 'leakDetect' plot: 'time' variable missing in dataset")
+
+    # 7. vacuumDepth
+    req_vac = ["time", "m_vacuum", "m_depth"]
+    if all(v in ds for v in req_vac):
+        plots_to_make["vacuumDepth"] = {
             "X": ds["time"],
             "Y": [ds["m_vacuum"]],
             "C": [ds["m_depth"]],
             "cb": "m_depth",
-        },
-    }
+        }
+    else:
+        missing = [v for v in req_vac if v not in ds]
+        _log.warning("Skipping 'vacuumDepth' plot: missing variable(s) %s in dataset", missing)
 
     return plots_to_make
 
@@ -1226,64 +1276,66 @@ def eng_tvt_plot(
 
     Parameters
     ----------
+    key : str
+        The name of the variable key from eng_dict to plot
     ds : xarray dataset
         Timeseries glider raw dataset.
-    eng_dict : dictionary
+    eng_dict : dict
         Dictionary produced by eng_plots_to_make()
-        Used by this function to get
-    key : str
-        The name of the variable (i.e., key from eng_dict) to plot
-    base_path : str
-        The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of glider.get_path_glider
+    base_path : str or None
+        The 'base' of the plot path. If None, plot is not saved
     show : bool
         Boolean indicating if the plots should be shown before being closed
 
     Returns
     -------
-        matplotlib.Figure.figure object
+    matplotlib.figure.Figure or None
     """
+    if key not in eng_dict:
+        _log.warning("Key '%s' not present in eng_dict. Skipping tvt plot.", key)
+        return None
 
-    if key not in list(eng_dict.keys()):
-        raise ValueError(
-            f"Variable name {key} not present in eng_dict. Skipping plot"
-        )
+    plot_info = eng_dict[key]
+    if plot_info is None or plot_info.get("X") is None or not plot_info.get("Y"):
+        _log.warning("Incomplete data for key '%s' in eng_dict. Skipping tvt plot.", key)
+        return None
 
-    deployment = ds.deployment_name
-    _log.info(f"Making tvt plot for dictionary key {key}")
+    deployment = getattr(ds, "deployment_name", ds.attrs.get("deployment_name", "unknown"))
+    _log.info("Making tvt plot for dictionary key %s", key)
 
     fig, ax = plt.subplots(figsize=(8.5, 8.5))
 
-    for i in range(len(eng_dict[key]["Y"])):
+    for i in range(len(plot_info["Y"])):
         if key == "oilVol":
-            plot = ax.scatter(eng_dict[key]["X"], eng_dict[key]["Y"][i])
+            plot = ax.scatter(plot_info["X"], plot_info["Y"][i])
         else:
             plot = ax.scatter(
-                eng_dict[key]["X"],
-                eng_dict[key]["Y"][i],
-                label=eng_dict[key]["Y"][i].name,
-                c=eng_dict[key]["C"][i],
+                plot_info["X"],
+                plot_info["Y"][i],
+                label=getattr(plot_info["Y"][i], "name", None),
+                c=plot_info["C"][i],
             )
 
-        if eng_dict[key]["cb"] is not None:
+        if plot_info["cb"] is not None:
             cbar = fig.colorbar(plot)
-            cbar.set_label(eng_dict[key]["cb"])
+            cbar.set_label(plot_info["cb"])
 
-    ax.set_xlabel(eng_dict[key]["X"].name, size=label_size)
-    ax.set_ylabel(eng_dict[key]["Y"][0].name, size=label_size)
+    x_name = getattr(plot_info["X"], "name", "X")
+    y_name = getattr(plot_info["Y"][0], "name", "Y")
 
-    if len(eng_dict[key]["C"]) > 1:
-        if key == "DiveEnergy":
+    ax.set_xlabel(x_name, size=label_size)
+    ax.set_ylabel(y_name, size=label_size)
+
+    if len(plot_info["C"]) > 1:
+        if key.lower() == "diveenergy":
             ax.legend(loc="upper left")
         else:
             ax.legend(loc="best")
 
-    if eng_dict[key]["X"].name == "time":
+    if x_name == "time":
         fig.autofmt_xdate()
 
-    ax.set_title(
-        f"Deployment {deployment}", size=title_size
-    )
+    ax.set_title(f"Deployment {deployment}", size=title_size)
 
     if base_path is not None:
         fname = os.path.join(

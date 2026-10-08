@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed `decompress.py` script to let the user specify 'dbdreader' or 'compex' as decompression methods. 
 - Added function `decompress_compex` to `slocum.core`, for using a user-specified compex file (from Teledyne) for decompressing binary files. 
 - Added function `count_binary_files` to `utils`, for counting and logging the number of binary files in a given directory. 
+- Changed the tvt plot creation to be robust to missing variables, for real-time data. 
 
 ## [0.4.0] - 2026-04-17
 
