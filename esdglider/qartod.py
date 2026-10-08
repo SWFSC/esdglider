@@ -173,7 +173,7 @@ from ioos_qc.qartod import qartod_compare
 from ioos_qc.results import collect_results
 from ioos_qc.streams import XarrayStream
 
-from esdglider import paths
+from esdglider import paths, utils
 
 # =========================================================
 # LOGGER
@@ -972,8 +972,8 @@ def run_flat_line_chunked(
         )
         # CONVERT RESULTS TO FLAGS
         chunk_flags = (
-            collected[0]
-            .results
+            collected[0] # type: ignore
+            .results # type: ignore
             .filled(2)
             .astype("int8")
         )
@@ -1150,7 +1150,7 @@ def run_qartod_tests(
 
                 test_flags = (
                     collected[0]
-                    .results
+                    .results # type: ignore
                     .filled(2)
                     .astype("int8")
                 )
@@ -1163,7 +1163,7 @@ def run_qartod_tests(
                 final_flags = test_flags.copy()
             else:
                 final_flags = qartod_compare(
-                    [final_flags, test_flags]
+                    [final_flags, test_flags] # type: ignore
                 ).astype("int8")
 
             _log.debug(
@@ -1565,6 +1565,8 @@ def save_qc_dataset(
                 "zlib": True,
             }
 
+    ds_qc = utils.sort_attrs(ds_qc)
+
     # WRITE NETCDF FILE
     ds_qc.to_netcdf(
         output_file,
@@ -1827,6 +1829,7 @@ def run_qartod_qc(
 
     # CREATE PLACEHOLDER QC VARIABLES
     ds_qc = create_placeholder_qc_variables(ds_qc)
+    ds_qc = utils.sort_attrs(ds_qc)
 
     # SAVE QC-ENHANCED DATASET
     save_qc_dataset(ds_qc, output_file)

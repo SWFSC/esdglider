@@ -558,15 +558,23 @@ def postproc_attrs(
     # for the sake of times. 
     # Metadata and device info have already been added, so not needed here
     ds = pgutils.fill_metadata(ds, {}, {})
+    ds.attrs['Metadata_Conventions'] = (
+        "Unidata Dataset Discovery v1.0, COARDS, CF-1.8"
+    )
+    # ds.attrs['Conventions'] = 'CF-1.8'
+    # ds.attrs['standard_name_vocabulary'] = 'CF Standard Name Table v72'
 
     # Drop some attributes from pyglider we don't want to keep
     attrs_to_drop = [
         "deployment_start", 
         "deployment_end", 
     ]
+    for attr in attrs_to_drop:
+        ds.attrs.pop(attr, None)
 
+    # ID
     # Check glider ID with start_date vs ID from time0, as applicable
-    # Use "%Y%m%dT%H%M" because this is what IOOS wants
+    # Use "%Y%m%dT%H%M" because this is desired IOOS format
     time0_str = ds.time.values[0].astype("datetime64[s]").item().strftime("%Y%m%dT%H%M")
     if start_date is None:
         attrs_to_drop.append("start_date")
@@ -585,9 +593,6 @@ def postproc_attrs(
                 min_dt_str,
                 time0_str,
             )
-
-    for attr in attrs_to_drop:
-        ds.attrs.pop(attr, None)
 
     ds.attrs["id"] = f"{ds.attrs['glider_name']}-{min_dt_str}"
 
@@ -615,7 +620,6 @@ def postproc_attrs(
                     attr,
                     ds.attrs[attr], 
                 )
-
     
     if file_info is None:
         file_info = "netCDF files created using"
@@ -631,6 +635,8 @@ def postproc_attrs(
 
     if processing_level is not None:
         ds.attrs["processing_level"] = processing_level
+
+    ds = utils.sort_attrs(ds)
 
     return ds
 
@@ -752,7 +758,7 @@ def postproc_tsl1(
     processing_level_l1 = (
         "Level 1 (L1) processed data timeseries. "
         "Values have been interpolated via linear fill, "
-        f"with a maxgap of {maxgap} seconds. "
+        f"with a 'maxgap' of {maxgap} seconds. "
         "Minimal data screening."
     )
     ds = postproc_attrs(
@@ -1522,6 +1528,13 @@ def update_ngdac_profile_attributes(
     meta = deployment["metadata"]
     instrument_meta = deployment["glider_devices"]
 
+    # DROP GEOSPATIAL_ AND TIME_COVERAGE_ ATTRIBUTES
+    for attr_name in list(ds.attrs):
+        if attr_name.startswith("geospatial_"):
+            del ds.attrs[attr_name]
+        if attr_name.startswith("time_coverage_"):
+            del ds.attrs[attr_name]
+
     # TRAJECTORY
     # ESD USES THE DEPLOYMENT ID FROM THE SCIENCE TIMESERIES
     ds["trajectory"] = trajectory.encode()
@@ -1535,6 +1548,10 @@ def update_ngdac_profile_attributes(
             "long_name": "Trajectory/Deployment Name",
         }
     )
+
+    # Instruct xarray to write as 1D char array using 'traj_strlen'
+    ds["trajectory"].encoding["dtype"] = "S1"
+    ds["trajectory"].encoding["char_dim_name"] = "traj_strlen"
 
     # PLATFORM
     ds["platform"].attrs["id"] = meta["glider_name"]

@@ -342,6 +342,24 @@ def parse_iso8601(dstring: str | datetime) -> datetime | None:
         return None
 
 
+def sort_attrs(ds):
+    """
+    Sort the attributes of a dataset in alphabetical order.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The dataset whose attributes are to be sorted.
+
+    Returns
+    -------
+    xarray.Dataset
+        The dataset with sorted attributes.
+    """
+    ds.attrs = collections.OrderedDict(sorted(ds.attrs.items()))
+    return ds
+
+
 # def is_iso8601(dstring: str) -> bool:
 #     """
 #     Check if a string is in ISO 8601 date format.
