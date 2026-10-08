@@ -1218,7 +1218,7 @@ def eng_plots_to_make(ds: xr.Dataset) -> dict:
         missing = [v for v in req_amphr if v not in ds]
         _log.warning("Skipping 'diveAmpHr' plot: missing variable(s) %s in dataset", missing)
 
-    # 6. leakDetect (constructs plot using whichever voltage variables exist)
+    # 6. leakDetect (30-minute rolling average via Pandas bridge)
     leak_vars = [
         "m_leakdetect_voltage",
         "m_leakdetect_voltage_forward",
@@ -1230,8 +1230,19 @@ def eng_plots_to_make(ds: xr.Dataset) -> dict:
         colors = ["C0", "C1", "C2"]
         for i, var in enumerate(leak_vars):
             if var in ds:
-                y_list.append(ds[var].rolling(time=900, min_periods=10).mean())
-                c_list.append(colors[i])
+                try:
+                    # Leverage Pandas for time-based rolling offset ("30min")
+                    smoothed_series = (
+                        ds[var]
+                        .to_series()
+                        .rolling("30min", min_periods=1)
+                        .mean()
+                    )
+                    smoothed_var = smoothed_series.to_xarray()
+                    y_list.append(smoothed_var)
+                    c_list.append(colors[i])
+                except Exception as e:
+                    _log.warning("Could not compute 30-minute rolling average for '%s': %s", var, e)
             else:
                 _log.warning("Variable '%s' missing for 'leakDetect' plot", var)
 
@@ -1243,7 +1254,7 @@ def eng_plots_to_make(ds: xr.Dataset) -> dict:
                 "cb": None,
             }
         else:
-            _log.warning("Skipping 'leakDetect' plot: no leak detect voltage variables present in dataset")
+            _log.warning("Skipping 'leakDetect' plot: no valid leak detect variables present in dataset")
     else:
         _log.warning("Skipping 'leakDetect' plot: 'time' variable missing in dataset")
 
@@ -1260,7 +1271,7 @@ def eng_plots_to_make(ds: xr.Dataset) -> dict:
         missing = [v for v in req_vac if v not in ds]
         _log.warning("Skipping 'vacuumDepth' plot: missing variable(s) %s in dataset", missing)
 
-    return plots_to_make
+    return plots_to_make    
 
 
 def eng_tvt_plot(
