@@ -1,13 +1,14 @@
 # import datetime
-from datetime import datetime
 import json
 import logging
-from PIL import Image
-from PIL.ExifTags import TAGS
 import os
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from PIL import Image
+from PIL.ExifTags import TAGS
 
 from esdglider import utils
 
@@ -399,9 +400,9 @@ def extract_image_metadata(image_path):
 
 
 def generate_osi_manifest(
-    jsonl_filepath: str,
-    output_filepath: str,
-    target_dirs: set[str],
+    jsonl_filepath: str | Path,
+    output_filepath: str | Path,
+    target_dirs: set[str] | list[str],
     deployment_name: str, 
     log_interval: int = 10000
 ) -> None:
@@ -412,6 +413,9 @@ def generate_osi_manifest(
     This function generates an OSI-compatible image manifest. 
     """
     _log.info(f"Starting processing for file: '{jsonl_filepath}'")
+
+    jsonl_filepath = str(jsonl_filepath)
+    output_filepath = str(output_filepath)
 
     yr = utils.get_path_year(deployment_name)
     base_uri = f"gs://swfscesd-glider-imagery-data-in/{yr}/{deployment_name}/images"

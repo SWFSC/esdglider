@@ -1,0 +1,127 @@
+import os
+
+import google.auth
+import google.auth.transport.requests
+import requests
+from google.cloud import storage
+
+# --- Configuration ---
+COMPOSER_URL = "https://14668048b1ac46eba7798ad8ed19d75a-dot-us-central1.composer.googleusercontent.com"
+DAG_ID = "optics-pipeline"
+JSON_BUCKET_NAME = "swfscesd-glider-imagery-metadata"
+OUTPUT_BUCKET_NAME = "ggn-nmfs-osi-dev-1-data"
+
+# GCS Paths
+JSON_FOLDER_PATH = "2026/calanus-20260824/osi-manifests"
+OUTPUT_FOLDER_PATH = "SWFSC/glider/calanus-20260824"
+
+# --- DAG Run Parameters ---
+MODEL_TYPE = "andy-6d-v1-detector-model" 
+YAML_CONFIG_PATH = "gs://ggn-nmfs-osi-dev-1-data/SWFSC/aleising/airflow configs/andy-6d-v1-detector-pipeline.yaml"
+
+# --- Testing ---
+# Set to the number of files you want to test (e.g., 2), or set to None to run everything.
+TEST_LIMIT = None
+DRY_RUN = False
+
+
+def get_access_token():
+    """Fetches an OAuth2 access token matching 'gcloud auth print-access-token'."""
+    credentials, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    auth_req = google.auth.transport.requests.Request()
+    credentials.refresh(auth_req)
+    return credentials.token
+
+
+def main():
+    print("Obtaining access token...")
+    token = get_access_token()
+
+    # Connect to GCS bucket
+    storage_client = storage.Client()
+    json_bucket = storage_client.bucket(JSON_BUCKET_NAME)
+    output_bucket = storage_client.bucket(OUTPUT_BUCKET_NAME)
+
+    # 1. Retrieve existing folder names in the output directory
+    print("Fetching existing output folders to exclude...")
+    output_blobs = output_bucket.list_blobs(prefix=OUTPUT_FOLDER_PATH, delimiter="/")
+    
+    existing_output_folders = set()
+    for page in output_blobs.pages:
+        for prefix in page.prefixes:
+            folder_name = prefix[len(OUTPUT_FOLDER_PATH):].rstrip("/")
+            if folder_name:
+                existing_output_folders.add(folder_name)
+
+    print(f"Found {len(existing_output_folders)} existing output folder(s).")
+
+    # 2. Fetch JSON input files
+    blobs = json_bucket.list_blobs(prefix=JSON_FOLDER_PATH)
+    json_blobs = [b for b in blobs if b.name.endswith('.json') and not b.name.endswith('/')]
+    print(f"Found {len(json_blobs)} total JSON configuration files in GCS.")
+
+    # 3. Filter out files whose base name matches an existing folder in output
+    filtered_json_blobs = []
+    skipped_count = 0
+
+    for blob in json_blobs:
+        file_name = os.path.basename(blob.name)
+        base_name, _ = os.path.splitext(file_name)  
+
+        if base_name in existing_output_folders:
+            skipped_count += 1
+        else:
+            filtered_json_blobs.append(blob)
+
+    print(f"Filtered out {skipped_count} existing run(s). {len(filtered_json_blobs)} remaining to process.")
+
+    # --- Apply Test Limit ---
+    if TEST_LIMIT is not None:
+        filtered_json_blobs = filtered_json_blobs[:TEST_LIMIT]
+        print(f"\n--- TEST MODE ACTIVE: Only processing the first {len(filtered_json_blobs)} file(s) ---\n")
+    else:
+        print("\n")
+
+    # REST API setup
+    url = f"{COMPOSER_URL}/api/v1/dags/{DAG_ID}/dagRuns"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    # Iterate through each remaining JSON file and trigger DAG
+    for i, blob in enumerate(filtered_json_blobs, 1):
+        file_name = os.path.basename(blob.name)
+
+        # --- Generate the Wrapper Configuration dynamically ---
+        input_file_uri = f"gs://{JSON_BUCKET_NAME}/{blob.name}"
+        
+        dag_conf = {
+            "input_file": input_file_uri,
+            "model_type": MODEL_TYPE,
+            "output_bucket": OUTPUT_BUCKET_NAME,
+            "output_folder": f"{OUTPUT_FOLDER_PATH}/{i:02d}",
+            "yaml_config_path": YAML_CONFIG_PATH
+        }
+
+        if not DRY_RUN:
+            # Payload structure expected by Airflow REST API
+            payload = {"conf": dag_conf}
+            res = requests.post(url, json=payload, headers=headers)
+
+            if res.status_code in (200, 201):
+                print(f"[{i}/{len(filtered_json_blobs)}] Successfully triggered run for {file_name}")
+            else:
+                print(f"[{i}/{len(filtered_json_blobs)}] Failed to trigger {file_name}: {res.status_code} - {res.text}")
+
+        else:
+            print(f"[{i}/{len(filtered_json_blobs)}] DRY RUN: Skipping trigger for {file_name}")
+            print("Would post the following payload configuration -----")
+            for k, v in dag_conf.items():
+                print(f"{k}: {v}")
+            print("End of payload configuration -----\n")
+
+if __name__ == "__main__":
+    main()

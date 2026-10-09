@@ -5,8 +5,13 @@ from esdglider import gcp, imagery, paths
 
 logger = logging.getLogger(__name__)
 
-deployment_name = "calanus-20260403"
-dir_chunk_size = 100
+deployment_name = "calanus-20260824" # Deployment name
+dir_chunk_size = 1                   # Number of directories per json file
+
+# List of directories to include; set to None to include all. 
+# Eg: ["dir0000004"]
+dir_filter = None 
+
 output_path_pre = Path(f"/home/user/tmp-meta/{deployment_name}/osi-manifests")
 
 home = Path.home()
@@ -38,12 +43,15 @@ if __name__ == "__main__":
     img_paths = paths.get_path_imagery(
         deployment_name = deployment_name, 
         # imagery_in_path = imagery_in_path, 
-        imagery_meta_path = imagery_meta_path, 
+        # imagery_meta_path = imagery_meta_path, 
         # data_out_path = data_out_path, 
+        home_path=home, 
     )
     output_path_pre.mkdir(parents=True, exist_ok=True)
 
     unique_dirs = imagery.get_unique_directories(img_paths["imgmetapath"])
+    if dir_filter is not None:
+        unique_dirs = [d for d in unique_dirs if d in dir_filter]
 
     # Chunk directories into manageable sizes for processing
     total_dirs = len(unique_dirs)
@@ -54,7 +62,7 @@ if __name__ == "__main__":
         chunk_num = (i // dir_chunk_size) + 1        
         output_filepath = output_path_pre / f"{deployment_name}-image-manifest-chunk{chunk_num:02d}.json"
         logger.info(
-            "First and last directory in chunk %d: %s, %s", 
+            "First / last directory in chunk %d: %s / %s", 
             chunk_num, 
             chunk[0], 
             chunk[-1]
@@ -68,5 +76,6 @@ if __name__ == "__main__":
             output_filepath=output_filepath,
             target_dirs=chunk,
             deployment_name=deployment_name, 
-            log_interval=10000, 
+            log_interval=100000, 
         )
+        
