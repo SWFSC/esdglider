@@ -415,7 +415,7 @@ def get_glider_name(deployment_name):
 
 def get_path_year(deployment_name):
     """
-    From the glider project and deployment name (both strings),
+    From the deployment name (both strings),
     generate and return the year string to use in file paths
     for ESD glider deployments
 
@@ -437,6 +437,22 @@ def get_path_year(deployment_name):
     #         year = f"{int(year) + 1}"
 
     return year
+
+def get_deployment_date(deployment_name: str):
+    """
+    From the deployment name (both strings),
+    generate and return the deployment date as a datetime object
+    for ESD glider deployments
+
+    For example, ringo-20181231 wopould return 31 Dec 2018 as a datetime object
+    """
+
+    deployment_split = _split_deployment(deployment_name)
+    deployment_date = deployment_split[1]
+
+    
+
+    return  datetime.strptime(deployment_date, "%Y%m%d").date()  # noqa: DTZ007
 
 
 # def _parse_deployment_info(delpoyment_info: dict):
@@ -781,12 +797,14 @@ def get_sunrise_sunset(time, lat, lon):
     rise or set as defined by skyfield,
     then a nan is returned for sunrise/sunset for that day.
 
-    Specificly:
+    Specifically:
     1) Calculates local timezone string for each image using timezonefinder,
         lat, and lon. because of the grouping (described next), if there are
         multiple timezones the most common is chosen
     2) Groups the image timestamps by local day,
         and calculates the mean lat/lon for each day.
+        This greatly reduces the processing time required for the calculations,
+        vs calculating a sunrise/sunset for each individual timestamp.
     3) For each day timestamp, which has a local time of 00:00:00:
         - Calculate the UTC time.
         - Use skyfield to calculate any sunrises/sunsets for the given lat/lon,

@@ -483,7 +483,7 @@ def generate_osi_manifest(
         _log.error(f"Input file not found at: '{jsonl_filepath}'")
         raise
     except Exception as e:
-        _log.error(f"An unexpected error occurred on line {total_lines:,}: {str(e)}")
+        _log.error(f"An unexpected error occurred on line {total_lines:,}: {e!s}")
         raise
 
 def get_unique_directories(jsonl_path: str) -> list[str]:
