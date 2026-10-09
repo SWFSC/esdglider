@@ -121,7 +121,7 @@ def make_deployment_yaml(
         deployment_name: str,
         outdir: str,
         schema: str = "dbo", 
-):
+) -> dict:
     """
     Make the first draft deployment yaml. 
     This yaml contains all relevant info from the Glider&Mooring database
