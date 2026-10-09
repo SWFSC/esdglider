@@ -1180,7 +1180,7 @@ def eng_plots_to_make(ds: xr.Dataset) -> dict:
                 "C": ["C0"],
                 "cb": None,
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _log.warning("Skipping 'diveDepth' plot due to processing error: %s", e)
     else:
         missing = [v for v in req_divedepth if v not in ds]
@@ -1199,7 +1199,7 @@ def eng_plots_to_make(ds: xr.Dataset) -> dict:
                 "C": [da_ctd_diff],
                 "cb": "depth diff (ctd minus measured)",
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _log.warning("Skipping 'diveDepthComp' plot due to processing error: %s", e)
     else:
         missing = [v for v in req_comp if v not in ds]
@@ -1241,7 +1241,7 @@ def eng_plots_to_make(ds: xr.Dataset) -> dict:
                     smoothed_var = smoothed_series.to_xarray()
                     y_list.append(smoothed_var)
                     c_list.append(colors[i])
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     _log.warning("Could not compute 30-minute rolling average for '%s': %s", var, e)
             else:
                 _log.warning("Variable '%s' missing for 'leakDetect' plot", var)

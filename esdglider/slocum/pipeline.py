@@ -22,7 +22,6 @@ import yaml
 import esdglider.profiles as prof
 from esdglider import paths, plots, qartod, utils
 from esdglider.slocum import core
-from esdglider.slocum.core import time_encoding
 
 _log = logging.getLogger(__name__)
 
@@ -241,7 +240,7 @@ def generate_timeseries(
         tsraw.to_netcdf(
             outname_tsraw, 
             mode="w", 
-            encoding={'time': time_encoding}, 
+            encoding={'time': core.time_encoding}, 
         )
 
         # Save profile summary, get profile index attributes
@@ -328,7 +327,7 @@ def generate_timeseries(
             outname_tseng, 
             deployment, 
             mode='w',
-            encoding={'time': time_encoding},
+            encoding={'time': core.time_encoding},
         )
         del tseng
 
@@ -410,7 +409,7 @@ def generate_timeseries(
             outname_tssci, 
             deployment, 
             mode='w',
-            encoding={'time': time_encoding},
+            encoding={'time': core.time_encoding},
         )        
         del tssci
 
@@ -1235,8 +1234,8 @@ def correct_flbbcd_raw_sci(
     ds_sci_cor = utils.drop_bogus(ds_sci_cor)
 
     _log.info("Writing corrected raw and science timeseries to netcdf")
-    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': time_encoding})
-    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': time_encoding})
+    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.time_encoding})
+    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.time_encoding})
 
     _log.info("Done FLBBCD correction")
     return outname_tsraw, outname_tssci
@@ -1268,12 +1267,12 @@ def correct_cdom_raw_sci(glider_paths: dict):
     _log.info("Starting CDOM correction for raw dataset")
     ds_raw_cor = utils.correct_cdom(ds_raw)
     _log.info("Writing corrected raw timeseries to netcdf")
-    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': time_encoding})
+    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.time_encoding})
 
     _log.info("Starting CDOM correction for science dataset")
     ds_sci_cor = utils.correct_cdom(ds_sci)
     _log.info("Writing corrected science timeseries to netcdf")
-    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': time_encoding})
+    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.time_encoding})
 
     _log.info("Done CDOM correction")
     return outname_tsraw, outname_tssci
@@ -1398,7 +1397,7 @@ def drop_ts_ranges(
     #     ds.to_netcdf(
     #         outname,
     #         mode='w',
-    #         encoding={'time': time_encoding},
+    #         encoding={'time': core.time_encoding},
     #     )
 
     return ds
@@ -1475,7 +1474,7 @@ def complete_profile_correction(
     # Save raw dataset
     tsraw.to_netcdf(
         glider_paths["tsrawpath"], 
-        encoding={'time': time_encoding}
+        encoding={'time': core.time_encoding}
     )
     _log.info("Wrote raw timeseries to %s", glider_paths["tsrawpath"])
 
@@ -1484,7 +1483,7 @@ def complete_profile_correction(
         tseng = prof.join_profiles(tseng, prof_summ, prof_index_attrs)
         tseng.to_netcdf(
             glider_paths["tsengpath"], 
-            encoding={'time': time_encoding}
+            encoding={'time': core.time_encoding}
         )
         _log.info("Wrote eng timeseries with new profiles to %s", glider_paths["tsengpath"])
 
@@ -1492,16 +1491,16 @@ def complete_profile_correction(
         tssci = prof.join_profiles(tssci, prof_summ, prof_index_attrs)
         tssci.to_netcdf(
             glider_paths["tsscipath"], 
-            encoding={'time': time_encoding}
+            encoding={'time': core.time_encoding}
         )
         _log.info("Wrote science timeseries with new profiles to %s", glider_paths["tsscipath"])
 
 
 def update_ngdac_profile_attributes(
-    ds,
-    deployment,
-    trajectory,
-):
+    ds: xr.Dataset,
+    deployment: dict,
+    trajectory: str,
+) -> xr.Dataset:
     """
     Apply ESD-specific metadata updates to a pyglider NGDAC profile.
 
@@ -1597,10 +1596,10 @@ def update_ngdac_profile_attributes(
 
 
 def create_ngdac_profiles(
-    inname,
-    outdir,
-    deploymentyaml,
-    force=False,
+    inname: str | Path,
+    outdir: str | Path,
+    deploymentyaml: str | Path,
+    force: bool = False,
 ):
     """
     Create NGDAC profile NetCDF files from a science timeseries NetCDF.
