@@ -195,7 +195,7 @@ def generate_timeseries(
 
     if write_raw:
         # Remove relevant files
-        _clear_raw_ts(mode, glider_paths)
+        _clear_raw_ts(glider_paths, mode)
 
         # Make directories, if necessary
         utils.makedirs_pass(rawdir)
@@ -293,8 +293,10 @@ def generate_timeseries(
     # Eng Timeseries
 
     if write_eng:
-        # Delete previous files before starting run
-        utils.remove_file(outname_tseng)
+        # Remove relevant files
+        _clear_eng_ts(glider_paths)
+
+        # Make directories, if necessary
         utils.makedirs_pass(tsdir)
 
         # Engineering - uses m_depth as time base
@@ -335,7 +337,7 @@ def generate_timeseries(
     # Sci Timeseries
     if write_sci:
         # Remove relevant files
-        _clear_sci_ts(mode, glider_paths)
+        _clear_sci_ts(glider_paths, mode)
 
         # Make directories, if necessary
         utils.makedirs_pass(tsdir)
@@ -474,7 +476,7 @@ def generate_timeseries(
     }
 
 
-def _clear_raw_ts(mode: str, glider_paths: dict):
+def _clear_raw_ts(glider_paths: dict, mode: str):
     """
     Remove (purge) relevant files if rewriting the raw timeseries
     Returns nothing
@@ -482,7 +484,7 @@ def _clear_raw_ts(mode: str, glider_paths: dict):
     utils.rmtree(glider_paths["ngdacdir"])
     utils.rmtree(glider_paths["plotdir"])
 
-    for dir_key in ["rawdir", "tsdir", "griddir", "ancillarydir"]:
+    for dir_key in ["rawdir", "ancillarydir"]:
         dir = Path(glider_paths[dir_key])
         regex = f"*-{mode}-*"
         _log.debug("Removing files with regex %s from directory: %s", regex, dir)
@@ -492,7 +494,16 @@ def _clear_raw_ts(mode: str, glider_paths: dict):
             utils.remove_file(f)
 
 
-def _clear_sci_ts(mode: str, glider_paths: dict):
+def _clear_eng_ts(glider_paths: dict):
+    """
+    Remove (purge) relevant files if rewriting the engineering timeseries
+    Returns nothing
+    """
+    utils.rmtree(glider_paths["plotdir"])
+    utils.remove_file(glider_paths["tsengpath"])
+
+
+def _clear_sci_ts(glider_paths: dict, mode: str):
     """
     Remove (purge) relevant files if rewriting the science timeseries
     Returns nothing
@@ -511,6 +522,12 @@ def _clear_sci_ts(mode: str, glider_paths: dict):
         for f in matching_files:
             utils.remove_file(f)
 
+    # Clear imagery timeseries and echoview files, if they exist
+    imgcsv = paths._get_path_imgcsv(glider_paths["deployment_name"], glider_paths["ancillarydir"])
+    utils.remove_file(imgcsv)
+    
+    echoview_path = paths._get_path_echoview(glider_paths["ancillarydir"])
+    utils.rmtree(echoview_path)
 
 
 def postproc_attrs(

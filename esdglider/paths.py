@@ -202,8 +202,9 @@ def get_path_glider(
 
     # return out | glider_paths_data_out
     return {
-        "deploymentyaml": deploymentyaml,
+        "deployment_name": deployment_name,
         "mode": mode,
+        "deploymentyaml": deploymentyaml,
         "cacdir": cache_path,
         "data_in_path": data_in_path,
         "data_out_path": data_out_path,
@@ -283,7 +284,7 @@ def get_path_aa(
 
     # ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
     ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
-    echoviewdir = os.path.join(ancillarydir, "echoview")
+    echoviewdir = _get_path_echoview(ancillarydir)
 
     regionspath = os.path.join(echoviewdir, f"{deployment_name}-regions.csv")
     pitchpath = os.path.join(echoviewdir, f"{deployment_name}.pitch.csv")
@@ -372,7 +373,8 @@ def get_path_imagery(
     )
 
     ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
-    imgcsv = os.path.join(ancillarydir, f"{deployment_name}-imagery-ancillary.csv")
+    # imgcsv = os.path.join(ancillarydir, f"{deployment_name}-imagery-ancillary.csv")
+    imgcsv = _get_path_imgcsv(deployment_name, ancillarydir)
 
     return {
         "imagery_in_path": imagery_in_path,
@@ -408,6 +410,43 @@ def _get_path_ancillary(deployment_name, data_out_path):
     glider_data_out_path = os.path.join(data_out_path, year, deployment_name)
     ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
     return ancillarydir
+
+def _get_path_echoview(dir):
+    """
+    Return the path to the Echoview products directory for a given deployment.
+
+    Parameters
+    ----------
+    dir : str
+        The (local) path in which the echoview directory will be located
+
+    Returns
+    -------
+    str
+        The path to the Echoview products directory
+    """
+    echoviewdir = os.path.join(dir, "echoview")
+    return echoviewdir
+
+
+def _get_path_imgcsv(deployment_name, dir):
+    """
+    Return the path to the imagery CSV for a given deployment.
+
+    Parameters
+    ----------
+    deployment_name : str
+            The name of the deployment, e.g. amlr08-20220513
+    dir : str
+        The (local) path in which the imagery CSV will be located
+
+    Returns
+    -------
+    str
+        The path to the imagery CSV file
+    """
+    imgcsv = os.path.join(dir, f"{deployment_name}-imagery-ancillary.csv")
+    return imgcsv
 
 
 def _resolve_path(p: str | Path, home: Path, type: str):  
