@@ -12,12 +12,13 @@ JSON_BUCKET_NAME = "swfscesd-glider-imagery-metadata"
 OUTPUT_BUCKET_NAME = "ggn-nmfs-osi-dev-1-data"
 
 # GCS Paths
-JSON_FOLDER_PATH = "2026/calanus-20260824/osi-manifests"
-OUTPUT_FOLDER_PATH = "SWFSC/glider/calanus-20260824"
+JSON_FOLDER_PATH = "2026/calanus-20260824/osi-manifests-050dirs"
+OUTPUT_FOLDER_PATH = "SWFSC/glider/calanus-20260824/050dirs"
 
 # --- DAG Run Parameters ---
 MODEL_TYPE = "andy-6d-v1-detector-model" 
-YAML_CONFIG_PATH = "gs://ggn-nmfs-osi-dev-1-data/SWFSC/aleising/airflow configs/andy-6d-v1-detector-pipeline.yaml"
+YAML_CONFIG_PATH = "gs://ggn-nmfs-osi-dev-1-data/SWFSC/sam/viame-custom-pipeline-viamecsv-uploadno.yaml"
+# YAML_CONFIG_PATH = "gs://ggn-nmfs-osi-dev-1-data/SWFSC/sam/viame-custom-pipeline-coco-uploadno.yaml"
 
 # --- Testing ---
 # Set to the number of files you want to test (e.g., 2), or set to None to run everything.

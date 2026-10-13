@@ -1,52 +1,48 @@
 import logging
 from pathlib import Path
 
-from esdglider import gcp, imagery, paths
+from esdglider import gcp, imagery, paths, utils
 
 logger = logging.getLogger(__name__)
 
 deployment_name = "calanus-20260824" # Deployment name
-dir_chunk_size = 1                   # Number of directories per json file
+dir_chunk_size = 50                  # Number of directories per json file
 
 # List of directories to include; set to None to include all. 
 # Eg: ["dir0000004"]
 dir_filter = None 
 
-output_path_pre = Path(f"/home/user/tmp-meta/{deployment_name}/osi-manifests")
-
 home = Path.home()
-mnt_path = home / "mnt-gcs"
+# mnt_path = home / "mnt-gcs"
+
+use_tmp_dir = False
 
 # imagery_in_bucket_name = "swfscesd-glider-imagery-data-in"
 # imagery_in_path = mnt_path / imagery_in_bucket_name
-imagery_meta_bucket_name = "swfscesd-glider-imagery-metadata"
-imagery_meta_path = mnt_path / imagery_meta_bucket_name
+# imagery_meta_bucket_name = "swfscesd-glider-imagery-metadata"
+# imagery_meta_path = mnt_path / imagery_meta_bucket_name
 
 
 
 #------------------------------------------------------------------------------
 if __name__ == "__main__":
-    # gcp.gcs_mount_bucket(imagery_in_bucket_name, imagery_in_path, ro=True)
-    gcp.gcs_mount_bucket(imagery_meta_bucket_name, imagery_meta_path, ro=False)
-
     logging.basicConfig(
-        # filename=logs_path / log_file_name,
-        # filemode="w",
         format="%(name)s:%(asctime)s:%(levelname)s:%(message)s [line %(lineno)d]",
         level=logging.INFO,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     logging.captureWarnings(True)
-    # logger.info("Beginning scheduled processing for %s", file_info)
-    # print(f"Writing logs to {logs_path / log_file_name}")
 
     img_paths = paths.get_path_imagery(
         deployment_name = deployment_name, 
-        # imagery_in_path = imagery_in_path, 
-        # imagery_meta_path = imagery_meta_path, 
-        # data_out_path = data_out_path, 
         home_path=home, 
     )
+    gcp.gcs_mount_bucket(paths.imagery_meta_bucket_name, img_paths["metadir"], ro=False)
+
+    if not use_tmp_dir:
+        output_path_pre = Path(img_paths["metadir"]) / f"osi-manifests-{dir_chunk_size:03d}dirs"
+    else:
+        output_path_pre = Path(f"/home/user/tmp-meta/{deployment_name}/osi-manifests-{dir_chunk_size:03d}dirs")
     output_path_pre.mkdir(parents=True, exist_ok=True)
 
     unique_dirs = imagery.get_unique_directories(img_paths["imgmetapath"])
@@ -57,8 +53,6 @@ if __name__ == "__main__":
     total_dirs = len(unique_dirs)
     for i in range(0, total_dirs, dir_chunk_size):
         chunk = unique_dirs[i : i + dir_chunk_size]
-        # print(i)
-        # print(chunk)
         chunk_num = (i // dir_chunk_size) + 1        
         output_filepath = output_path_pre / f"{deployment_name}-image-manifest-chunk{chunk_num:02d}.json"
         logger.info(
@@ -78,4 +72,12 @@ if __name__ == "__main__":
             deployment_name=deployment_name, 
             log_interval=100000, 
         )
+
+        if use_tmp_dir:
+            print(
+                "Command to run to copy from temp directory to bucket, if necessary:\n"
+                f"gcloud storage cp -r {output_path_pre} "
+                f"gs://{paths.imagery_meta_bucket_name}/"
+                f"{utils.get_path_year(deployment_name)}/{deployment_name}/"
+            )
         
