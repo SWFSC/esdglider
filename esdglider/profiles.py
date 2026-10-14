@@ -478,7 +478,11 @@ def calc_profile_summary(ds: xr.Dataset, depth_var: str) -> pd.DataFrame:
     return df # type: ignore
 
 
-def check_profiles(df: pd.DataFrame) -> pd.DataFrame:
+def check_profiles(
+    df: pd.DataFrame,     
+    pair_tol : float = 3.0, 
+    min_swing: float = 10.0
+) -> pd.DataFrame:
     """
     Perform profile sanity checks, including:
     - Check for the same numbers of dive and climb profiles
@@ -490,6 +494,12 @@ def check_profiles(df: pd.DataFrame) -> pd.DataFrame:
     ----------
     df : pandas DataFrame
         Output of calc_profile_summary()
+    pair_tol : float, optional
+        Maximum allowed difference between paired start depths, by default 3.0
+        Passed directly to check_start_depth_pairs
+    min_swing : float, optional
+        Minimum required swing between consecutive pairs, by default 10.0
+        Passed directly to check_start_depth_pairs
 
     Returns
     -------
@@ -615,7 +625,7 @@ def check_profiles(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     # Additional checks
-    check_start_depth_pairs(df, "start_depth", pair_tol=3.0, min_swing=10.0)
+    check_start_depth_pairs(df, "start_depth", pair_tol=pair_tol, min_swing=min_swing)
     validate_glider_profiles(df)
 
     _log.info("Completed profile checks")
