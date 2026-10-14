@@ -254,6 +254,23 @@ def gcs_unmount_bucket(mountpoint: str) -> None:
         _log.debug(f"fusermount stdout:\n{result.stdout.strip()}")
     _log.debug(f"Successfully unmounted {mountpoint}")
 
+def gcs_mount_bucket_check(bucket: str, mountpoint: str | Path, ro: bool = False) -> None:
+    """
+    Light wrapper around the gcs_mount_bucket function.
+    Checks for files and directories in mountpoint, 
+    and exits quietly if the mountpoint is not empty.
+    This is a convenience function for esdglider notebooks, 
+    which might be being run while a processing script is also running, 
+    and thus remounting is undesirable.
+    """ 
+
+    mountpoint = str(mountpoint)
+    if os.path.exists(mountpoint) and os.listdir(mountpoint):
+        _log.info("Mountpoint '%s' is not empty; skipping mount.", mountpoint)
+        return
+    
+    gcs_mount_bucket(bucket, mountpoint, ro=ro)
+
 
 def gcs_mount_bucket(bucket: str, mountpoint: str | Path, ro: bool = False) -> None:
     """
