@@ -864,11 +864,11 @@ def sci_timesection_plot(
         matplotlib.Figure.figure object
     """
 
-    if var not in list(ds.data_vars):
-        _log.info("Variable name %s not present in ds. Skipping plot", var)
-        return
     if var in ["profile_index"]:
         _log.info("Skipping %s because it is not relevant", var)
+        return
+    if var not in list(ds.data_vars):
+        _log.info("Variable name %s not present in ds. Skipping plot", var)
         return
 
     _log.info(f"Making timesection plot for variable {var}")
@@ -940,11 +940,11 @@ def sci_spatialsection_plot(
         matplotlib.Figure.figure object
     """
 
-    if var not in list(ds.data_vars):
-        _log.info("Variable name %s not present in ds. Skipping plot", var)
-        return
     if var in ["profile_index"]:
         _log.info("Skipping %s because it is not relevant", var)
+        return
+    if var not in list(ds.data_vars):
+        _log.info("Variable name %s not present in ds. Skipping plot", var)
         return
 
     _log.info(f"Making spatialsection plot for variable {var}")
@@ -1059,11 +1059,11 @@ def sci_spatialgrid_plot(
         matplotlib.Figure.figure object
     """
 
-    if var not in list(ds.data_vars):
-        _log.info("Variable name %s not present in ds. Skipping plot", var)
-        return
     if var in ["profile_index"]:
         _log.info("Skipping %s because it is not relevant", var)
+        return
+    if var not in list(ds.data_vars):
+        _log.info("Variable name %s not present in ds. Skipping plot", var)
         return
 
     _log.info(f"Making spatialgrid plot for variable {var}")
