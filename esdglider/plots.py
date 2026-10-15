@@ -341,7 +341,28 @@ def esd_all_plots(
     if base_path is not None and combine_pdf:
         _log.info("Combining output plots into a single PDF")
         png_files = sorted(Path(base_path).rglob("*.png"))
-        pdf_path = Path(base_path) / f"{deployment_name}_all_plots.pdf"
+        pdf_path = Path(base_path) / f"{deployment_name}-all-plots.pdf"
+
+        combine_images_to_pdf(png_files, pdf_path)
+
+    
+    # Combine into single 'data review' PDF
+    if base_path is not None and combine_pdf:
+        _log.info("Combining output plots into a single 'data review' PDF")
+        target_folders = [
+            surfacemap_sci_path, 
+            timesection_path, 
+            timesection_gt_path, 
+            qc_path, 
+            ts_path, 
+        ]
+
+        png_files = sorted(
+            f for folder in target_folders 
+            for f in (Path(base_path) / folder).rglob("*.png")
+        )
+        # png_files = sorted(Path(base_path).rglob("*.png"))
+        pdf_path = Path(base_path) / f"{deployment_name}-data-review.pdf"
 
         combine_images_to_pdf(png_files, pdf_path)
 
