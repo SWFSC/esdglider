@@ -56,6 +56,10 @@ netcdf_variables:
     long_name: m_pitch
     standard_name: platform_pitch_angle
     units: rad
+  m_pressure:
+    long_name: m_pressure
+    source: m_pressure
+    units: bar
   m_roll:
     source: m_roll
     long_name: m_roll
@@ -115,6 +119,10 @@ netcdf_variables:
     long_name: m_gps_lon
     source: m_gps_lon
     units: degrees_east
+  m_gps_on:
+    long_name: m_gps_on
+    source: m_gps_on
+    units: bool
   m_vacuum:
     long_name: m_vacuum
     source: m_vacuum
