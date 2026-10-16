@@ -292,6 +292,13 @@ def esd_all_plots(
     ll_good = ~(np.isnan(ds_raw.longitude) | np.isnan(ds_raw.latitude))
     ds_raw = ds_raw.where(ll_good, drop=True)
     scatter_plot(ds_raw, "raw", base_path)
+    scatter_plot(
+        ds_raw, 
+        "raw_gps", 
+        base_path,         
+        lon_var="m_gps_lon",
+        lat_var="m_gps_lat",
+    )
 
     # Sci/eng loops
     sci_gridded_loop(ds_gr5m, base_path)
@@ -704,46 +711,96 @@ def save_plot(fig: matplotlib.figure.Figure, fname: str | Path):
     fig.savefig(fname)
 
 
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+import os
+import xarray as xr
+
+
 def scatter_plot(
     ds: xr.Dataset,
     ds_type: str,
     base_path: str | None = None,
     show: bool = False,
+    lon_var: str = "longitude",
+    lat_var: str = "latitude",
+    color_by_time: bool = True,
+    time_var: str = "time",
+    cmap: str = "viridis",
 ):
     """
     Saves the plot to 'scatter_path' folder within 'base_path'
 
     Parameters
     ----------
-    ds : xarray dataset
+    ds : xarray.Dataset
         Science, engineering, or raw timeseries dataset.
     ds_type : str
-        dataset (timeseries) type: one of 'sci', 'eng', or 'raw'
-    base_path : str
-        The 'base' of the plot path. If None, then the plot will not be saved
-        Intended to be the 'plotdir' output of glider.get_path_glider
-    show : bool
-        Boolean indicating if the plots should be shown before being closed
+        Dataset (timeseries) type: one of 'sci', 'eng', or 'raw'.
+    base_path : str | None, default None
+        The 'base' of the plot path. If None, then the plot will not be saved.
+        Intended to be the 'plotdir' output of glider.get_path_glider.
+    show : bool, default False
+        Boolean indicating if the plots should be shown before being closed.
+    lon_var : str, default "longitude"
+        Variable name in `ds` to use for longitude.
+    lat_var : str, default "latitude"
+        Variable name in `ds` to use for latitude.
+    color_by_time : bool, default True
+        Whether to color-code points by timestamp.
+    time_var : str, default "time"
+        Variable/coordinate name in `ds` to use for time values.
+    cmap : str, default "viridis"
+        Colormap name used when `color_by_time` is True.
 
     Returns
     -------
-        matplotlib.Figure.figure object
-
+    matplotlib.figure.Figure
+        The generated figure object.
     """
 
     # Prep
     _log.info(f"Making basic scatter plot for {ds_type} timeseries")
     deployment = ds.deployment_name
-    title_str = f"{deployment}: All points for {ds_type} timeseries"
+    title_str = (
+        f"{deployment}: All {lat_var}/{lon_var} points for {ds_type} "
+        "timeseries"
+    )
 
     # Plot
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.scatter(ds.longitude, ds.latitude, s=3)
+    fig, ax = plt.subplots(figsize=(11, 8.5))
+
+    if color_by_time:
+        # Convert xarray/numpy datetime64 array to matplotlib date floats
+        time_nums = mdates.date2num(ds[time_var].values)
+        sc = ax.scatter(
+            ds[lon_var],
+            ds[lat_var],
+            c=time_nums,
+            cmap=cmap,
+            s=3,
+        )
+
+        # Dynamic, compact date ticks and formatting for the colorbar
+        locator = mdates.AutoDateLocator()
+        # formatter = mdates.ConciseDateFormatter(locator)
+        formatter = mdates.DateFormatter(xaxis_format)
+        cbar = fig.colorbar(sc, ax=ax, ticks=locator, format=formatter)
+        cbar.set_label("Time", size=label_size)
+    else:
+        ax.scatter(ds[lon_var], ds[lat_var], s=3)
+
+    # ax.tick_params(axis="x", rotation=30)
+    # plt.setp(
+    #     ax.get_xticklabels(), rotation=30, ha="right", rotation_mode="anchor"
+    # )
 
     # Labels and title
     ax.set_xlabel("Longitude", size=label_size)
     ax.set_ylabel("Latitude", size=label_size)
-    ax.set_title(title_str, size=title_size)
+    ax.set_title(title_str, loc="left", wrap=True, pad=16, size=title_size)
+    for label in ax.get_xticklabels(which="major"):
+        label.set(rotation=15, horizontalalignment="center")
     ax.grid(True)
 
     if base_path is not None:
