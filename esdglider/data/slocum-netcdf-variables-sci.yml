@@ -102,6 +102,7 @@ cdom:
   units:         ppb
   observation_type: calculated
   instrument:   "instrument_flbbcd"
+  valid_min: 0.0
 
 backscatter_700:
   source:  sci_flbbcd_bb_units
@@ -110,6 +111,7 @@ backscatter_700:
   units: m-1 sr-1
   observation_type: calculated
   instrument:   "instrument_flbbcd"
+  valid_min: 0.0
 
 # Oxygen
 oxygen_concentration:
