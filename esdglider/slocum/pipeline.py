@@ -877,6 +877,7 @@ def postproc_tsl1_sci(
         - if sci_use_m_depth is True, try to rename m_depth to depth
         - calculate variable 'profile_direction' from variable 'depth'
         - run postproc_tsl1
+        - ensure that temperature and potential temperature have correct units (degrees_C)
 
     Parameters
     ----------
@@ -922,6 +923,26 @@ def postproc_tsl1_sci(
 
     ds = prof.get_fill_profiles(ds, "time", "depth")
     ds = ds.drop_vars("profile_index")
+
+    # Temperature/potential temperature units consistency check
+    if 'temperature' in ds.variables and 'potential_temperature' in ds.variables:
+        temp_units = ds['temperature'].attrs['units']
+        if temp_units != "degrees_C":
+            _log.warning(
+                "Temperature units are 'degrees_C'. Is this intentional? "
+                "Current units: %s",
+                temp_units
+            )
+        else:
+            ds['potential_temperature'].attrs['units'] = temp_units
+
+        if temp_units != ds['potential_temperature'].attrs['units']:
+            _log.warning(
+                "Potential temperature units do not match temperature units. "
+                "Current potential temperature units: %s, temperature units: %s",
+                ds['potential_temperature'].attrs['units'],
+                temp_units
+            )
 
     # General updates
     ds = postproc_tsl1(

@@ -58,7 +58,7 @@ temperature:
   source:  sci_water_temp
   long_name:    water temperature
   standard_name: sea_water_temperature
-  units:        Celsius
+  units:        degrees_C
   instrument:   instrument_ctd
   valid_min:    -5.
   valid_max:    50.

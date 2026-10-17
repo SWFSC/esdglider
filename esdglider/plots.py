@@ -355,7 +355,7 @@ def esd_all_plots(
     
     # Combine into single 'data review' PDF
     if base_path is not None and combine_pdf:
-        _log.info("Combining output plots into a single 'data review' PDF")
+        _log.info("Combining output plots into a single data review PDF")
         target_folders = [
             surfacemap_sci_path, 
             timesection_path, 
