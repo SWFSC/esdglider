@@ -13,155 +13,81 @@ _log = logging.getLogger(__name__)
 
 
 def sync_sfmc_deployment(
-        deployment_name: str, 
-        bucket_name: str, 
-        sfmc_path: str | Path, 
-        cache_path: str | Path, 
-        gcpproject_id: str, 
-        secret_id: str, 
-    ) -> None:
+    deployment_name: str,
+    bucket_name: str,
+    sfmc_path: str | Path,
+    cache_path: str | Path,
+    gcpproject_id: str,
+    secret_id: str,
+) -> None:
     """
-    rsync files from sfmc, and send them to correct bucket directories;
-
+    Sync files from SFMC and distribute them to local cache and GCS buckets.
 
     Parameters
     ----------
     deployment_name : str
         The name of the deployment.
     bucket_name : str
-        The name of the GCS data in bucket.
+        The name of the GCS data bucket.
     sfmc_path : str | Path
-        The local path to store SFMC files.
+        The local path to store downloaded SFMC files.
+    cache_path : str | Path
+        The local path to the cache file directory.
     gcpproject_id : str
         The GCP project ID.
     secret_id : str
         The secret ID for accessing the SFMC password.
-    cache_path : str | Path
-        The local path to the cache file directory.
 
-    Returns
-    -------
-    None
+    Raises
+    ------
+    FileNotFoundError
+        If the cache destination path does not exist.
     """
-
-    _log.info("Scraping files from SFMC for deployment %s", deployment_name)
+    _log.info("Starting SFMC deployment sync for %s", deployment_name)
     year = utils.get_path_year(deployment_name)
 
-    # --------------------------------------------
-    # Create sfmc directory structure, if needed
-    _log.info("Making sfmc deployment dirs at %s", sfmc_path)
-    
-    # Path construction and directory creation via pathlib
-    sfmc_local_path = Path(sfmc_path) / f"sfmc-{deployment_name}"
+    # 1. Create sfmc deployment directory
+    sfmc_local_path = Path(sfmc_path).expanduser().resolve() / f"sfmc-{deployment_name}"
     sfmc_local_path.mkdir(parents=True, exist_ok=True)
 
-    # --------------------------------------------
-    # rsync with SFMC
-
-    # Secret retrieval
+    # 2. Retrieve secret and ingest files from SFMC
     sfmc_password = gcp.access_secret_version(gcpproject_id, secret_id)
-    env = dict(os.environ, SSHPASS=sfmc_password)
-    
     fetch_from_sfmc(
         deployment_name=deployment_name,
         local_path=sfmc_local_path,
-        env=env, 
-        # gcpproject_id=gcpproject_id,
-        # secret_id=secret_id,
+        password=sfmc_password,
     )
-    
-    # _log.info(
-    #     "Starting rsync with SFMC dockerver for glider/deployment: %s/%s", 
-    #     glider, 
-    #     deployment_name
-    # )
-    # # sfmc_glider = os.path.join(
-    # #     "/var/opt/sfmc-dockserver/stations/noaa/gliders",
-    # #     glider,
-    # #     "from-glider/",
-    # # )
-    # # sfmc_server_path = f"swoodman@sfmc.webbresearch.com:{sfmc_glider}"
-    
-    # remote_dir = PurePosixPath("/var/opt/sfmc-dockserver/stations/noaa/gliders") / glider / "from-glider"
-    # sfmc_server_path = f"swoodman@sfmc.webbresearch.com:{remote_dir.as_posix()}/"
 
-    # ssh_cmd = "sshpass -e ssh -o StrictHostKeyChecking=accept-new"
-
-    # rsync_args = [
-    #     "rsync",
-    #     "-aP",
-    #     "--delete",
-    #     "-e", ssh_cmd,
-    #     sfmc_server_path,
-    #     f"{sfmc_local_path.as_posix()}/",
-    # ]
-   
-    # # Secret retrieval
-    # sfmc_password = gcp.access_secret_version(gcpproject_id, secret_id)
-    # env = dict(os.environ, SSHPASS=sfmc_password)
-    
-    # _log.info("Starting rsync from SFMC server...")
-    # retcode = subprocess.run(
-    #     rsync_args, 
-    #     env=env, 
-    #     capture_output=True, 
-    #     text=True, 
-    #     check=False
-    # )
-
-    # if retcode.returncode != 0:
-    #     _log.error(f"Error rsyncing with SFMC dockserver: {retcode.stderr}")
-    #     raise ValueError("Unsuccessful rsync with SFMC dockserver")
-
-    # _log.info("Successfully completed rsync from SFMC.")
-
-    # Check for unexpected file extensions
+    # 3. Check for unexpected file extensions
     sfmc_file_ext = utils.find_extensions(sfmc_local_path)
     file_ext_expected = {".cac", ".CAC", ".sbd", ".tbd", ".ad2", ".ccc", ".scd", ".tcd", ".cam"}
     file_ext_unk = sfmc_file_ext.difference(file_ext_expected)
-    if len(file_ext_unk) > 0:
+    if file_ext_unk:
         _log.warning(
-            "File with the following extensions (%s) "
-            "were downloaded from the SFMC, "
-            "but will not be organized or copied to the GCS bucket", 
+            "Files with the following unexpected extensions (%s) "
+            "were downloaded from SFMC and will not be organized or uploaded.",
             ", ".join(file_ext_unk),
         )
 
-    # --------------------------------------------
-    # Copy files to subfolders, and rsync with bucket
-    _log.info("Starting file management")
+    # 4. Cache file management
+    target_cache_path = Path(cache_path).expanduser().resolve()
+    if not target_cache_path.is_dir():
+        _log.error("Cache path does not exist: %s", target_cache_path)
+        raise FileNotFoundError(f"Cache path does not exist: {target_cache_path}")
 
-    ### cache files ------------------------------
-    # cache files to standard-glider-files repo folder
-    cache_path = Path(cache_path)
     pattern = re.compile(r"\.[Cc][AaCc][Cc]$")
+    _log.info("Processing cache files matching regex: %s", pattern.pattern)
 
-    # Ensure the cache destination directory exists
-    if not cache_path.exists():
-        _log.error("Cache path does not exist: %s", cache_path)
-        raise FileNotFoundError(f"Cache path does not exist: {cache_path}")
-
-    _log.info(
-        "Performing real-time file management for cache files "
-        "matching regex: %s in sfmc local path", 
-        pattern, 
-    )
-
-    # Process matching files
     for item in sfmc_local_path.iterdir():
         if item.is_file() and pattern.search(item.name):
-            destination = cache_path / item.name
-
-            # Only copy if the file does not already exist in cache_path
+            destination = target_cache_path / item.name
             if not destination.exists():
                 shutil.copy(str(item), str(destination))
                 _log.info("Copied cache file %s to %s", item.name, destination)
             else:
                 _log.debug("Skipped cache file (already exists): %s", item.name)
 
-    
-    ### sbd/tbd files ---------------------------
-    # Do not bother with compressed files, because the SFMC uncompresses them
+    # 5. Stage and sync binary files to GCS
     bucket_stbd_prefix = (PurePosixPath(year) / deployment_name / "binary/rt").as_posix()
     _stage_and_sync_to_gcs(
         file_extensions=sfmc_file_ext,
@@ -170,77 +96,43 @@ def sync_sfmc_deployment(
         local_path=sfmc_local_path,
         bucket_name=bucket_name,
         gcs_prefix=bucket_stbd_prefix,
+        rsync_delete=True,
     )
-
-    
-
-    ### ad2 files -------------------------------
-    # # TODO ad2 files
-    # name_ad2 = "ad2"
-    # bucket_ad2 = (
-    #     f"gs://amlr-gliders-acoustics-dev/{project}/{year}/{deployment}/data/rt/"
-    # )
-    # utils.mkdir_pass(os.path.join(sfmc_local_path, name_ad2))
-    # rt_file_mgmt(sfmc_file_ext, ".ad2", name_ad2, sfmc_local_path, bucket_ad2)
-
-
-    # name_ccc  = 'ccc'
-    # putils.mkdir_pass(os.path.join(sfmc_local_path, name_ccc))
-    # rt_file_mgmt(sfmc_file_ext, '.ccc', name_ccc, sfmc_local_path,
-    #              f'gs://{bucket}/cache-compressed')
-
-    # # scd/tcd files
-    # name_stcd = 'stcd'
-    # bucket_stcd = os.path.join(bucket_deployment, 'data', 'binary', 'rt-compressed')
-    # putils.mkdir_pass(os.path.join(sfmc_local_path, name_stcd))
-    # rt_file_mgmt(
-    #     sfmc_file_ext, '.[SsTt]cd', name_stcd, sfmc_local_path, bucket_stcd)
-
-    # # cam files TODO
-    # name_cam  = 'cam'
-    # putils.mkdir_pass(os.path.join(sfmc_local_path, name_cam))
-    # rt_files_mgmt(sfmc_file_ext, '.cam', name_cam, sfmc_local_path, bucket_cam)
 
 
 def fetch_from_sfmc(
     deployment_name: str,
-    local_path: Path,
-    env: dict[str, str],
+    local_path: str | Path,
+    password: str,
 ) -> None:
     """
-    Fetches files from the SFMC server for the specified glider deployment.
+    Fetch files from the SFMC server for the specified glider deployment via rsync.
 
     Parameters
     ----------
-    deployment_name: str
+    deployment_name : str
         Name of the glider deployment.
-    local_path: Path
+    local_path : str | Path
         Local directory to store the fetched files.
-    env: dict[str, str]
-        Environment variables to use for the subprocess, including the SFMC server password.
+    password : str
+        Password for the SFMC dockserver user.
 
-    Returns
-    -------
-    None
+    Raises
+    ------
+    ValueError
+        If the rsync process exits with a non-zero status code.
     """
     glider = utils.get_glider_name(deployment_name)
+    target_path = Path(local_path).expanduser().resolve()
 
-    # rsync with SFMC
     _log.info(
-        "Starting rsync with SFMC dockerver for glider/deployment: %s/%s", 
-        glider, 
-        deployment_name
+        "Starting rsync with SFMC dockserver for glider/deployment: %s/%s",
+        glider,
+        deployment_name,
     )
-    # sfmc_glider = os.path.join(
-    #     "/var/opt/sfmc-dockserver/stations/noaa/gliders",
-    #     glider,
-    #     "from-glider/",
-    # )
-    # sfmc_server_path = f"swoodman@sfmc.webbresearch.com:{sfmc_glider}"
-    
+
     remote_dir = PurePosixPath("/var/opt/sfmc-dockserver/stations/noaa/gliders") / glider / "from-glider"
     sfmc_server_path = f"swoodman@sfmc.webbresearch.com:{remote_dir.as_posix()}/"
-
     ssh_cmd = "sshpass -e ssh -o StrictHostKeyChecking=accept-new"
 
     rsync_args = [
@@ -249,21 +141,23 @@ def fetch_from_sfmc(
         "--delete",
         "-e", ssh_cmd,
         sfmc_server_path,
-        f"{local_path.as_posix()}/",
+        f"{target_path.as_posix()}/",
     ]
-    
+
+    env = dict(os.environ, SSHPASS=password)
+
     _log.info("Starting rsync from SFMC server...")
     retcode = subprocess.run(
-        rsync_args, 
-        env=env, 
-        capture_output=True, 
-        text=True, 
-        check=False
+        rsync_args,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
     if retcode.returncode != 0:
         _log.error("Error rsyncing with SFMC dockserver: %s", retcode.stderr)
-        raise ValueError("Unsuccessful rsync with SFMC dockserver")
+        raise ValueError(f"Unsuccessful rsync with SFMC dockserver: {retcode.stderr.strip()}")
 
     _log.info("Successfully completed rsync from SFMC.")
 
@@ -272,51 +166,46 @@ def _stage_and_sync_to_gcs(
     file_extensions: set[str],
     ext_regex: str,
     subdir_name: str,
-    local_path: Path,
+    local_path: str | Path,
     bucket_name: str,
     gcs_prefix: str,
     rsync_delete: bool = True,
 ) -> None:
     """
-    Sorts local files matching extension patterns and uploads them to GCS natively.
-    Moves files matching the given extension regex from the local path to a subdirectory,
-    and then syncs that subdirectory to the specified GCS bucket location.
+    Move matching files into a staging subdirectory and sync that directory to GCS.
 
     Parameters
     ----------
-    file_extensions: set[str]
-        Set of all file extensions present in the local SFMC directory.
-    ext_regex: str
+    file_extensions : set[str]
+        Set of all file extensions present in the local directory.
+    ext_regex : str
         Regular expression pattern to match specific file extensions.
-    subdir_name: str
-        Name of the subdirectory to move matching files into.
-    local_path: Path
-        Path to the local SFMC directory.
-    bucket_name: str
-        Name of the GCS bucket to sync files to.
-    gcs_prefix: str
+    subdir_name : str
+        Name of the staging subdirectory.
+    local_path : str | Path
+        Path to the local directory containing source files.
+    bucket_name : str
+        Name of the GCS bucket.
+    gcs_prefix : str
         Prefix path within the GCS bucket.
-    rsync_delete: bool
-        Whether to delete unmatched files in the GCS destination. 
-        Default is True
-
-    Returns
-    -------
-    None
+    rsync_delete : bool, optional
+        Whether to delete unmatched files at the GCS destination (default is True).
     """
+    base_path = Path(local_path).expanduser().resolve()
     pattern = re.compile(ext_regex)
+
     _log.info(
-        "Performing real-time file management for files matching regex: %s in local path: %s", 
-        ext_regex, 
-        local_path
+        "Performing real-time file management for regex '%s' in %s",
+        ext_regex,
+        base_path,
     )
-    
+
     if any(pattern.search(ext) for ext in file_extensions):
-        subdir_path = local_path / subdir_name
+        subdir_path = base_path / subdir_name
         subdir_path.mkdir(exist_ok=True)
 
         _log.info("Moving %s files to %s", subdir_name, subdir_path)
-        for item in local_path.iterdir():
+        for item in base_path.iterdir():
             if item.is_file() and pattern.search(item.suffix):
                 shutil.move(item, subdir_path / item.name)
 
@@ -329,14 +218,14 @@ def _stage_and_sync_to_gcs(
         )
     else:
         _log.info("No %s files found to process.", subdir_name)
-    
+
 
 def sync_directory_to_ftp(
     local_dir: str | Path,
     remote_dir: str | PurePosixPath,
     host: str,
     username: str,
-    env: dict[str, str],
+    password: str,
     *,
     exclude_patterns: list[str] | str | None = None,
     log_file: str | Path | None = None,
@@ -364,8 +253,8 @@ def sync_directory_to_ftp(
         The FTP server hostname or IP address.
     username : str
         The FTP account username.
-    env : dict[str, str]
-        Environment variables to use for the subprocess, including the FTP account password.
+    password : str
+        The FTP account password.
     exclude_patterns : list[str] | str | None, optional
         Glob patterns to ignore and protect from remote deletion (default is None).
     log_file : str | Path | None, optional
@@ -383,10 +272,6 @@ def sync_directory_to_ftp(
         Connection and network timeout in seconds (default is 30).
     max_retries : int, optional
         Maximum number of connection retry attempts (default is 3).
-
-    Returns
-    -------
-    None
 
     Raises
     ------
@@ -406,7 +291,6 @@ def sync_directory_to_ftp(
 
     remote_path = PurePosixPath(remote_dir).as_posix()
 
-    # Normalize exclude patterns into a list
     if exclude_patterns is None:
         patterns: list[str] = []
     elif isinstance(exclude_patterns, str):
@@ -451,6 +335,8 @@ def sync_directory_to_ftp(
     quit
     """
 
+    env = dict(os.environ, LFTP_PASSWORD=password)
+
     _log.info(
         "Starting LFTP mirror from %s to %s:%s (dry_run=%s)",
         local_path,
@@ -489,13 +375,14 @@ def sync_to_ngdac(
     exclude_patterns: list[str] | str | None = None,
     log_file: str | Path | None = None,
     dry_run: bool = False,
+    timeout: int = 30,
+    max_retries: int = 3,
 ) -> None:
     """
     Mirror local glider files to the IOOS NGDAC FTPS server.
 
-    Retrieves the account password from Google Cloud Secret Manager, enforces
-    preservation of the remote 'deployment.json' file, and delegates the
-    transfer to `sync_directory_to_ftp`.
+    Retrieves credentials from GCP Secret Manager, ensures 'deployment.json'
+    is preserved remotely, and delegates transfer to `sync_directory_to_ftp`.
 
     Parameters
     ----------
@@ -519,14 +406,13 @@ def sync_to_ngdac(
     dry_run : bool, optional
         Whether to simulate the mirror without transferring or deleting files
         (default is False).
-
-    Returns
-    -------
-    None
+    timeout : int, optional
+        Connection and network timeout in seconds (default is 30).
+    max_retries : int, optional
+        Maximum number of connection retry attempts (default is 3).
     """
     _log.info("Preparing sync to IOOS NGDAC (%s) for user %s", host, username)
 
-    # Normalize patterns and ensure deployment.json is always protected
     combined_excludes = {"deployment.json"}
     if exclude_patterns:
         if isinstance(exclude_patterns, str):
@@ -534,20 +420,19 @@ def sync_to_ngdac(
         else:
             combined_excludes.update(exclude_patterns)
 
-    # Retrieve credentials from GCP Secret Manager
     ftp_password = gcp.access_secret_version(gcpproject_id, secret_id)
-    env = dict(os.environ, LFTP_PASSWORD=ftp_password)
 
-
-    return sync_directory_to_ftp(
+    sync_directory_to_ftp(
         local_dir=local_dir,
         remote_dir=remote_dir,
         host=host,
         username=username,
-        env=env,
+        password=ftp_password,
         exclude_patterns=sorted(combined_excludes),
         log_file=log_file,
         dry_run=dry_run,
         ssl_force=True,
         ssl_protect_data=True,
+        timeout=timeout,
+        max_retries=max_retries,
     )
