@@ -2,7 +2,7 @@ import logging
 
 import sqlalchemy
 
-from esdglider import config
+from esdglider import metadata
 
 """
 Scrape info from database, and generate draft of
@@ -28,7 +28,7 @@ if __name__ == "__main__":
         conn_string = f.read()
         engine = sqlalchemy.create_engine(conn_string)
         with engine.connect() as connection:
-            config.make_deployment_yaml(
+            metadata.make_deployment_yaml(
                 con=connection,
                 deployment_name=deployment_name,
                 outdir=path_config,

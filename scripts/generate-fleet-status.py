@@ -4,7 +4,7 @@ import gspread
 import pandas as pd
 import sqlalchemy
 
-from esdglider import config
+from esdglider import metadata
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
         engine = sqlalchemy.create_engine(conn_string)
         with engine.connect() as connection:
             # Generate deployment table, and write to fleet status
-            df_depl = config.get_deployment_table(connection)
+            df_depl = metadata.get_deployment_table(connection)
             x = df_depl.copy(deep=True)
             x = x.drop(["Dates", "Sensors"], axis=1)
             x = x.fillna("").rename({"Glider_Deployment_ID": "Deployment_ID"})
