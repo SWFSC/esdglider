@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 import subprocess
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from esdglider import gcp, utils
 
@@ -88,7 +88,7 @@ def sync_sfmc_deployment(
                 _log.debug("Skipped cache file (already exists): %s", item.name)
 
     # 5. Stage and sync binary files to GCS
-    bucket_stbd_prefix = (PurePosixPath(year) / deployment_name / "binary/rt").as_posix()
+    bucket_stbd_prefix = (Path(year) / deployment_name / "binary/rt").as_posix()
     _stage_and_sync_to_gcs(
         file_extensions=sfmc_file_ext,
         ext_regex=r"\.[SsTt]bd$",
@@ -131,7 +131,7 @@ def fetch_from_sfmc(
         deployment_name,
     )
 
-    remote_dir = PurePosixPath("/var/opt/sfmc-dockserver/stations/noaa/gliders") / glider / "from-glider"
+    remote_dir = Path("/var/opt/sfmc-dockserver/stations/noaa/gliders") / glider / "from-glider"
     sfmc_server_path = f"swoodman@sfmc.webbresearch.com:{remote_dir.as_posix()}/"
     ssh_cmd = "sshpass -e ssh -o StrictHostKeyChecking=accept-new"
 
@@ -222,7 +222,7 @@ def _stage_and_sync_to_gcs(
 
 def sync_directory_to_ftp(
     local_dir: str | Path,
-    remote_dir: str | PurePosixPath,
+    remote_dir: str | Path,
     host: str,
     username: str,
     password: str,
@@ -247,7 +247,7 @@ def sync_directory_to_ftp(
     ----------
     local_dir : str | Path
         The local directory path to synchronize.
-    remote_dir : str | PurePosixPath
+    remote_dir : str | Path
         The target directory path on the remote FTP server.
     host : str
         The FTP server hostname or IP address.
@@ -289,7 +289,7 @@ def sync_directory_to_ftp(
         _log.error("Local directory does not exist: %s", local_path)
         raise FileNotFoundError(f"Local directory does not exist: {local_path}")
 
-    remote_path = PurePosixPath(remote_dir).as_posix()
+    remote_path = Path(remote_dir).as_posix()
 
     if exclude_patterns is None:
         patterns: list[str] = []
@@ -366,7 +366,7 @@ def sync_directory_to_ftp(
 
 def sync_to_ngdac(
     local_dir: str | Path,
-    remote_dir: str | PurePosixPath,
+    remote_dir: str | Path,
     username: str,
     gcpproject_id: str,
     secret_id: str,
@@ -388,7 +388,7 @@ def sync_to_ngdac(
     ----------
     local_dir : str | Path
         The local directory path to synchronize.
-    remote_dir : str | PurePosixPath
+    remote_dir : str | Path
         The target directory path on the remote FTP server.
     username : str
         The IOOS NGDAC FTP username.
