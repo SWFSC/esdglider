@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unrealeased]
 
 - Changed data file 'slocum-netcdf-variables-sci.yml' so that cdom and backscatter_700 variables have a `valid_min: 0`
+- Changed... in `slocumn.rt`...
 
 ## [1.0.0] - 2026-10-16
 
