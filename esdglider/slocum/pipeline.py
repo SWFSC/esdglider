@@ -20,7 +20,7 @@ import xarray as xr
 import yaml
 
 import esdglider.profiles as prof
-from esdglider import paths, plots, qartod, utils
+from esdglider import gcp, paths, plots, qartod, utils
 from esdglider.slocum import core
 
 _log = logging.getLogger(__name__)
@@ -1733,3 +1733,75 @@ def create_ngdac_profiles(
                     outname,
                     mode="w",
                 )
+
+
+def sync_to_ngdac(
+    local_dir: str | Path,
+    remote_dir: str | Path,
+    username: str,
+    gcpproject_id: str,
+    secret_id: str,
+    *,
+    exclude_patterns: list[str] | str | None = None,
+    log_file: str | Path | None = None,
+    dry_run: bool = False,
+    timeout: int = 30,
+    max_retries: int = 3,
+) -> None:
+    """
+    Mirror local glider files to the IOOS NGDAC FTPS server (gliders.ioos.us).
+
+    Retrieves credentials from GCP Secret Manager, ensures 'deployment.json'
+    is preserved remotely, and delegates transfer to `sync_directory_to_ftp`.
+
+    Parameters
+    ----------
+    local_dir : str | Path
+        The local directory path to synchronize.
+    remote_dir : str | Path
+        The target directory path on the remote FTP server.
+    username : str
+        The IOOS NGDAC FTP username.
+    gcpproject_id : str
+        The GCP project ID containing the Secret Manager secret.
+    secret_id : str
+        The secret ID in Secret Manager containing the FTP password.
+    exclude_patterns : list[str] | str | None, optional
+        Additional glob patterns to preserve on the remote server
+        (default is None). 'deployment.json' is always preserved.
+    log_file : str | Path | None, optional
+        Local file path where LFTP will log operations (default is None).
+    dry_run : bool, optional
+        Whether to simulate the mirror without transferring or deleting files
+        (default is False).
+    timeout : int, optional
+        Connection and network timeout in seconds (default is 30).
+    max_retries : int, optional
+        Maximum number of connection retry attempts (default is 3).
+    """
+    host = "gliders.ioos.us"
+    _log.info("Preparing sync to IOOS NGDAC (%s) for user %s", host, username)
+
+    combined_excludes = {"deployment.json"}
+    if exclude_patterns:
+        if isinstance(exclude_patterns, str):
+            combined_excludes.add(exclude_patterns)
+        else:
+            combined_excludes.update(exclude_patterns)
+
+    ftp_password = gcp.access_secret_version(gcpproject_id, secret_id)
+
+    utils.sync_directory_to_ftp(
+        local_dir=local_dir,
+        remote_dir=remote_dir,
+        host=host,
+        username=username,
+        password=ftp_password,
+        exclude_patterns=sorted(combined_excludes),
+        log_file=log_file,
+        dry_run=dry_run,
+        ssl_force=True,
+        ssl_protect_data=True,
+        timeout=timeout,
+        max_retries=max_retries,
+    )

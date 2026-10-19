@@ -6,8 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unrealeased]
 
-- Changed data file 'slocum-netcdf-variables-sci.yml' so that cdom and backscatter_700 variables have a `valid_min: 0`
-- Changed... in `slocumn.rt`...
+- Changed data file 'slocum-netcdf-variables-sci.yml' so that cdom and backscatter_700 variables have a `valid_min: 0`. 
+- Added function `sync_directory_to_ftp` to module `utils`, to be able to automate and standardize sending profile NetCDF files to the DAC. 
+- Added functions `sync_to_ngdac` to module `slocum.pipeline`, to automate and standardize sending profile NetCDF files to the DAC. 
+- Added function `fetch_from_sfmc` in `slocum.rt` to isolate fetching data from the SFMC.
+- Changed the names of functions in `slocum.rt` to be more consistent and follow best practices. Specifically, changes `scrape_sfmc` to `sync_sfmc_deployment`, and changed `transfer_files_to_gcs` to `_stage_and_sync_to_gcs`. 
 
 ## [1.0.0] - 2026-10-16
 
@@ -20,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - Changed `generate_timeseries` so that the engineering timeseries does not contain the variable 'profile_direction'. The science timeseries currently still needs to have this variable, as it is required by pyglider's gridding function.
     - Changed raw dataset variables and netCDF generation such that the variable names are the same as the source sensor names (#54).
 - Changed the name of the module `acoustics` to `aa`, to reflect that this module is specific to active acoustic data.
-- Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and changed these functions to align with the new ESD prod directory structure. The modulte functions use defaults that align with ESD glider workstation setup. 
+- Added a `paths` module for all functions involved in generating file or directory paths. Moved all such path functions from other modules into `paths`, and changed these functions to align with the new ESD prod directory structure. The module functions use defaults that align with ESD glider workstation setup. 
 - Added a `profiles` module for all functions related to profiles: calculating, checking, summarizing, etc. These functions all were previously in the `utils` module. (#46)
 - Changed `gcp` module, using Gemini to follow a "Fail-Fast" module design. 
 
@@ -43,7 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - Removed `solocam_img_meta`, and added `get_solocam_dt` to the `imagery` module for formatting the image timestamps
     - Added `utils.check_string_length`, for checking that all strings in a list (e.g., solocam image file names) are the same length, and returning useful warning logs if not
     - Changed `imagery.imagery_timeseries` to use `solocam_dt_from_meta` and `check_string_length`
-- Added function `generate_osi_manifest` for generating OSI image json file, for DAG processing. Also added assocaited script `generate_osi_json.py`
+- Added function `generate_osi_manifest` for generating OSI image json file, for DAG processing. Also added associated script `generate_osi_json.py`
 
 ### Data corrections
 - Added several functions and a data file for checking and correcting ecopuck data:
@@ -52,7 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - `check_flbbcd_autoexec` checks the flbbcd calibration values from the calibration yaml against the values from the binary files (i.e., from the autoexec). 
     - `calc_flbbcd` calculates correct output values the signal and calibration values, for chlorophyll, cdom, and backscatter_700
     - `correct_flbbcd_raw_sci` recalculates the flbbcd output values, and updates the raw and science timeseries
-- Added several functions to for checking and correcting CDOM values, based on data notices from Seabird Scientific:
+- Added several functions for checking and correcting CDOM values, based on data notices from Seabird Scientific:
     - `check_cdom_date` determines the status of the CDOM data (e.g., is it out-of-tolerance)
     - `correct_cdom` depending on status of the CDOM data, removes CDOM data, or applies correction factor
     - `correct_cdom_raw_sci` removes or corrects CDOM data, for the raw and science timeseries
@@ -68,7 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `get_instrument_sn_date` to `utils`, for extracting the serial number and calibration date for the given instrument.
 - Changed glider path output so paths to package yaml files are not included. 
 - Added `complete_profile_correction` to `slocum.pipeline`, to handle consistent steps that occur if profile indices need to be adjusted by hand in the processing script.
-- Added a `check-nc-old-new.py` script for comparing sets of old and new processed glider deployment files and plots. Useful to make sure code cleanup don't affect output files. 
+- Added a `check-nc-old-new.py` script for comparing sets of old and new processed glider deployment files and plots. Useful to make sure code cleanup doesn't affect output files. 
 - Changed multiple functions so optional arguments, for `esdglider.profiles.findProfiles`, are passed into functions as a dictionary with the named arguments, rather than kwargs.
 - Added valid_min and valid_max values for several variables to the `data/netcdf-variables-sci.yml` file.
 - Changed applicable functions to now check the deployment metadata for a 'start_date' attribute (rather than 'deployment_min_dt') for the deployment start time, for instance to filter for values after this start datetime.
@@ -81,7 +84,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [0.4.0] - 2026-04-17
 
 - `esdglider` currently relies on the [smwoodman pyglider fork](https://github.com/smwoodman/pyglider). A PR is currently open [here](https://github.com/c-proof/pyglider/pull/227)
-- Fixed the gridding code to use proper methods for different input boolean flags
+- Fixed the gridding code to use proper methods for different input Boolean flags
 - Changed the gridding code to use the new pyglider gridding function
 - Changed config module:
     - Functions that scrape info from the database to all expect a `sqlalchemy.engine.Connectable` object as the first input
