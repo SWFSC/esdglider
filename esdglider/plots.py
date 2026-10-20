@@ -27,6 +27,17 @@ try:
 except ImportError:
     HAS_PIL = False
 
+try:
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    import cmocean.cm as cmo
+    import matplotlib.pyplot as plt
+except ImportError as exc:
+    raise ImportError(
+        "Plotting dependencies are missing. "
+        "Install them with `pip install 'esdglider[plots]'`."
+    ) from exc
+
 _log = logging.getLogger(__name__)
 
 """Constants used throughout plotting functions."""

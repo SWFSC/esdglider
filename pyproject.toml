@@ -1,56 +1,80 @@
 [build-system]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
-
-requires = [ "setuptools>=61", "wheel" ]
 
 [project]
 name = "esdglider"
 version = "1.1.0-dev"
 description = "Functions for processing ESD glider data"
-license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
 authors = [
   { name = "Sam Woodman", email = "sam.woodman@noaa.gov" },
   { name = "Caleb Flaim" },
   { name = "Madison Richardson" },
 ]
-requires-python = ">=3.10"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
-  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-  "cartopy",
-  "cmocean",
-  "google-cloud-secret-manager>=2.12",
-  "google-crc32c>=1.1",
-  "google-cloud-storage",
   "gsw",
-  "matplotlib",
+  "ioos_qc",
   "netcdf4",
   "numpy",
-  "pandas",
-  "pyglider",
-  "python-dateutil", 
+  "pandas>=2.0",
+  "pyglider @ git+https://github.com/smwoodman/pyglider.git@main",
+  "python-dateutil",
   "pyyaml",
   "xarray",
-  "ioos_qc",
-  "glidertools",
-  "pillow",
-  "skyfield",
-  "sqlalchemy",
-  "timezonefinder",
 ]
 
-urls.Homepage = "https://swfsc.github.io/glider-lab-manual"
-urls.Issues = "http://github.com/SWFSC/esdglider/issues"
-urls.Repository = "http://github.com/SWFSC/esdglider.git"
+[project.optional-dependencies]
+# Cloud infrastructure & secrets
+gcp = [
+  "google-cloud-secret-manager>=2.12",
+  "google-cloud-storage",
+  "google-crc32c>=1.1",
+]
+# Database ingestion
+db = [
+  "sqlalchemy",
+  "pyodbc",
+]
+# Visualization & plotting
+plots = [
+  "cartopy",
+  "cmocean",
+  "glidertools",
+  "matplotlib",
+  "pillow",
+]
+# Solar/almanac utilities
+imagery = [
+  "skyfield",
+  "timezonefinder",
+]
+# All operational and lab requirements bundled together
+all = [
+  "esdglider[db,gcp,optics,plots]",
+]
+# Development and testing tooling
+dev = [
+  "pre-commit",
+  "pytest",
+  "ruff",
+]
+
+[project.urls]
+Homepage = "https://swfsc.github.io/glider-lab-manual"
+Issues = "https://github.com/SWFSC/esdglider/issues"
+Repository = "https://github.com/SWFSC/esdglider.git"
 
 [tool.setuptools.packages.find]
-exclude = [ "tests*", "docs*" ]
+exclude = ["tests*", "docs*", "notebooks*", "scripts*"]
 
 [tool.setuptools.package-data]
-esdglider = [ "data/*" ]
+esdglider = ["data/*"]

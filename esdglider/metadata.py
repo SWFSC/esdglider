@@ -1,15 +1,16 @@
 import logging
 import os
 from importlib.resources import as_file, files
+from typing import TYPE_CHECKING
 
 import pandas as pd
 import yaml
-from google.cloud import storage
-from sqlalchemy.engine import Connectable
 
 from esdglider import defaults, paths, utils
-from esdglider.gcp import check_gcs_directory_exists, check_gcs_file_exists
 
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Connection, Engine
+    
 _log = logging.getLogger(__name__)
 
 
@@ -113,7 +114,7 @@ def _get_instrument_attrs(
 
 
 def make_deployment_yaml(
-        con: Connectable, 
+        con: "Connection | Engine",  # Quoted string or postponed evaluation
         deployment_name: str,
         outdir: str,
         schema: str = defaults.DB_SCHEMA, 
@@ -124,7 +125,7 @@ def make_deployment_yaml(
 
     Parameters
     ----------
-    con : sqlalchemy Connectable
+    con : sqlalchemy Connection | Engine
         Database connection, passed to 'con' arg of `pd.read_sql_table`
     deployment_name : str
         name of the glider deployment, eg, amlr01-20200101
@@ -287,6 +288,18 @@ def make_website_yaml(
         The dictionary that was written to the yaml file 
     """
 
+    try:
+        from google.cloud import storage
+
+        from esdglider.gcp import check_gcs_directory_exists, check_gcs_file_exists
+    except ImportError as exc:
+        raise ImportError(
+            "Google Cloud dependencies are required to run make_website_yaml. "
+            "Install them with `pip install 'esdglider[gcp]'`."
+        ) from exc
+
+    storage_client = storage.Client()
+
     # _log.debug("database connection %s", con)
     # _log.info("Get the info for each deployment from the glider database")
     depl_columns = [
@@ -319,7 +332,6 @@ def make_website_yaml(
     console_url = "https://console.cloud.google.com/storage/browser"
 
     _log.debug("Creating connections to GCS buckets")
-    storage_client = storage.Client()
     glider_data_out_bucket = storage_client.bucket(glider_data_out_bucket_name)
     # aa_in_bucket = storage_client.bucket(aa_in_bucket_name)
     imagery_in_bucket = storage_client.bucket(imagery_in_bucket_name)
@@ -398,7 +410,7 @@ def make_website_yaml(
 
 
 def get_deployment_table(
-    con: Connectable, 
+    con: "Connection | Engine",  # Quoted string or postponed evaluation
     schema: str = defaults.DB_SCHEMA
 ):
     """
@@ -407,7 +419,7 @@ def get_deployment_table(
 
     Parameters
     ----------
-    con : sqlalchemy Connectable
+    con : sqlalchemy Connection | Engine
         Database connection, passed to 'con' arg of `pd.read_sql_table`
     schema : string, default defaults.DB_SCHEMA
         Database schema, passed to 'schema' arg of `pd.read_sql_table`

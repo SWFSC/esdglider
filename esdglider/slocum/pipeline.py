@@ -20,7 +20,7 @@ import xarray as xr
 import yaml
 
 import esdglider.profiles as prof
-from esdglider import defaults, gcp, paths, plots, qartod, utils
+from esdglider import defaults, paths, qartod, utils
 from esdglider.slocum import core
 
 _log = logging.getLogger(__name__)
@@ -1352,6 +1352,13 @@ def drop_ts_ranges(
         Input ds, with points within specified time ranges dropped.
         Also saves 'dropped' scatter plots to plotdir, if specified.
     """
+    try:
+        from esdglider.plots import scatter_drop_plot
+    except ImportError as exc:
+        raise ImportError(
+            "Plotting dependencies are missing. "
+            "Install them with `pip install 'esdglider[plots]'`."
+        ) from exc
 
     _log.info(
         "There are %d points in the original %s dataset",
@@ -1373,7 +1380,7 @@ def drop_ts_ranges(
 
     # Make plot
     if plotdir is not None:
-        plots.scatter_drop_plot(ds, todrop, dstype, plotdir)
+        scatter_drop_plot(ds, todrop, dstype, plotdir)
 
     # Drop time(s)
     todrop_mask = xr.DataArray(todrop, dims="time", coords={"time": ds.time})
@@ -1756,6 +1763,14 @@ def sync_to_ngdac(
         Whether to simulate the mirror without transferring or deleting files
         (default is False).
     """
+    try:
+        from esdglider.gcp import access_secret_version
+    except ImportError as exc:
+        raise ImportError(
+            "Google Cloud dependencies are required to run this function. "
+            "Install them with `pip install 'esdglider[gcp]'`."
+        ) from exc
+
     _log.info(
         "Preparing sync to IOOS NGDAC (%s) for user %s", 
         host, 
@@ -1777,7 +1792,7 @@ def sync_to_ngdac(
         else:
             combined_excludes.update(exclude_patterns)
 
-    ftp_password = gcp.access_secret_version(secret_id, project_id)
+    ftp_password = access_secret_version(secret_id, project_id)
 
     utils.sync_directory_to_ftp(
         local_dir=local_dir,
