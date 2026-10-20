@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from esdglider import gcp, utils
+from esdglider import defaults, gcp, utils
 
 _log = logging.getLogger(__name__)
 
@@ -17,8 +17,8 @@ def sync_sfmc_deployment(
     bucket_name: str,
     sfmc_path: str | Path,
     cache_path: str | Path,
-    gcpproject_id: str,
-    secret_id: str,
+    secret_id: str = defaults.SECRET_ID_SFMC,
+    project_id: str = defaults.GCP_PROJECT_ID,
 ) -> None:
     """
     Sync files from SFMC and distribute them to local cache and GCS buckets.
@@ -33,10 +33,10 @@ def sync_sfmc_deployment(
         The local path to store downloaded SFMC files.
     cache_path : str | Path
         The local path to the cache file directory.
-    gcpproject_id : str
-        The GCP project ID.
-    secret_id : str
-        The secret ID for accessing the SFMC password.
+    gcpproject_id : str, optional
+        The GCP project ID. Defaults to `defaults.GCP_PROJECT_ID`.
+    secret_id : str, optional
+        The secret ID for accessing the SFMC password. Defaults to `defaults.SECRET_ID_SFMC`.
 
     Raises
     ------
@@ -51,7 +51,7 @@ def sync_sfmc_deployment(
     sfmc_local_path.mkdir(parents=True, exist_ok=True)
 
     # 2. Retrieve secret and ingest files from SFMC
-    sfmc_password = gcp.access_secret_version(gcpproject_id, secret_id)
+    sfmc_password = gcp.access_secret_version(secret_id, project_id)
     fetch_from_sfmc(
         deployment_name=deployment_name,
         local_path=sfmc_local_path,

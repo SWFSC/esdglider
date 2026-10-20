@@ -1332,7 +1332,7 @@ def combine_datasets(nc_dir):
 
     # PROCESS EACH PROFILE FILE
     for nc_file in nc_files:
-        ds = xr.open_dataset(nc_file)
+        ds = xr.load_dataset(nc_file)
 
         # STORE THE PROFILE FILENAME FOR EACH OBSERVATION
         profile_name = nc_file.stem.replace("_qc", "")
@@ -1352,7 +1352,6 @@ def combine_datasets(nc_dir):
     )
 
     return deployment_ds
-
 
 
 def sync_directory_to_ftp(
@@ -1436,7 +1435,8 @@ def sync_directory_to_ftp(
     mirror_opts = [
         "--reverse",
         "--delete",
-        "--only-newer",
+        # "--only-newer",
+        "--ignore-time",
         "--verbose",
     ]
 
@@ -1479,6 +1479,7 @@ def sync_directory_to_ftp(
         remote_path,
         dry_run,
     )
+    _log.debug("LFTP script:\n%s", lftp_script)
 
     retcode = subprocess.run(
         ["lftp"],

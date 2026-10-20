@@ -20,7 +20,7 @@ import xarray as xr
 import yaml
 
 import esdglider.profiles as prof
-from esdglider import gcp, paths, plots, qartod, utils
+from esdglider import defaults, gcp, paths, plots, qartod, utils
 from esdglider.slocum import core
 
 _log = logging.getLogger(__name__)
@@ -1713,16 +1713,15 @@ def create_ngdac_profiles(
 
 def sync_to_ngdac(
     local_dir: str | Path,
-    remote_dir: str | Path,
-    username: str,
-    gcpproject_id: str,
-    secret_id: str,
+    # remote_dir: str | Path,
     *,
+    host: str = defaults.NGDAC_HOST, 
+    username: str = defaults.NGDAC_USER,
+    secret_id: str = defaults.SECRET_ID_NGDAC,
+    project_id: str = defaults.GCP_PROJECT_ID,
     exclude_patterns: list[str] | str | None = None,
     log_file: str | Path | None = None,
     dry_run: bool = False,
-    timeout: int = 30,
-    max_retries: int = 3,
 ) -> None:
     """
     Mirror local glider files to the IOOS NGDAC FTPS server (gliders.ioos.us).
@@ -1734,29 +1733,42 @@ def sync_to_ngdac(
     ----------
     local_dir : str | Path
         The local directory path to synchronize.
-    remote_dir : str | Path
-        The target directory path on the remote FTP server.
-    username : str
-        The IOOS NGDAC FTP username.
-    gcpproject_id : str
-        The GCP project ID containing the Secret Manager secret.
-    secret_id : str
-        The secret ID in Secret Manager containing the FTP password.
+    # remote_dir : str | Path
+    #     The target directory path on the remote FTP server.
+    host : str, optional
+        The IOOS NGDAC FTP host. Defaults to `defaults.NGDAC_HOST`.
+    username : str, optional
+        The IOOS NGDAC FTP username. 
+        Defaults to `defaults.NGDAC_USER`.
+    secret_id : str, optional
+        The secret ID in Secret Manager containing the FTP password. 
+        Defaults to `defaults.SECRET_ID_NGDAC`.
+    project_id : str, optional
+        The GCP project ID containing the Secret Manager secret. 
+        Defaults to `defaults.GCP_PROJECT_ID`.
     exclude_patterns : list[str] | str | None, optional
         Additional glob patterns to preserve on the remote server
         (default is None). 'deployment.json' is always preserved.
     log_file : str | Path | None, optional
-        Local file path where LFTP will log operations (default is None).
+        Local file path where LFTP will log operations.
+        If None (default), logging will be directed to the module logger.
     dry_run : bool, optional
         Whether to simulate the mirror without transferring or deleting files
         (default is False).
-    timeout : int, optional
-        Connection and network timeout in seconds (default is 30).
-    max_retries : int, optional
-        Maximum number of connection retry attempts (default is 3).
     """
-    host = "gliders.ioos.us"
-    _log.info("Preparing sync to IOOS NGDAC (%s) for user %s", host, username)
+    _log.info(
+        "Preparing sync to IOOS NGDAC (%s) for user %s", 
+        host, 
+        username
+    )
+
+    # Get the file ID, which is also the remote directory path
+    nc0 = next(Path(local_dir).glob("*.nc"), None)    
+    if nc0 is None:
+        raise FileNotFoundError(f"No NetCDF files found in {local_dir}")
+    with xr.open_dataset(nc0) as ds:
+        remote_dir = ds.attrs["id"]
+    _log.debug("remote_dir: %s", remote_dir)
 
     combined_excludes = {"deployment.json"}
     if exclude_patterns:
@@ -1765,7 +1777,7 @@ def sync_to_ngdac(
         else:
             combined_excludes.update(exclude_patterns)
 
-    ftp_password = gcp.access_secret_version(gcpproject_id, secret_id)
+    ftp_password = gcp.access_secret_version(secret_id, project_id)
 
     utils.sync_directory_to_ftp(
         local_dir=local_dir,
@@ -1778,6 +1790,6 @@ def sync_to_ngdac(
         dry_run=dry_run,
         ssl_force=True,
         ssl_protect_data=True,
-        timeout=timeout,
-        max_retries=max_retries,
+        timeout=30,
+        max_retries=3,
     )
