@@ -127,12 +127,14 @@ def imagery_timeseries(ds, img_paths):
         DataFrame: pd.DataFrame of imagery timeseries
     """
 
-    deployment_name = ds.attrs["deployment_name"]
     # imagedir = img_paths["imagedir"]
     metadir = img_paths["metadir"]
     ancdir = img_paths["ancdir"]
     
-    _log.info("Creating imagery ancillary data file for %s", deployment_name)
+    _log.info(
+        "Creating imagery ancillary data file for %s", 
+        utils.get_deployment_name(ds)
+    )
     # _log.info(f"Using images directory {imagedir}")
     _log.info("Using image metadata directory %s", metadir)
 
@@ -451,8 +453,6 @@ def generate_osi_manifest(
     jsonl_filepath = str(jsonl_filepath)
     output_filepath = str(output_filepath)
 
-    # yr = utils.get_path_year(deployment_name)
-    # base_uri = f"gs://{bucket_name}/{yr}/{deployment_name}/images"
     target_dirs_set = set(target_dirs)
     _log.info(f"Target directories to filter: {target_dirs_set}")
 

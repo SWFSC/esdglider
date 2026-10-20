@@ -259,7 +259,7 @@ def esd_all_plots(
     # ds_sci_qc = xr.load_dataset(ds_paths["outname_tssciqc"])
     ds_gr5m = xr.load_dataset(ds_paths["outname_gr5m"])
 
-    deployment_name = ds_sci.attrs['deployment_name']
+    deployment_name = utils.get_deployment_name(ds_sci)
 
     # Delete old plots
     if base_path is not None:
@@ -734,9 +734,9 @@ def scatter_plot(
 
     # Prep
     _log.info(f"Making basic scatter plot for {ds_type} timeseries")
-    deployment = ds.attrs["deployment_name"]
+    deployment_name = utils.get_deployment_name(ds)
     title_str = (
-        f"{deployment}: All {lat_var}/{lon_var} points for {ds_type} "
+        f"{deployment_name}: All {lat_var}/{lon_var} points for {ds_type} "
         "timeseries"
     )
 
@@ -780,7 +780,7 @@ def scatter_plot(
         fname = os.path.join(
             base_path,
             SCATTER_PATH,
-            f"{deployment}_{ds_type}_scatter.png",
+            f"{deployment_name}_{ds_type}_scatter.png",
         )
         save_plot(fig, fname)
 
@@ -824,7 +824,7 @@ def scatter_drop_plot(
 
     # Prep
     _log.info(f"Making drop scatter plot for {ds_type} timeseries")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
 
     color_kept = "#0072B2"  # Blue
     color_dropped = "#D55E00"  # Orange
@@ -839,7 +839,7 @@ def scatter_drop_plot(
     ax.set_xlabel("Longitude", size=LABEL_SIZE)
     ax.set_ylabel("Latitude", size=LABEL_SIZE)
     ax.set_title(
-        f"{deployment}: Dropped points for {ds_type} timeseries",
+        f"{deployment_name}: Dropped points for {ds_type} timeseries",
         size=TITLE_SIZE,
     )
     ax.grid(True)
@@ -855,7 +855,7 @@ def scatter_drop_plot(
         fname = os.path.join(
             base_path,
             SCATTER_PATH,
-            f"{deployment}_{ds_type}_dropped.png",
+            f"{deployment_name}_{ds_type}_dropped.png",
         )
         save_plot(fig, fname)
 
@@ -902,7 +902,7 @@ def sci_timesection_plot(
         return
 
     _log.info(f"Making timesection plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     # glider = utils.split_deployment(deployment)[0]
     ds = ds.dropna(dim="depth", how="all")
 
@@ -915,7 +915,7 @@ def sci_timesection_plot(
     ax.invert_yaxis()
 
     ax.set_title(
-        f"Deployment {deployment} - time section\n std={std:0.2f} mean={mean:0.2f}",
+        f"Deployment {deployment_name} - time section\n std={std:0.2f} mean={mean:0.2f}",
         size=14,
     )  # use set_title so that title is centered over the plot
     ax.set_xlabel("Time", size=LABEL_SIZE)
@@ -932,7 +932,7 @@ def sci_timesection_plot(
         fname = os.path.join(
             base_path,
             TIMESECTION_PATH,
-            f"{deployment}_{var}_timesection.png",
+            f"{deployment_name}_{var}_timesection.png",
         )
         save_plot(fig, fname)
 
@@ -978,7 +978,7 @@ def sci_spatialsection_plot(
         return
 
     _log.info(f"Making spatialsection plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     ds = ds.dropna(dim="depth", how="all")
 
     fig, axs = plt.subplots(1, 2, figsize=(11, 8.5), sharey=True)
@@ -1034,7 +1034,7 @@ def sci_spatialsection_plot(
     # axs[1].set_ylabel(f"Depth [m]", size=14)
 
     fig.suptitle(
-        f"Deployment {deployment} - spatial section\n std={std:0.2f} mean={mean:0.2f}",
+        f"Deployment {deployment_name} - spatial section\n std={std:0.2f} mean={mean:0.2f}",
         size=TITLE_SIZE,
     )
 
@@ -1050,7 +1050,7 @@ def sci_spatialsection_plot(
         fname = os.path.join(
             base_path,
             SPATIALSECTION_PATH,
-            f"{deployment}_{var}_spatialSections.png",
+            f"{deployment_name}_{var}_spatialSections.png",
         )
         save_plot(fig, fname)
 
@@ -1107,7 +1107,7 @@ def sci_spatialgrid_plot(
         wspace=0.05,
         hspace=0.05,
     )
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     ds = ds.dropna(dim="depth", how="all")
 
     fig = plt.figure(figsize=(11, 8.5))
@@ -1158,14 +1158,14 @@ def sci_spatialgrid_plot(
         size=LABEL_SIZE,
     )
     fig.suptitle(
-        f"Deployment {deployment} - spatial grid", size=TITLE_SIZE
+        f"Deployment {deployment_name} - spatial grid", size=TITLE_SIZE
     )
 
     if base_path is not None:
         fname = os.path.join(
             base_path,
             SPATIALGRID_PATH,
-            f"{deployment}_{var}_spatialGrids.png",
+            f"{deployment_name}_{var}_spatialGrids.png",
         )
         save_plot(fig, fname)
 
@@ -1362,7 +1362,7 @@ def eng_tvt_plot(
         _log.warning("Incomplete data for key '%s' in eng_dict. Skipping tvt plot.", key)
         return None
 
-    deployment = getattr(ds, "deployment_name", ds.attrs.get("deployment_name", "unknown"))
+    deployment_name = utils.get_deployment_name(ds)
     _log.info("Making tvt plot for dictionary key %s", key)
 
     fig, ax = plt.subplots(figsize=(8.5, 8.5))
@@ -1397,11 +1397,11 @@ def eng_tvt_plot(
     if x_name == "time":
         fig.autofmt_xdate()
 
-    ax.set_title(f"Deployment {deployment}", size=TITLE_SIZE)
+    ax.set_title(f"Deployment {deployment_name}", size=TITLE_SIZE)
 
     if base_path is not None:
         fname = os.path.join(
-            base_path, TVT_PATH, f"{deployment}_{key}_engtvt.png"
+            base_path, TVT_PATH, f"{deployment_name}_{key}_engtvt.png"
         )
         save_plot(fig, fname)
 
@@ -1445,7 +1445,7 @@ def eng_timeseries_plot(
         return
 
     _log.info(f"Making eng timeseries plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
 
@@ -1453,7 +1453,7 @@ def eng_timeseries_plot(
     ax.set_ylabel(_adj_var_label(ds, var), size=LABEL_SIZE)
     # ax.invert_yaxis()
     ax.set_title(
-        f"Deployment {deployment} - timeseries", size=TITLE_SIZE
+        f"Deployment {deployment_name} - timeseries", size=TITLE_SIZE
     )
 
     ax.scatter(ds.time, ds[var], s=3)
@@ -1464,7 +1464,7 @@ def eng_timeseries_plot(
         fname = os.path.join(
             base_path,
             TIMESERIES_ENG_PATH,
-            f"{deployment}_{var}_timeseries.png",
+            f"{deployment_name}_{var}_timeseries.png",
         )
         save_plot(fig, fname)
 
@@ -1515,7 +1515,7 @@ def sci_timeseries_plot(
         return
 
     _log.info(f"Making sci timeseries plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
 
@@ -1523,7 +1523,7 @@ def sci_timeseries_plot(
     ax.set_ylabel("Depth [m]", size=LABEL_SIZE)
     ax.invert_yaxis()
     ax.set_title(
-        f"Deployment {deployment} - timeseries", size=TITLE_SIZE
+        f"Deployment {deployment_name} - timeseries", size=TITLE_SIZE
     )
 
     p = ax.scatter(
@@ -1540,7 +1540,7 @@ def sci_timeseries_plot(
         fname = os.path.join(
             base_path,
             TIMESERIES_SCI_PATH,
-            f"{deployment}_{var}_timeseries.png",
+            f"{deployment_name}_{var}_timeseries.png",
         )
         save_plot(fig, fname)
 
@@ -1607,8 +1607,8 @@ def sci_timesection_gt_plot(
     _log.info(
         f"Making sci timesection plot for variable {var}, using glidertools",
     )
-    deployment = ds.deployment_name
-    title_str = f"Deployment {deployment} - time section"
+    deployment_name = utils.get_deployment_name(ds)
+    title_str = f"Deployment {deployment_name} - time section"
     if robust:
         title_str += " - [0.5, 99.5] percentiles"
 
@@ -1631,7 +1631,7 @@ def sci_timesection_gt_plot(
         fname = os.path.join(
             base_path,
             TIMESECTION_GT_PATH,
-            f"{deployment}_{var}_gt.png",
+            f"{deployment_name}_{var}_gt.png",
         )
         save_plot(fig, fname)
 
@@ -1679,7 +1679,7 @@ def ts_plot(
         return
 
     _log.info(f"Making ts plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     start, end = utils.get_date_start_end(ds)
 
     Sg, Tg, sigma = utils.calc_ts(ds)
@@ -1702,7 +1702,7 @@ def ts_plot(
         shrink=1,
     ).set_label(label=_adj_var_label(ds, var), size=LABEL_SIZE)
 
-    ax.set_title(f"{deployment} from {start} to {end}", size=TITLE_SIZE)
+    ax.set_title(f"{deployment_name} from {start} to {end}", size=TITLE_SIZE)
     ax.set_xlabel(_adj_var_label(ds, "salinity"), size=LABEL_SIZE)
     ax.set_ylabel(_adj_var_label(ds, "potential_temperature"), size=LABEL_SIZE)
     # ax.set_xlabel("Salinity [PSU]", size=label_size)
@@ -1710,7 +1710,7 @@ def ts_plot(
 
     if base_path is not None:
         fname = os.path.join(
-            base_path, TS_PATH, f"{deployment}_{var}_tsPlot.png"
+            base_path, TS_PATH, f"{deployment_name}_{var}_tsPlot.png"
         )
         save_plot(fig, fname)
 
@@ -1785,7 +1785,7 @@ def sci_surface_map(
         return
 
     _log.info(f"Making surface map for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     start, end = utils.get_date_start_end(ds)
 
     map_lon_border = 0.1
@@ -1830,11 +1830,11 @@ def sci_surface_map(
     # Special considerations for profile_index
     if var == "profile_index":
         c = ds["profile"]
-        title = f"{deployment}: {var}\nfrom {start} to {end}"
+        title = f"{deployment_name}: {var}\nfrom {start} to {end}"
         cbar_label = "profile_index [1]"
     else:
         c = ds[var].where(ds.depth <= 10, drop=True).mean(dim="depth")
-        title = f"{deployment}: 0 - 10m average {var}\nfrom {start} to {end}"
+        title = f"{deployment_name}: 0 - 10m average {var}\nfrom {start} to {end}"
         cbar_label = _adj_var_label(ds, var)
 
     # Scatter plot data given data, colored by values in the top 10m
@@ -1872,7 +1872,7 @@ def sci_surface_map(
         fname = os.path.join(
             base_path,
             SURFACEMAP_SCI_PATH,
-            f"{deployment}_{var}_map_0-10.png",
+            f"{deployment_name}_{var}_map_0-10.png",
         )
         save_plot(fig, fname)
 

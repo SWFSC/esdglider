@@ -7,13 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unrealeased]
 
 - Changed data file 'slocum-netcdf-variables-sci.yml' so that cdom and backscatter_700 variables have a `valid_min: 0`. 
-- Added function `sync_directory_to_ftp` to module `utils`, to be able to automate and standardize sending profile NetCDF files to the DAC. 
-- Added functions `sync_to_ngdac` to module `slocum.pipeline`, to automate and standardize sending profile NetCDF files to the DAC. 
+- Added functions `sync_to_ngdac` and `sync_directory_to_ftp` to module `slocum.pipeline`, to automate and standardize sending profile NetCDF files to the DAC. 
 - Added function `fetch_from_sfmc` in `slocum.rt` to isolate fetching data from the SFMC.
 - Changed the names of functions in `slocum.rt` to be more consistent and follow best practices. Specifically, changes `scrape_sfmc` to `sync_sfmc_deployment`, and changed `transfer_files_to_gcs` to `_stage_and_sync_to_gcs`. 
 - Changed the name of `config` module to `metadata`, to better reflect its functionality. The `config` module still exists, but now re-exports everything from the `metadata` module and issues a standard `DeprecationWarning` when imported.
 - Added a `defaults` module, to consolidate ESD-specific default values. These values include GCP project and secret names, and bucket names from the `paths` module. 
 - Changed module-level constants to follow PEP 8 conventions: all capital letters with underscores separating words. 
+- Changed package design to make some lightly-used dependencies optional. 
+- 
 
 ## [1.0.0] - 2026-10-16
 

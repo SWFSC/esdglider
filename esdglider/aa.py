@@ -93,8 +93,10 @@ def ancillary_echoview(ds: xr.Dataset, aa_paths: dict):
     Nothing
     """
 
-    deployment_name = ds.attrs["deployment_name"]
-    _log.info(f"Creating echoview ancillary data files for {deployment_name}")
+    _log.info(
+        "Creating echoview ancillary data files for %s", 
+        utils.get_deployment_name(ds)
+    )
 
     # Prep - making paths, variables, etc used throughout
     path_echoview = aa_paths["echoviewdir"]

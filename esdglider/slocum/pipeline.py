@@ -6,6 +6,8 @@ import ast
 import logging
 import math
 import os
+import shutil
+import subprocess
 import tempfile
 from datetime import datetime
 from importlib import metadata
@@ -519,10 +521,13 @@ def _clear_sci_ts(glider_paths: dict, mode: str):
             utils.remove_file(f)
 
     # Clear imagery timeseries and echoview files, if they exist
-    imgcsv = paths._get_path_imgcsv(glider_paths["deployment_name"], glider_paths["ancillarydir"])
+    imgcsv = paths.get_helper_path_imgcsv(
+        glider_paths["deployment_name"], 
+        glider_paths["ancillarydir"]
+    )
     utils.remove_file(imgcsv)
     
-    echoview_path = paths._get_path_echoview(glider_paths["ancillarydir"])
+    echoview_path = paths.get_helper_path_echoview(glider_paths["ancillarydir"])
     utils.rmtree(echoview_path)
 
 
@@ -637,7 +642,7 @@ def postproc_attrs(
         file_info = "netCDF files created using"
     ds.attrs["history"] = f"{utils.datetime_now_utc()}: {file_info}: " + "; ".join(
         [
-            f"deployment_name={ds.deployment_name}",
+            f"deployment_name={utils.get_deployment_name(ds)}",
             f"mode={mode}",
             f"esdglider v{metadata.version('esdglider')}",
             f"pyglider v{metadata.version('pyglider')}",
@@ -1794,7 +1799,7 @@ def sync_to_ngdac(
 
     ftp_password = access_secret_version(secret_id, project_id)
 
-    utils.sync_directory_to_ftp(
+    sync_directory_to_ftp(
         local_dir=local_dir,
         remote_dir=remote_dir,
         host=host,
@@ -1808,3 +1813,150 @@ def sync_to_ngdac(
         timeout=30,
         max_retries=3,
     )
+
+
+def sync_directory_to_ftp(
+    local_dir: str | Path,
+    remote_dir: str | Path,
+    host: str,
+    username: str,
+    password: str,
+    *,
+    exclude_patterns: list[str] | str | None = None,
+    log_file: str | Path | None = None,
+    dry_run: bool = False,
+    ssl_force: bool = True,
+    ssl_protect_data: bool = True,
+    parallel: int = 1,
+    timeout: int = 30,
+    max_retries: int = 3,
+) -> None:
+    """
+    Mirror a local directory to a remote FTPS server using LFTP.
+
+    Uploads new and modified files, removes remote files missing locally,
+    preserves excluded patterns, and passes passwords securely through the
+    LFTP_PASSWORD environment variable.
+
+    Parameters
+    ----------
+    local_dir : str | Path
+        The local directory path to synchronize.
+    remote_dir : str | Path
+        The target directory path on the remote FTP server.
+    host : str
+        The FTP server hostname or IP address.
+    username : str
+        The FTP account username.
+    password : str
+        The FTP account password.
+    exclude_patterns : list[str] | str | None, optional
+        Glob patterns to ignore and protect from remote deletion (default is None).
+    log_file : str | Path | None, optional
+        Local file path where LFTP will log operations (default is None).
+    dry_run : bool, optional
+        Whether to simulate the mirror without transferring/deleting files
+        (default is False).
+    ssl_force : bool, optional
+        Whether to enforce FTP over TLS (default is True).
+    ssl_protect_data : bool, optional
+        Whether to encrypt the data channel (default is True).
+    parallel : int, optional
+        Number of parallel file transfers (default is 1).
+    timeout : int, optional
+        Connection and network timeout in seconds (default is 30).
+    max_retries : int, optional
+        Maximum number of connection retry attempts (default is 3).
+
+    Raises
+    ------
+    FileNotFoundError
+        If LFTP is not installed or the local directory does not exist.
+    ValueError
+        If the LFTP command exits with a non-zero exit code.
+    """
+    if not shutil.which("lftp"):
+        _log.error("The 'lftp' binary was not found in PATH.")
+        raise FileNotFoundError("The 'lftp' binary is not installed or not in PATH.")
+
+    local_path = Path(local_dir).expanduser().resolve()
+    if not local_path.is_dir():
+        _log.error("Local directory does not exist: %s", local_path)
+        raise FileNotFoundError(f"Local directory does not exist: {local_path}")
+
+    remote_path = Path(remote_dir).as_posix()
+
+    if exclude_patterns is None:
+        patterns: list[str] = []
+    elif isinstance(exclude_patterns, str):
+        patterns = [exclude_patterns]
+    else:
+        patterns = list(exclude_patterns)
+
+    mirror_opts = [
+        "--reverse",
+        "--delete",
+        # "--only-newer",
+        "--ignore-time",
+        "--verbose",
+    ]
+
+    if dry_run:
+        mirror_opts.append("--dry-run")
+    if parallel > 1:
+        mirror_opts.append(f"--parallel={parallel}")
+    for pat in patterns:
+        mirror_opts.append(f'--exclude-glob "{pat}"')
+
+    if log_file:
+        resolved_log = Path(log_file).expanduser().resolve()
+        resolved_log.parent.mkdir(parents=True, exist_ok=True)
+        mirror_opts.append(f'--log="{resolved_log.as_posix()}"')
+
+    mirror_flags = " ".join(mirror_opts)
+    ssl_force_str = "true" if ssl_force else "false"
+    ssl_data_str = "true" if ssl_protect_data else "false"
+
+    lftp_script = f"""
+    set cmd:fail-exit true
+    set net:max-retries {max_retries}
+    set net:timeout {timeout}
+    set ftp:ssl-force {ssl_force_str}
+    set ftp:ssl-protect-data {ssl_data_str}
+
+    open -u "{username}" --env-password "{host}"
+
+    mirror {mirror_flags} "{local_path.as_posix()}" "{remote_path}"
+
+    quit
+    """
+
+    env = dict(os.environ, LFTP_PASSWORD=password)
+
+    _log.info(
+        "Starting LFTP mirror from %s to %s:%s (dry_run=%s)",
+        local_path,
+        host,
+        remote_path,
+        dry_run,
+    )
+    _log.debug("LFTP script:\n%s", lftp_script)
+
+    retcode = subprocess.run(
+        ["lftp"],
+        input=lftp_script,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    if retcode.returncode != 0:
+        _log.error("Error syncing via LFTP to %s: %s", host, retcode.stderr)
+        raise ValueError(f"Unsuccessful LFTP sync with {host}: {retcode.stderr.strip()}")
+
+    _log.info("Successfully completed LFTP mirror to %s.", host)
+    if retcode.stdout:
+        for line in retcode.stdout.strip().splitlines():
+            _log.info("LFTP: %s", line)
+            
