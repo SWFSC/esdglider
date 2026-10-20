@@ -8,10 +8,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytz
-from PIL import Image
-from PIL.ExifTags import TAGS
 
-from esdglider import defaults, utils
+from esdglider import utils
 
 # from glidertools.optics import sunset_sunrise
 # from timezonefinder import TimezoneFinder
@@ -105,7 +103,7 @@ def get_solocam_dt(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
         .rename(columns=df_columns)
         .sort_values(by="img_file", ignore_index=True)
     )
-    df["time_dt"] = df['time_str'].apply(lambda x: datetime.strptime(x, format))  # noqa: DTZ007
+    df["time_dt"] = df['time_str'].apply(lambda x: datetime.strptime(x, format))
     df["time"] = df["time_dt"].astype("datetime64[s]")
 
     return df[["img_file", "img_dir", "time"]]
@@ -326,6 +324,15 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
         - image format (e.g., JPEG, PNG)
         - image mode (e.g., RGB, or L (grayscale))
     """
+    try:
+        from PIL import Image
+        from PIL.ExifTags import TAGS
+    except ImportError as exc:
+        raise ImportError(
+            "Pillow is required for image metadata extraction. "
+            "Install it with `pip install pillow`."
+        ) from exc
+
     _log.info("Extracting deployment-level metadata from %s", image_path)
     try:
         with Image.open(image_path) as img:            
@@ -377,6 +384,13 @@ def extract_image_metadata(image_path):
         - p: directory name
         - dt: Datetime string, from the tag ID 306 ('Datetime')
     """
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise ImportError(
+            "Pillow is required for image metadata extraction. "
+            "Install it with `pip install pillow`."
+        ) from exc
     
     try:
         with Image.open(image_path) as img:
@@ -404,8 +418,7 @@ def generate_osi_manifest(
     jsonl_filepath: str | Path,
     output_filepath: str | Path,
     target_dirs: set[str] | list[str],
-    deployment_name: str, 
-    bucket_name: str = defaults.BUCKET_IMAGERY_IN,
+    base_uri: str,
     log_interval: int = 10000
 ) -> None:
     """
@@ -413,15 +426,33 @@ def generate_osi_manifest(
     filters by directory, and writes a streaming
     JSON manifest format without holding the full dataset in memory.
 
-    This function generates an OSI-compatible image manifest. 
+    This function generates an image manifest compatible with the
+    Optics SI (OSI) DAG Pipelines. 
+
+    Parameters
+    ----------
+    jsonl_filepath : str | Path
+        Path to the input JSONL file containing image metadata.
+    output_filepath : str | Path
+        Path to the output JSON manifest file.
+    target_dirs : set[str] | list[str]
+        Directories to include in the manifest.
+    base_uri : str
+        Base URI for constructing image URLs.
+    log_interval : int, optional
+        Interval for logging progress, by default 10000.
+
+    Returns
+    -------
+    None
     """
     _log.info(f"Starting processing for file: '{jsonl_filepath}'")
 
     jsonl_filepath = str(jsonl_filepath)
     output_filepath = str(output_filepath)
 
-    yr = utils.get_path_year(deployment_name)
-    base_uri = f"gs://{bucket_name}/{yr}/{deployment_name}/images"
+    # yr = utils.get_path_year(deployment_name)
+    # base_uri = f"gs://{bucket_name}/{yr}/{deployment_name}/images"
     target_dirs_set = set(target_dirs)
     _log.info(f"Target directories to filter: {target_dirs_set}")
 

@@ -170,7 +170,7 @@ def get_path_glider(
     procl3dir = os.path.join(glider_data_out_path, "processed-L3")
     plotdir = os.path.join(glider_data_out_path, "plots", mode)
     ngdacdir = os.path.join(procl1dir, "ngdac", mode)
-    ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
+    ancillarydir = get_helper_path_ancillary(deployment_name, data_out_path)
 
     # Separate, in case in the future they end up in their own directories
     rawdir = procl0dir
@@ -272,8 +272,8 @@ def get_path_aa(
     _check_dir_exists(aa_glider_in_path, "derived acoustic deployment")
 
     # ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
-    ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
-    echoviewdir = _get_path_echoview(ancillarydir)
+    ancillarydir = get_helper_path_ancillary(deployment_name, data_out_path)
+    echoviewdir = get_helper_path_echoview(ancillarydir)
 
     regionspath = os.path.join(echoviewdir, f"{deployment_name}-regions.csv")
     pitchpath = os.path.join(echoviewdir, f"{deployment_name}.pitch.csv")
@@ -363,9 +363,9 @@ def get_path_imagery(
         f"{deployment_name}-image-metadata.jsonl"
     )
 
-    ancillarydir = _get_path_ancillary(deployment_name, data_out_path)
+    ancillarydir = get_helper_path_ancillary(deployment_name, data_out_path)
     # imgcsv = os.path.join(ancillarydir, f"{deployment_name}-imagery-ancillary.csv")
-    imgcsv = _get_path_imgcsv(deployment_name, ancillarydir)
+    imgcsv = get_helper_path_imgcsv(deployment_name, ancillarydir)
 
     return {
         "imagery_in_path": imagery_in_path,
@@ -381,7 +381,7 @@ def get_path_imagery(
     }
 
 
-def _get_path_ancillary(deployment_name, data_out_path):
+def get_helper_path_ancillary(deployment_name, data_out_path):
     """
     Return the path to the ancillary products directory for a given deployment.
 
@@ -402,7 +402,7 @@ def _get_path_ancillary(deployment_name, data_out_path):
     ancillarydir = os.path.join(glider_data_out_path, "ancillary-products")
     return ancillarydir
 
-def _get_path_echoview(dir):
+def get_helper_path_echoview(dir):
     """
     Return the path to the Echoview products directory for a given deployment.
 
@@ -420,7 +420,7 @@ def _get_path_echoview(dir):
     return echoviewdir
 
 
-def _get_path_imgcsv(deployment_name, dir):
+def get_helper_path_imgcsv(deployment_name, dir):
     """
     Return the path to the imagery CSV for a given deployment.
 

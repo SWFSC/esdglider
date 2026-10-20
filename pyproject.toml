@@ -41,8 +41,8 @@ gcp = [
 ]
 # Database ingestion
 db = [
-  "sqlalchemy",
   "pyodbc",
+  "sqlalchemy",
 ]
 # Visualization & plotting
 plots = [
@@ -52,8 +52,8 @@ plots = [
   "matplotlib",
   "pillow",
 ]
-# Solar/almanac utilities
-imagery = [
+# Solar/almanac utilities (standardized to 'optics')
+optics = [
   "skyfield",
   "timezonefinder",
 ]

@@ -3,20 +3,9 @@ import os
 import typing
 from pathlib import Path
 
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import cmocean.cm as cmo
-import matplotlib
-import matplotlib.dates as mdates
-import matplotlib.figure
-import matplotlib.lines as mlines
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-from cartopy.mpl.geoaxes import GeoAxes
-from matplotlib.gridspec import GridSpec
-from matplotlib.patches import Patch
 from numpy.typing import NDArray
 
 from esdglider import utils
@@ -31,7 +20,14 @@ try:
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
     import cmocean.cm as cmo
+    import matplotlib
+    import matplotlib.dates as mdates
+    import matplotlib.figure
+    import matplotlib.lines as mlines
     import matplotlib.pyplot as plt
+    from cartopy.mpl.geoaxes import GeoAxes
+    from matplotlib.gridspec import GridSpec
+    from matplotlib.patches import Patch
 except ImportError as exc:
     raise ImportError(
         "Plotting dependencies are missing. "
@@ -738,7 +734,7 @@ def scatter_plot(
 
     # Prep
     _log.info(f"Making basic scatter plot for {ds_type} timeseries")
-    deployment = ds.deployment_name
+    deployment = ds.attrs["deployment_name"]
     title_str = (
         f"{deployment}: All {lat_var}/{lon_var} points for {ds_type} "
         "timeseries"

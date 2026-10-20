@@ -65,11 +65,14 @@ if __name__ == "__main__":
         logger.debug("Chunk %d directories: %s", chunk_num, chunk)
 
         # Usage:
+        bucket_name = defaults.BUCKET_IMAGERY_IN
+        yr = utils.get_path_year(deployment_name)
+        base_uri = f"gs://{bucket_name}/{yr}/{deployment_name}/images"
         imagery.generate_osi_manifest(
             jsonl_filepath=img_paths["imgmetapath"],
             output_filepath=output_filepath,
             target_dirs=chunk,
-            deployment_name=deployment_name, 
+            base_uri=base_uri, 
             log_interval=100000, 
         )
 
