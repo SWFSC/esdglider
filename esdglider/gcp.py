@@ -115,6 +115,8 @@ def sync_directory_to_gcs(
     """
     Uploads files from a local directory to a GCS bucket using native Python SDK.
     Only uploads files if they do not already exist at the destination prefix.
+    If specified, will sync directories, 
+    i.e., delete files in the GCS bucket that do not exist locally.
     
     Parameters
     ----------

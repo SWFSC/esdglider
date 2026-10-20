@@ -5,7 +5,7 @@ from pathlib import Path
 from dbdreader.decompress import decompress_file, is_compressed
 from esdglider.slocum.core import decompress_compex
 
-from esdglider import gcp, paths, utils
+from esdglider import defaults, gcp, paths, utils
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ compex_exe_path = "" # "/home/user/compexp.exe"
 
 ### Consistent variables
 home = Path.home()
-logs_bucket_name = "swfscesd-glider-logs"
+logs_bucket_name = defaults.BUCKET_LOGS
 logs_path = home / "mnt-gcs" / logs_bucket_name
 # logs_path = home / "tmp-binary"
 log_file_name = f"{deployment_name}-{mode}-decompress-{decompress_tool}.log"
@@ -64,7 +64,7 @@ if __name__ == "__main__":
         mode = mode, 
         home_path = home,
     )
-    gcp.gcs_mount_bucket(paths.data_in_bucket_name, glider_paths["data_in_path"], ro=False)
+    gcp.gcs_mount_bucket(defaults.BUCKET_DATA_IN, glider_paths["data_in_path"], ro=False)
 
 
     binary_dir = glider_paths["binarydir"]

@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from esdglider import gcp, imagery, paths, utils
+from esdglider import defaults, gcp, imagery, paths, utils
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ if __name__ == "__main__":
         deployment_name = deployment_name, 
         home_path=home, 
     )
-    gcp.gcs_mount_bucket(paths.imagery_meta_bucket_name, img_paths["metadir"], ro=False)
+    gcp.gcs_mount_bucket(defaults.BUCKET_IMAGERY_META, img_paths["metadir"], ro=False)
 
     if not use_tmp_dir:
         output_path_pre = Path(img_paths["metadir"]) / f"osi-manifests-{dir_chunk_size:03d}dirs"
@@ -77,7 +77,7 @@ if __name__ == "__main__":
             print(
                 "Command to run to copy from temp directory to bucket, if necessary:\n"
                 f"gcloud storage cp -r {output_path_pre} "
-                f"gs://{paths.imagery_meta_bucket_name}/"
+                f"gs://{defaults.BUCKET_IMAGERY_META}/"
                 f"{utils.get_path_year(deployment_name)}/{deployment_name}/"
             )
         

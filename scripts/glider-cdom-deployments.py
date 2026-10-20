@@ -1,10 +1,10 @@
 import logging
 
 import gspread
-import sqlalchemy
 import pandas as pd
+import sqlalchemy
 
-import esdglider.metadata as metadata
+from esdglider import metadata
 
 """
 CDOM

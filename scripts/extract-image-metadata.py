@@ -9,7 +9,7 @@ from subprocess import run
 
 from tqdm import tqdm
 
-from esdglider import gcp, imagery, paths, utils
+from esdglider import defaults, gcp, imagery, paths, utils
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,8 @@ run_pipeline_bool = True
 home = Path.home()
 mnt_path = home / "mnt-gcs"
 
-imagery_in_bucket_name = "swfscesd-glider-imagery-data-in"
-imagery_meta_bucket_name = "swfscesd-glider-imagery-metadata"
+imagery_in_bucket_name = defaults.BUCKET_IMAGERY_IN
+imagery_meta_bucket_name = defaults.BUCKET_IMAGERY_META
 
 imagery_in_path = mnt_path / imagery_in_bucket_name
 imagery_meta_path = mnt_path / imagery_meta_bucket_name
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     img_paths = paths.get_path_imagery(
         deployment_name=deployment_name, 
         imagery_in_path=imagery_in_path, 
-        imagery_meta_path=imagery_meta_bucket_name, 
+        imagery_meta_path=imagery_meta_path, 
         data_out_path="", 
     )
     
