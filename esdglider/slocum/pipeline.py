@@ -28,20 +28,20 @@ _log = logging.getLogger(__name__)
 
 """
 Glider values for ESD slocum pipeline
-Note that depth bins will be defined by `np.arange(0, depth_max, i)`,
-where i is in element of bin_size
+Note that depth bins will be defined by `np.arange(0, DEPTH_MAX, i)`,
+where i is in element of BIN_SIZES
 
-bin_size: list
-    a list of the gridded depth bin sizes
-depth_max: float
+BIN_SIZES: list (integer)
+    a list of the (integer) gridded depth bin sizes 
+DEPTH_MAX: float
     The maximum value to use when making depth bins
-maxgap_esd : float
+MAXGAP_SECONDS: float
     The maximum allowed gap (in seconds) for ESD processing.
 """
 
-bin_size = [1, 5]
-depth_max = 1200.1
-maxgap_esd = 60
+BIN_SIZES = [1, 5]
+DEPTH_MAX = 1200.1
+MAXGAP_SECONDS = 60
 
 
 def generate_timeseries(
@@ -57,7 +57,7 @@ def generate_timeseries(
     run_qc: bool = False,
     file_info: str | None = None,
     binary_search: str | None = None,
-    maxgap: int | None = None,
+    maxgap: int = MAXGAP_SECONDS,
     prof_args: dict | None = None,
 ) -> dict:
     """
@@ -100,9 +100,9 @@ def generate_timeseries(
     binary_search : str | None, optional
         The search pattern for binary files.
         If None (default), will default to all uncompressed binary files
-    maxgap : int | None, optional
+    maxgap : int, optional
         The maximum allowed gap (in seconds) for interpolation. 
-        If None (default), will use the module's maxgap_esd value.
+        By default, will use the module's MAXGAP_SECONDS value.
     prof_args : dict | None, optional
         named optional arguments, passed to esdglider.profiles.findProfiles
 
@@ -149,10 +149,6 @@ def generate_timeseries(
     else:
         _log.error("mode must be either 'rt' or 'delayed'")
         raise ValueError("mode must be either 'rt' or 'delayed'")
-
-    # Set defaults
-    if maxgap is None:
-        maxgap = maxgap_esd
 
     if prof_args is None:
         prof_args = {}
@@ -240,7 +236,7 @@ def generate_timeseries(
         tsraw.to_netcdf(
             outname_tsraw, 
             mode="w", 
-            encoding={'time': core.time_encoding}, 
+            encoding={'time': core.TIME_ENCODING}, 
         )
 
         # Save profile summary, get profile index attributes
@@ -310,7 +306,7 @@ def generate_timeseries(
             fnamesuffix=f"-{mode}-eng",
             time_base="m_depth",
             profile_filt_time=None,  # type: ignore
-            maxgap=maxgap_esd,
+            maxgap=maxgap,
         )
 
         _log.info(f"Post-processing engineering timeseries: {outname_tseng}")
@@ -329,7 +325,7 @@ def generate_timeseries(
             outname_tseng, 
             deployment, 
             mode='w',
-            encoding={'time': core.time_encoding},
+            encoding={'time': core.TIME_ENCODING},
         )
         del tseng
 
@@ -363,7 +359,7 @@ def generate_timeseries(
                     tsdir,
                     deploymentyaml,
                     fnamesuffix=f"-{mode}-sci",
-                    maxgap=maxgap_esd,
+                    maxgap=maxgap,
                 )
             drop_vars = None
 
@@ -383,7 +379,7 @@ def generate_timeseries(
                 fnamesuffix=f"-{mode}-sci",
                 time_base=time_base_var,
                 profile_filt_time=None,  # type: ignore
-                maxgap=maxgap_esd,
+                maxgap=maxgap,
             )
 
             # Drop rows in science where pressure is nan, because:
@@ -411,7 +407,7 @@ def generate_timeseries(
             outname_tssci, 
             deployment, 
             mode='w',
-            encoding={'time': core.time_encoding},
+            encoding={'time': core.TIME_ENCODING},
         )        
         del tssci
 
@@ -964,6 +960,8 @@ def postproc_tsl1_sci(
 def generate_gridded(
     glider_paths: dict,
     write_gridded: bool = True,
+    bin_sizes: list[int] = BIN_SIZES, 
+    depth_bin_max: float = DEPTH_MAX,
 ) -> dict:
     """
     Generate gridded netCDF files for the slocum glider deployment.
@@ -974,6 +972,10 @@ def generate_gridded(
         A dictionary containing paths relevant to the glider deployment.
     write_gridded : bool, optional
         Whether to write gridded netCDF files, by default True.
+    bin_sizes : list[int], optional
+        List of bin sizes for gridding, by default BIN_SIZES.
+    depth_bin_max : float, optional
+        Maximum depth for gridding, by default DEPTH_MAX.
     
     Returns
     -------
@@ -981,15 +983,16 @@ def generate_gridded(
         A dictionary containing the paths to the gridded netCDF files.
     """
     
-    if bin_size != [1, 5]:
+    if BIN_SIZES != [1, 5]:
         _log.warning(
             "The bin_size variable is not the default [1, 5]. "
             "The output paths may be different than expected."
         )
     
-    keys_to_extract = [f"gr{i}path" for i in bin_size]
-    keys_to_return = [f"outname_gr{i}m" for i in bin_size]
+    keys_to_extract = [f"gr{i}path" for i in BIN_SIZES]
+    keys_to_return = [f"outname_gr{i}m" for i in BIN_SIZES]
     outname_tssci = glider_paths["tsscipath"]
+    outnames = {}
 
     if write_gridded:
         if not os.path.isfile(outname_tssci):
@@ -1001,53 +1004,25 @@ def generate_gridded(
             utils.remove_file(glider_paths[ke])
 
         _log.info("Gridding science data using given 'depth' var")
-        outnames = _run_pyglider_gridding(outname_tssci, glider_paths)
+        # outnames = _run_pyglider_gridding(outname_tssci, glider_paths)
+
+        for i in bin_sizes:
+            _log.info("Generating %sm gridded data", i)
+            outname_gr = pgncprocess.make_gridfiles(
+                outname_tssci,
+                glider_paths["griddir"],
+                glider_paths["deploymentyaml"],
+                depth_bins=np.arange(0, depth_bin_max, i),
+                fnamesuffix=f"-{glider_paths['mode']}-{i}m",
+            )
+            outnames = outnames | {f"outname_gr{i}m": outname_gr}
         _log.debug("gridded outnames %s", "; ".join(outnames))
 
     else:
         _log.info("Not writing gridded nc")
-        outnames = {}
         for kr, ke in zip(keys_to_return, keys_to_extract):
             outnames |= {kr: glider_paths[ke]}
         
-    return outnames
-
-
-def _run_pyglider_gridding(inname, glider_paths) -> dict:
-    """
-    A consistent way of creating gridded datafiles for ESD. 
-    Note that this function uses the module-level variables: 
-    bin_size, depth_max. 
-
-    Parameters
-    ----------
-    inname : str or Path
-        netcdf file to break into profiles.
-        Passed directly to inname argument of pyglider.ncprocess.make_gridfiles
-    glider_paths : dict
-        A dictionary of file/directory paths for various processing steps.
-        Intended to be the output of get_path_glider()
-        See this function for the expected key/value pairs
-
-    Returns
-    -------
-    dict
-        A dictionary of the generated gridded datasets, 
-        with keys like "outname_gr1m" and "outname_gr5m"
-    """
-
-    outnames = {}
-
-    for i in bin_size:
-        _log.info("Generating %sm gridded data", i)
-        outname_gr = pgncprocess.make_gridfiles(
-            inname,
-            glider_paths["griddir"],
-            glider_paths["deploymentyaml"],
-            depth_bins=np.arange(0, depth_max, i),
-            fnamesuffix=f"-{glider_paths['mode']}-{i}m",
-        )
-        outnames = outnames | {f"outname_gr{i}m": outname_gr}
     return outnames
 
 
@@ -1161,6 +1136,7 @@ def correct_flbbcd_raw_sci(
     chlor_cal: tuple | None = None,
     cdom_cal: tuple | None = None,
     bb_cal: tuple | None = None,
+    maxgap: float = MAXGAP_SECONDS,
 ) -> tuple:
     """
     Calculate and save corrected ecopuck (FLBBCD) output values
@@ -1254,7 +1230,7 @@ def correct_flbbcd_raw_sci(
             
             # Interpolate raw values to sci timestamps, and do screens
             val_interp = np.interp(t, _t, val, left=np.nan, right=np.nan)
-            tg_ind = pgutils.find_gaps(_t, t, maxgap_esd)
+            tg_ind = pgutils.find_gaps(_t, t, maxgap)
             val_interp[tg_ind] = np.nan
             val_interp = pgutils._zero_screen(val_interp)
 
@@ -1272,8 +1248,8 @@ def correct_flbbcd_raw_sci(
     ds_sci_cor = utils.drop_bogus(ds_sci_cor)
 
     _log.info("Writing corrected raw and science timeseries to netcdf")
-    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.time_encoding})
-    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.time_encoding})
+    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.TIME_ENCODING})
+    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.TIME_ENCODING})
 
     _log.info("Done FLBBCD correction")
     return outname_tsraw, outname_tssci
@@ -1305,12 +1281,12 @@ def correct_cdom_raw_sci(glider_paths: dict):
     _log.info("Starting CDOM correction for raw dataset")
     ds_raw_cor = utils.correct_cdom(ds_raw)
     _log.info("Writing corrected raw timeseries to netcdf")
-    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.time_encoding})
+    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.TIME_ENCODING})
 
     _log.info("Starting CDOM correction for science dataset")
     ds_sci_cor = utils.correct_cdom(ds_sci)
     _log.info("Writing corrected science timeseries to netcdf")
-    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.time_encoding})
+    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.TIME_ENCODING})
 
     _log.info("Done CDOM correction")
     return outname_tsraw, outname_tssci
@@ -1512,7 +1488,7 @@ def complete_profile_correction(
     # Save raw dataset
     tsraw.to_netcdf(
         glider_paths["tsrawpath"], 
-        encoding={'time': core.time_encoding}
+        encoding={'time': core.TIME_ENCODING}
     )
     _log.info("Wrote raw timeseries to %s", glider_paths["tsrawpath"])
 
@@ -1521,7 +1497,7 @@ def complete_profile_correction(
         tseng = prof.join_profiles(tseng, prof_summ, prof_index_attrs)
         tseng.to_netcdf(
             glider_paths["tsengpath"], 
-            encoding={'time': core.time_encoding}
+            encoding={'time': core.TIME_ENCODING}
         )
         _log.info("Wrote eng timeseries with new profiles to %s", glider_paths["tsengpath"])
 
@@ -1529,7 +1505,7 @@ def complete_profile_correction(
         tssci = prof.join_profiles(tssci, prof_summ, prof_index_attrs)
         tssci.to_netcdf(
             glider_paths["tsscipath"], 
-            encoding={'time': core.time_encoding}
+            encoding={'time': core.TIME_ENCODING}
         )
         _log.info("Wrote science timeseries with new profiles to %s", glider_paths["tsscipath"])
 

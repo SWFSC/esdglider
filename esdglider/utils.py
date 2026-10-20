@@ -4,9 +4,9 @@ import logging
 import os
 import shutil
 import statistics
+import subprocess
 from datetime import date, datetime, timezone
 from pathlib import Path
-import subprocess
 
 import gsw
 import numpy as np

@@ -10,7 +10,7 @@ import pandas as pd
 from PIL import Image
 from PIL.ExifTags import TAGS
 
-from esdglider import utils
+from esdglider import defaults, utils
 
 # from glidertools.optics import sunset_sunrise
 # from timezonefinder import TimezoneFinder
@@ -404,10 +404,12 @@ def generate_osi_manifest(
     output_filepath: str | Path,
     target_dirs: set[str] | list[str],
     deployment_name: str, 
+    bucket_name: str = defaults.BUCKET_IMAGERY_IN,
     log_interval: int = 10000
 ) -> None:
     """
-    Streams a JSONL file line-by-line, filters by directory, and writes a streaming
+    Streams a JSONL file line-by-line, 
+    filters by directory, and writes a streaming
     JSON manifest format without holding the full dataset in memory.
 
     This function generates an OSI-compatible image manifest. 
@@ -418,7 +420,7 @@ def generate_osi_manifest(
     output_filepath = str(output_filepath)
 
     yr = utils.get_path_year(deployment_name)
-    base_uri = f"gs://swfscesd-glider-imagery-data-in/{yr}/{deployment_name}/images"
+    base_uri = f"gs://{bucket_name}/{yr}/{deployment_name}/images"
     target_dirs_set = set(target_dirs)
     _log.info(f"Target directories to filter: {target_dirs_set}")
 

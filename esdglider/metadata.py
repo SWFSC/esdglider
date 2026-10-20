@@ -7,12 +7,8 @@ import yaml
 from google.cloud import storage
 from sqlalchemy.engine import Connectable
 
-# from esdglider.acoustics import get_path_acoustics_deployment
+from esdglider import defaults, paths, utils
 from esdglider.gcp import check_gcs_directory_exists, check_gcs_file_exists
-from esdglider.paths import get_path_glider, get_path_imagery
-
-# from esdglider.imagery import get_path_imagery_deployment
-from esdglider.utils import dataframe_col_reorder, get_glider_name, get_path_year
 
 _log = logging.getLogger(__name__)
 
@@ -120,7 +116,7 @@ def make_deployment_yaml(
         con: Connectable, 
         deployment_name: str,
         outdir: str,
-        schema: str = "dbo", 
+        schema: str = defaults.DB_SCHEMA, 
 ) -> dict:
     """
     Make the first draft deployment yaml. 
@@ -135,7 +131,7 @@ def make_deployment_yaml(
     outdir : str
         path to which to write the output yaml file. The full output file
         path will be `os.path.join(outdir, f"{deployment_name}.yml")`
-    schema : string, default "dbo"
+    schema : string, default defaults.DB_SCHEMA
         Database schema, passed to 'schema' arg of `pd.read_sql_table`
 
     Returns
@@ -227,7 +223,7 @@ def make_deployment_yaml(
     metadata["os_version"] = str(db_depl["Software_Version"].values[0])
     metadata["project"] = project
     metadata["sea_name"] = sea_name
-    metadata["glider_name"] = get_glider_name(deployment_name)
+    metadata["glider_name"] = utils.get_glider_name(deployment_name)
     if not any(db_devices["Device_Type"] == "Teledyne Glider Slocum G3"):
         raise ValueError(
             "No device 'Teledyne Glider Slocum G3'. Please add to the build",
@@ -337,13 +333,13 @@ def make_website_yaml(
         deployment_name = d["Deployment_Name"]
         _log.info("Working on deployment %s", deployment_name)
         # project = d["Project"]
-        year = get_path_year(deployment_name)
+        year = utils.get_path_year(deployment_name)
         mode = "delayed"
         path_pre = os.path.join(year, deployment_name).replace("\\", "/")
         # paths_acoustics = get_path_acoustics_deployment(path_pre, deployment_name, mode)
-        glider_paths = get_path_glider(deployment_name, mode)
+        glider_paths = paths.get_path_glider(deployment_name, mode)
         # aa_paths = get_path_aa(deployment_name)
-        img_paths = get_path_imagery(deployment_name)
+        img_paths = paths.get_path_imagery(deployment_name)
         _log.debug("url/path prefix %s", path_pre)
         
         ### Check for File and Directories
@@ -401,7 +397,10 @@ def make_website_yaml(
     return yaml_data
 
 
-def get_deployment_table(con: Connectable, schema: str = "dbo"):
+def get_deployment_table(
+    con: Connectable, 
+    schema: str = defaults.DB_SCHEMA
+):
     """
     Generate a deployment summary table. 
     This table is intended to be published on the Fleet Status sheet
@@ -410,7 +409,7 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
     ----------
     con : sqlalchemy Connectable
         Database connection, passed to 'con' arg of `pd.read_sql_table`
-    schema : string, default "dbo"
+    schema : string, default defaults.DB_SCHEMA
         Database schema, passed to 'schema' arg of `pd.read_sql_table`
 
     Returns
@@ -597,7 +596,7 @@ def get_deployment_table(con: Connectable, schema: str = "dbo"):
     # Join with serial num columns, and make sensors
     device_summ = pd.merge(device_summ, device_summ_serial, on="Glider_Deployment_ID", how="left")
     leading_cols = ["Glider_Deployment_ID", "Batteries", "CTD", "Ecopuck", "Optode", "PAR"]
-    device_summ = dataframe_col_reorder(device_summ, leading_cols)
+    device_summ = utils.dataframe_col_reorder(device_summ, leading_cols)
     device_summ.loc[:, "Sensors"] = device_summ.apply(
         lambda row: _concatenate_sensors(row),
         axis=1,

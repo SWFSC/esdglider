@@ -3,20 +3,9 @@ import os
 from importlib import resources
 from pathlib import Path
 
-from esdglider import utils
+from esdglider import defaults, utils
 
 _log = logging.getLogger(__name__)
-
-
-"""
-Production bucket names
-"""
-logs_bucket_name = "swfscesd-glider-logs"
-data_in_bucket_name = "swfscesd-glider-deployments-data-in"
-data_out_bucket_name = "swfscesd-glider-deployments-data-out"
-imagery_in_bucket_name = "swfscesd-glider-imagery-data-in"
-imagery_meta_bucket_name = "swfscesd-glider-imagery-metadata"
-aa_in_bucket_name = "swfscesd-glider-active-acoustics-data-in"
 
 
 def _check_dir_exists(dir_path, description):
@@ -131,10 +120,10 @@ def get_path_glider(
         If not provided, defaults to '<home_path>/glider-processing/deployment-configs'.
     data_in_path : str
         The (local) path to the 'data in' folder, with the binary files
-        If not provided, defaults to '<home_path>/mnt-gcs/<data_in_bucket_name>'.
+        If not provided, defaults to '<home_path>/mnt-gcs/defaults.BUCKET_DATA_IN'.
     data_out_path : str
         The (local) path to the 'data out' folder
-        If not provided, defaults to '<home_path>/mnt-gcs/<data_out_bucket_name>'.
+        If not provided, defaults to '<home_path>/mnt-gcs/defaults.BUCKET_DATA_OUT'.
         
     Returns
     -------
@@ -255,10 +244,10 @@ def get_path_aa(
         The (local) path to the home directory; defaults to '/home/user'.
     aa_in_path : str
         The (local) path to the folder with the 'data in' (i.e., raw) acoustic data
-        If not provided, defaults to '<home_path>/mnt-gcs/<aa_in_bucket_name>'.
+        If not provided, defaults to '<home_path>/mnt-gcs/defaults.BUCKET_AA_IN'.
     data_out_path : str
         The (local) path to the glider 'data out' folder
-        If not provided, defaults to '<home_path>/mnt-gcs/<data_out_bucket_name>'.
+        If not provided, defaults to '<home_path>/mnt-gcs/defaults.BUCKET_DATA_OUT'.
 
     Returns
     -------
@@ -328,11 +317,13 @@ def get_path_imagery(
         The name of the deployment, e.g. amlr08-20220513
     imagery_in_path : str
         The (local) path to the folder with the 'data in' (i.e., raw) imagery
+        If not provided, defaults to '<home_path>/mnt-gcs/defaults.BUCKET_IMAGERY_IN'.
     imagery_meta_path : str
-        The (local) path to the folder with the imagery metadata files
+        The (local) path to the folder with the imagery metadata files. 
+        If not provided, defaults to '<home_path>/mnt-gcs/defaults.BUCKET_IMAGERY_META'.
     data_out_path : str
         The (local) path to the glider 'data out' folder
-        If not provided, defaults to '<home_path>/mnt-gcs/<data_out_bucket_name>'.
+        If not provided, defaults to '<home_path>/mnt-gcs/defaults.BUCKET_DATA_OUT'.
 
     Returns
     -------
@@ -468,35 +459,42 @@ def _resolve_path(p: str | Path, home: Path, type: str):
         The resolved path
     """
 
-    mnt_path = Path("mnt-gcs")
-
-    if type == "data-in":
-        end_path = mnt_path / data_in_bucket_name
-    elif type == "data-out":
-        end_path = mnt_path / data_out_bucket_name
-    elif type == "cache":
-        end_path = Path("standard-glider-files") / "Cache"
-    # elif type == "config":
-    #     end_path = Path("glider-processing") / "deployment-configs"
-    elif type == "aa-in":
-        end_path = mnt_path / aa_in_bucket_name
-    elif type == "img-in":
-        end_path = mnt_path / imagery_in_bucket_name
-    elif type == "img-meta":
-        end_path = mnt_path / imagery_meta_bucket_name
-    else:
-        raise ValueError("Unknown path type: %s", type)
-
     if p == "":
+        # No path provided, use default locations based on the type
+        mnt_path = Path("mnt-gcs")
+
+        if type == "data-in":
+            end_path = mnt_path / defaults.BUCKET_DATA_IN
+        elif type == "data-out":
+            end_path = mnt_path / defaults.BUCKET_DATA_OUT
+        elif type == "cache":
+            end_path = Path("standard-glider-files") / "Cache"
+        # elif type == "config":
+        #     end_path = Path("glider-processing") / "deployment-configs"
+        elif type == "aa-in":
+            end_path = mnt_path / defaults.BUCKET_AA_IN
+        elif type == "img-in":
+            end_path = mnt_path / defaults.BUCKET_IMAGERY_IN
+        elif type == "img-meta":
+            end_path = mnt_path / defaults.BUCKET_IMAGERY_META
+        else:
+            raise ValueError("Unknown path type: %s", type)
+
         p = str(home / end_path)
+
     else:
+        # Else, use the user-specified path 
         p = str(p)
+
     _log.info("Using %s path: %s", type, p)
 
     return p
 
 
-def get_file_info(file: Path) -> tuple[str, str]:
+def get_file_info(
+    file: Path, 
+    file_repo: str = defaults.PROCESSING_REPO_URL, 
+) -> tuple[str, str]:
     """
     Return the file information and log file name for a given file.
 
@@ -504,13 +502,16 @@ def get_file_info(file: Path) -> tuple[str, str]:
     ----------
     file : Path
         The path to the file
+    file_repo : str, optional
+        The URL of the repository where the file is located, 
+        by default defaults.PROCESSING_REPO_URL
 
     Returns
     -------
     tuple[str, str]
         A tuple containing the file information URL and the log file name
     """
-    file_info = f"https://github.com/SWFSC/glider-processing: {file.name}"
+    file_info = f"{file_repo}: {file.name}"
     log_file_name = f"{file.stem}.log"
 
     return file_info, log_file_name
