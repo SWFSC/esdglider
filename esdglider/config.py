@@ -17,4 +17,4 @@ warnings.warn(
 )
 
 # Re-export all public functions, classes, and variables from metadata.py
-from esdglider.metadata import *  # noqa: F401, F403
+from esdglider.metadata import * # type: ignore  # noqa: I001
