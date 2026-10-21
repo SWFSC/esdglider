@@ -4,7 +4,7 @@ All notable changes to the esdglider package will be documented in this file. Se
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unrealeased]
+## [1.1.0] - 2026-10-20
 
 - Changed data file 'slocum-netcdf-variables-sci.yml' so that cdom and backscatter_700 variables have a `valid_min: 0`. 
 - Added functions `sync_to_ngdac` and `sync_directory_to_ftp` to module `slocum.pipeline`, to automate and standardize sending profile NetCDF files to the DAC. 
@@ -13,8 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed the name of `config` module to `metadata`, to better reflect its functionality. The `config` module still exists, but now re-exports everything from the `metadata` module and issues a standard `DeprecationWarning` when imported.
 - Added a `defaults` module, to consolidate ESD-specific default values. These values include GCP project and secret names, and bucket names from the `paths` module. 
 - Changed module-level constants to follow PEP 8 conventions: all capital letters with underscores separating words. 
-- Changed package design to make some lightly-used dependencies optional. 
-- 
+- Changed package design to make some specific, heavy dependencies optional.  
 
 ## [1.0.0] - 2026-10-16
 
