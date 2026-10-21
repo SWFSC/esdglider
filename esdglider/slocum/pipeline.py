@@ -1902,6 +1902,7 @@ def sync_directory_to_ftp(
     ]
 
     if dry_run:
+        _log.info("Running LFTP mirror in dry-run mode")
         mirror_opts.append("--dry-run")
     if parallel > 1:
         mirror_opts.append(f"--parallel={parallel}")
@@ -1916,6 +1917,7 @@ def sync_directory_to_ftp(
     mirror_flags = " ".join(mirror_opts)
     ssl_force_str = "true" if ssl_force else "false"
     ssl_data_str = "true" if ssl_protect_data else "false"
+    _log.debug("mirror flags:\n%s", mirror_flags)
 
     lftp_script = f"""
     set cmd:fail-exit true

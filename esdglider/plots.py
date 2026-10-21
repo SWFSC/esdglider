@@ -67,8 +67,8 @@ var: str
 
 
 # def return_var(x):
-#     """Simply return a variable"""
-#     return x
+#      """Simply return a variable"""
+#      return x
 
 
 def _adj_var(ds, var):
@@ -86,22 +86,22 @@ def _adj_var_label(ds, var):
     """Get the formatted label for the plot"""
     u = ds[var].attrs["units"]
     # if var not in list(units.keys()):
-    #     u2 = "missing"
+    #      u2 = "missing"
     # else:
-    #     u2 = units[var]
+    #      u2 = units[var]
     # print(f"var: {var}; ds: {u}; dict: {u2}")
 
     # if var in adjustments_labels.keys():
-    #     return f"{adjustments_labels[var]}({var} [{u}])"
+    #      return f"{adjustments_labels[var]}({var} [{u}])"
     # else:
-    #     return f"{var} [{u}]"
+    #      return f"{var} [{u}]"
 
     if var not in ADJUSTMENTS:
         return f"{var} [{u}]"
     elif ADJUSTMENTS[var] == np.log10:
         return "$log_{10}$" + f"({var} [{u}])"
     # elif adjustments[var] == return_var:
-    #     return f"{var} [{u}]"
+    #      return f"{var} [{u}]"
     else:
         raise ValueError(f"var {var}: not an expected adjustments value")
 
@@ -124,9 +124,9 @@ ADJUSTMENTS = {
 # """ Dictionary of label adjustments; corresponds to adjustments dict
 # """
 # adjustments_labels = {
-#     "chlorophyll": "$log_{10}$",
-#     "cdom": "$log_{10}$",
-#     "backscatter_700": "$log_{10}$",
+#      "chlorophyll": "$log_{10}$",
+#      "cdom": "$log_{10}$",
+#      "backscatter_700": "$log_{10}$",
 # }
 
 """
@@ -274,7 +274,7 @@ def esd_all_plots(
     scatter_plot(
         ds_raw, 
         "raw_gps", 
-        base_path,         
+        base_path,          
         lon_var="m_gps_lon",
         lat_var="m_gps_lat",
     )
@@ -547,64 +547,64 @@ def eng_timeseries_loop(
 
 
 # def sci_ts_loop(
-#     ds: xr.Dataset,
-#     base_path: str | None = None,
-#     show: bool = False,
-#     max_workers=None,
+#      ds: xr.Dataset,
+#      base_path: str | None = None,
+#      show: bool = False,
+#      max_workers=None,
 # ):
-#     """
-#     A loop/wrapper function to use a timeseries science dataset to make plots
-#     of all sci_vars kyes.
-#     Specifically, for each sci_vars key present in the dataset,
-#     create a ts plot
+#      """
+#      A loop/wrapper function to use a timeseries science dataset to make plots
+#      of all sci_vars kyes.
+#      Specifically, for each sci_vars key present in the dataset,
+#      create a ts plot
 
-#     Arguments let the user specify if these plots should be saved, and/or shown
+#      Arguments let the user specify if these plots should be saved, and/or shown
 
-#     Parameters
-#     ----------
-#     ds : xarray Dataset
-#         Timeseries science dataset
-#     base_path : str
-#         The 'base' of the plot path. If None, then the plot will not be saved
-#         Intended to be the 'plotdir' output of glider.get_path_glider
-#     show : bool
-#         Boolean indicating if the plots should be shown before being closed
-#     max_workers : int | None
-#         Number of workers with which to make the plots.
-#         If 1, a normal for loop is used.
-#         If None, all cores are used, as determiend by os.cpu_count()
-#         Else, max_workers is the number of cores used
+#      Parameters
+#      ----------
+#      ds : xarray Dataset
+#          Timeseries science dataset
+#      base_path : str
+#          The 'base' of the plot path. If None, then the plot will not be saved
+#          Intended to be the 'plotdir' output of glider.get_path_glider
+#      show : bool
+#          Boolean indicating if the plots should be shown before being closed
+#      max_workers : int | None
+#          Number of workers with which to make the plots.
+#          If 1, a normal for loop is used.
+#          If None, all cores are used, as determiend by os.cpu_count()
+#          Else, max_workers is the number of cores used
 
-#     Returns
-#     -------
-#         Nothing
-#     """
+#      Returns
+#      -------
+#          Nothing
+#      """
 
-#     _log.info("LOOP: making ts plots")
-#     # If doing the loop, remove past plots
-#     if base_path is not None:
-#         utils.rmtree(os.path.join(base_path, ts_path))
+#      _log.info("LOOP: making ts plots")
+#      # If doing the loop, remove past plots
+#      if base_path is not None:
+#          utils.rmtree(os.path.join(base_path, ts_path))
 
-#     vars_toloop = sci_vars
-#     if max_workers == 1:
-#         _log.info("Plotting with one worker, not in parallel")
-#         for var in vars_toloop:
-#             _log.debug(f"var {var}")
-#             ts_plot(var, ds, base_path=base_path, show=show)
-#     else:
-#         if max_workers is None:
-#             max_workers = max(1, os.cpu_count()) # type: ignore
-#         _log.info("Starting parallel plotting with %s workers", max_workers)
-#         task_function = functools.partial(
-#             ts_plot,
-#             ds=ds,
-#             base_path=base_path,
-#             show=show,
-#         )
-#         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-#             executor.map(task_function, vars_toloop)
+#      vars_toloop = sci_vars
+#      if max_workers == 1:
+#          _log.info("Plotting with one worker, not in parallel")
+#          for var in vars_toloop:
+#              _log.debug(f"var {var}")
+#              ts_plot(var, ds, base_path=base_path, show=show)
+#      else:
+#          if max_workers is None:
+#              max_workers = max(1, os.cpu_count()) # type: ignore
+#          _log.info("Starting parallel plotting with %s workers", max_workers)
+#          task_function = functools.partial(
+#              ts_plot,
+#              ds=ds,
+#              base_path=base_path,
+#              show=show,
+#          )
+#          with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+#              executor.map(task_function, vars_toloop)
 
-#     _log.info("Completed ts plots")
+#      _log.info("Completed ts plots")
 
 
 def sci_surface_map_loop(
@@ -642,6 +642,11 @@ def sci_surface_map_loop(
     -------
         Nothing
     """
+
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if not np.any(valid):
+        _log.warning("No valid coordinates in ds. Skipping surface maps.")
+        return
 
     _log.info("LOOP: making surface maps")
     # If doing the loop, remove past plots
@@ -740,6 +745,12 @@ def scatter_plot(
         "timeseries"
     )
 
+    valid = ~(np.isnan(ds[lon_var]) | np.isnan(ds[lat_var]))
+    if not np.any(valid):
+        _log.warning(f"No valid {lat_var}/{lon_var} points in ds for {ds_type}. Skipping scatter plot.")
+        return None
+    ds = ds.where(valid, drop=True)
+
     # Plot
     fig, ax = plt.subplots(figsize=(11, 8.5))
 
@@ -765,7 +776,7 @@ def scatter_plot(
 
     # ax.tick_params(axis="x", rotation=30)
     # plt.setp(
-    #     ax.get_xticklabels(), rotation=30, ha="right", rotation_mode="anchor"
+    #      ax.get_xticklabels(), rotation=30, ha="right", rotation_mode="anchor"
     # )
 
     # Labels and title
@@ -825,6 +836,13 @@ def scatter_drop_plot(
     # Prep
     _log.info(f"Making drop scatter plot for {ds_type} timeseries")
     deployment_name = utils.get_deployment_name(ds)
+
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if not np.any(valid):
+        _log.warning(f"No valid coordinates in ds for {ds_type}. Skipping drop scatter plot.")
+        return None
+    ds = ds.where(valid, drop=True)
+    todrop = todrop[valid.values]
 
     color_kept = "#0072B2"  # Blue
     color_dropped = "#D55E00"  # Orange
@@ -923,7 +941,7 @@ def sci_timesection_plot(
     # t = ax.text(0, -0.18, caption, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes, wrap=True)
 
     # for label in ax.get_xticklabels(which='major'):
-    #     label.set(rotation=15, horizontalalignment='center')
+    #      label.set(rotation=15, horizontalalignment='center')
     ax.xaxis.set_major_formatter(mdates.DateFormatter(XAXIS_FORMAT))
     fig.autofmt_xdate()
     # fig_cnt += 1
@@ -980,6 +998,12 @@ def sci_spatialsection_plot(
     _log.info(f"Making spatialsection plot for variable {var}")
     deployment_name = utils.get_deployment_name(ds)
     ds = ds.dropna(dim="depth", how="all")
+
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if np.count_nonzero(valid) < 2:
+        _log.warning("Not enough valid coordinates in ds for spatial section. Skipping plot.")
+        return
+    ds = ds.where(valid, drop=True)
 
     fig, axs = plt.subplots(1, 2, figsize=(11, 8.5), sharey=True)
     std = np.nanstd(ds[var])
@@ -1110,6 +1134,12 @@ def sci_spatialgrid_plot(
     deployment_name = utils.get_deployment_name(ds)
     ds = ds.dropna(dim="depth", how="all")
 
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if np.count_nonzero(valid) < 2:
+        _log.warning("Not enough valid coordinates in ds for spatial grid. Skipping plot.")
+        return
+    ds = ds.where(valid, drop=True)
+
     fig = plt.figure(figsize=(11, 8.5))
 
     ax0 = fig.add_subplot(gs[0:3, 0:3])
@@ -1219,23 +1249,23 @@ def eng_plots_to_make(ds: xr.Dataset) -> dict:
         missing = [v for v in req_energy if v not in ds]
         _log.warning("Skipping 'diveEnergy' plot: missing variable(s) %s in dataset", missing)
 
-    # 3. diveDepth
-    req_divedepth = ["c_dive_target_depth", "m_depth"]
-    if all(v in ds for v in req_divedepth):
-        try:
-            da_c_tdepth = ds["c_dive_target_depth"].dropna(dim="time")
-            da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
-            plots_to_make["diveDepth"] = {
-                "X": da_c_tdepth,
-                "Y": [da_c_mdepth],
-                "C": ["C0"],
-                "cb": None,
-            }
-        except Exception as e:  # noqa: BLE001
-            _log.warning("Skipping 'diveDepth' plot due to processing error: %s", e)
-    else:
-        missing = [v for v in req_divedepth if v not in ds]
-        _log.warning("Skipping 'diveDepth' plot: missing variable(s) %s in dataset", missing)
+    # # 3. diveDepth
+    # req_divedepth = ["c_dive_target_depth", "m_depth"]
+    # if all(v in ds for v in req_divedepth):
+    #     try:
+    #         da_c_tdepth = ds["c_dive_target_depth"].dropna(dim="time")
+    #         da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
+    #         plots_to_make["diveDepth"] = {
+    #             "X": da_c_tdepth,
+    #             "Y": [da_c_mdepth],
+    #             "C": ["C0"],
+    #             "cb": None,
+    #         }
+    #     except Exception as e: 
+    #         _log.warning("Skipping 'diveDepth' plot due to processing error: %s", e)
+    # else:
+    #     missing = [v for v in req_divedepth if v not in ds]
+    #     _log.warning("Skipping 'diveDepth' plot: missing variable(s) %s in dataset", missing)
 
     # 4. diveDepthComp
     req_comp = ["depth_ctd", "m_depth"]
@@ -1783,6 +1813,12 @@ def sci_surface_map(
     if var not in list(ds.data_vars) and var != "profile_index":
         _log.info("Variable name %s not present in ds. Skipping plot", var)
         return
+
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if not np.any(valid):
+        _log.warning("No valid coordinates in ds for surface map. Skipping plot.")
+        return
+    ds = ds.where(valid, drop=True)
 
     _log.info(f"Making surface map for variable {var}")
     deployment_name = utils.get_deployment_name(ds)

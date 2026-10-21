@@ -25,8 +25,8 @@ mounts = ["amlr-gliders-deployments-dev", "swfscesd-glider-deployments-data-out"
 for i in mounts:
     gcp.gcs_mount_bucket(i, str(home / f"mnt-gcs/{i}/"), ro=True)
 
-deployment_name = "calanus-20241019"; year = "2024"; project="ECOSWIM"
-# deployment_name = "amlr08-20220513"; year = "2022"; project="SANDIEGO"
+# deployment_name = "calanus-20241019"; year = "2024"; project="ECOSWIM"
+deployment_name = "amlr08-20220513"; year = "2022"; project="SANDIEGO"
 # deployment_name = "stenella-20250414"
 
 # NOTE: OLD DIR expects old dir structure (.../data/processed-L1/...)

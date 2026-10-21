@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added a `defaults` module, to consolidate ESD-specific default values. These values include GCP project and secret names, and bucket names from the `paths` module. 
 - Changed module-level constants to follow PEP 8 conventions: all capital letters with underscores separating words. 
 - Changed package design to make some lightly-used dependencies optional. 
-- 
+- Changed relevant functions in `plots` module to subset the dataset to finite coordinates (i.e., no nan latitude and longitude values) before plotting
 
 ## [1.0.0] - 2026-10-16
 
