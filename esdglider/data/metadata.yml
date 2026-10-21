@@ -3,7 +3,7 @@
 # Other attrs created during processing, eg history, id, processing_level, title
 
 Metadata_Conventions: Unidata Dataset Discovery v1.0, COARDS, CF-1.8
-acknowledgement: 'This work was supported by funding from NOAA.'
+acknowledgement: 'This work was supported by funding from NOAA Fisheries, SWFSC.'
 comment: ' '
 contributor_name: 'Christian Reiss, George Watters, Jennifer Walsh, Anthony Cossio, Tegan Murray, Samuel Woodman'
 contributor_role: 'Principal Investigator, Principal Investigator, Glider Pilot, Glider Pilot, Glider Pilot, Data Manager'
