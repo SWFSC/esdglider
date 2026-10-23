@@ -621,6 +621,7 @@ def postproc_attrs(
         "date_issued", 
         "time_coverage_end", 
         "time_coverage_start", 
+        "start_date", 
     ]
     for attr in attrs_z:
         _log.debug("Checking attribute %s for Z suffix", attr)

@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed several suspect/fail ranges in `qartod-config.yml` to be appropriate for Antarctic waters and be consistent with deployment valid mins/maxes.
 - Added a TS plot color-coded by depth to `esd_all_plots`. 
 - Added function `get_unique_file_sizes` to `utils`, for checking the size of nested files (e.g., images) in a given directory. 
+- Changed attribute post-processing to ensure that the `start_date` attribute is always written consistently (e.g., "2022-05-13T18:56Z") 
 
 ## [1.0.0] - 2026-10-16
 
