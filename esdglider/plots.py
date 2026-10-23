@@ -3,20 +3,9 @@ import os
 import typing
 from pathlib import Path
 
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import cmocean.cm as cmo
-import matplotlib
-import matplotlib.dates as mdates
-import matplotlib.figure
-import matplotlib.lines as mlines
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-from cartopy.mpl.geoaxes import GeoAxes
-from matplotlib.gridspec import GridSpec
-from matplotlib.patches import Patch
 from numpy.typing import NDArray
 
 from esdglider import utils
@@ -27,28 +16,47 @@ try:
 except ImportError:
     HAS_PIL = False
 
+try:
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    import cmocean.cm as cmo
+    import matplotlib
+    import matplotlib.dates as mdates
+    import matplotlib.figure
+    import matplotlib.lines as mlines
+    import matplotlib.pyplot as plt
+    from cartopy.mpl.geoaxes import GeoAxes
+    from matplotlib.gridspec import GridSpec
+    from matplotlib.patches import Patch
+except ImportError as exc:
+    raise ImportError(
+        "Plotting dependencies are missing. "
+        "Install them with `pip install 'esdglider[plots]'`."
+    ) from exc
+
 _log = logging.getLogger(__name__)
 
-"""Constants used throughout plotting functions
-"""
-label_size = 11
-title_size = 13
-xaxis_format = "%d %b %H:%M" #"%m/%d %H:%M"
+"""Constants used throughout plotting functions."""
+LABEL_SIZE = 11
+TITLE_SIZE = 13
+XAXIS_FORMAT = "%d %b %H:%M" #"%m/%d %H:%M"
 
 # Folder names
-scatter_path = "pointMaps"
-tvt_path = "thisVsThat-eng"
-spatialsection_path = "spatialSections-sci"
-spatialgrid_path = "spatialGrids-sci"
-timesection_path = "timeSections-sci"
-timesection_gt_path = "timeSections-sci-gt"
-timeseries_eng_path = "timeSeries-eng"
-timeseries_sci_path = "timeSeries-sci"
-qc_path = "QC-sci"
-ts_path = "TS-sci"
-surfacemap_sci_path = "maps-sci"
+SCATTER_PATH = "pointMaps"
+TVT_PATH = "thisVsThat-eng"
+SPATIALSECTION_PATH = "spatialSections-sci"
+SPATIALGRID_PATH = "spatialGrids-sci"
+TIMESECTION_PATH = "timeSections-sci"
+TIMESECTION_GT_PATH = "timeSections-sci-gt"
+TIMESERIES_ENG_PATH = "timeSeries-eng"
+TIMESERIES_SCI_PATH = "timeSeries-sci"
+QC_PATH = "QC-sci"
+TS_PATH = "TS-sci"
+SURFACEMAP_SCI_PATH = "maps-sci"
+MEANPROFILE_PATH = "meanProfiles-sci"
 
-"""Helper functions and dictionaries for plot formats/display
+"""
+Helper functions and dictionaries for plot formats/display
 
 Parameters
 ----------
@@ -60,49 +68,51 @@ var: str
 
 
 # def return_var(x):
-#     """Simply return a variable"""
-#     return x
+#      """Simply return a variable"""
+#      return x
 
 
-def adj_var(ds, var):
+def _adj_var(ds, var):
     """Get the adjusted var values for the plot. Eg, take the log"""
-    if var not in adjustments:
+    if var not in ADJUSTMENTS:
         return ds[var]
-    if adjustments[var] == np.log10:
-        return adjustments[var](ds[var])
+    if ADJUSTMENTS[var] == np.log10:
+        return ADJUSTMENTS[var](ds[var])
     else:
         _log.warning("Unknown adjustments option")
         return ds[var]
 
 
-def adj_var_label(ds, var):
+def _adj_var_label(ds, var):
     """Get the formatted label for the plot"""
     u = ds[var].attrs["units"]
     # if var not in list(units.keys()):
-    #     u2 = "missing"
+    #      u2 = "missing"
     # else:
-    #     u2 = units[var]
+    #      u2 = units[var]
     # print(f"var: {var}; ds: {u}; dict: {u2}")
 
     # if var in adjustments_labels.keys():
-    #     return f"{adjustments_labels[var]}({var} [{u}])"
+    #      return f"{adjustments_labels[var]}({var} [{u}])"
     # else:
-    #     return f"{var} [{u}]"
+    #      return f"{var} [{u}]"
 
-    if var not in adjustments:
+    if var not in ADJUSTMENTS:
         return f"{var} [{u}]"
-    elif adjustments[var] == np.log10:
+    elif ADJUSTMENTS[var] == np.log10:
         return "$log_{10}$" + f"({var} [{u}])"
     # elif adjustments[var] == return_var:
-    #     return f"{var} [{u}]"
+    #      return f"{var} [{u}]"
     else:
         raise ValueError(f"var {var}: not an expected adjustments value")
 
 
-"""Dictionary of adjustments to make to variables to plot.
-Functionally, this is variables that should be plotted with log10
 """
-adjustments = {
+Dictionary of adjustments to make to variables to plot.
+Functionally, this is variables that should be plotted with log10
+
+"""
+ADJUSTMENTS = {
     # "chlorophyll": np.log10,
     # "cdom": np.log10,
     # "backscatter_700": np.log10,
@@ -115,39 +125,9 @@ adjustments = {
 # """ Dictionary of label adjustments; corresponds to adjustments dict
 # """
 # adjustments_labels = {
-#     "chlorophyll": "$log_{10}$",
-#     "cdom": "$log_{10}$",
-#     "backscatter_700": "$log_{10}$",
-# }
-
-# """ Dictionary of variable units
-# SMW note: This should likely be changed to use units from variable attributes
-# """
-# units = {
-#     "latitude": "deg",
-#     "longitude": "deg",
-#     "depth": "m",
-#     "heading": "deg",
-#     "pitch": "rad",
-#     "roll": "rad",
-#     "waypoint_latitude": "deg",
-#     "waypoint_longitude": "deg",
-#     "conductivity": "S$\\bullet m^{-1}$",
-#     "temperature": "°C",
-#     "pressure": "dbar",
-#     "chlorophyll": "µg•$L^{-l}$",
-#     "cdom": "ppb",
-#     "backscatter_700": "$m^{-1}$",
-#     "oxygen_concentration": "µmol•$L^{-1}$",
-#     "depth_ctd": "m",
-#     "distance_over_ground": "km",
-#     "salinity": "PSU",
-#     "potential_density": "kg $\\bullet m^{-3}$",
-#     "density": "kg $\\bullet m^{-3}$",
-#     "potential_temperature": "°C",
-#     "profile_index": "1",
-#     "profile_direction": "1",
-#     "total_num_inflections": "1",
+#      "chlorophyll": "$log_{10}$",
+#      "cdom": "$log_{10}$",
+#      "backscatter_700": "$log_{10}$",
 # }
 
 """
@@ -161,7 +141,23 @@ described in https://tos.org/oceanography/assets/docs/29-3_thyng.pdf,
 or that most closely matched variables colors in the R package oce
 (eg, https://dankelley.github.io/oce/reference/oceColorsOxygen.html)
 """
-sci_vars = {
+SCI_VARS = [
+    "temperature",
+    "potential_temperature",
+    "conductivity",
+    "salinity",
+    "density",
+    "potential_density",
+    "oxygen_concentration",
+    "oxygen_saturation",
+    "chlorophyll",
+    "cdom",
+    "backscatter_700",
+    "par",
+    "profile_index",
+]
+
+SCI_COLORS = {
     "temperature": cmo.thermal,  # type: ignore
     "potential_temperature": cmo.thermal,  # type: ignore
     "conductivity": cmo.tempo,  # type: ignore
@@ -175,13 +171,14 @@ sci_vars = {
     "backscatter_700": cmo.delta,  # colormaps["terrain"], # type: ignore
     "par": cmo.turbid,  # type: ignore
     "profile_index": cmo.gray,  # type: ignore
+    "depth": cmo.deep,  # type: ignore
 }
 
 """
 List of engineering variables to plot
 Plotting functions loop through this list to plot engineering vars
 """
-eng_vars = [
+ENG_VARS = [
     "heading",
     "pitch",
     "roll",
@@ -280,7 +277,7 @@ def esd_all_plots(
     # ds_sci_qc = xr.load_dataset(ds_paths["outname_tssciqc"])
     ds_gr5m = xr.load_dataset(ds_paths["outname_gr5m"])
 
-    deployment_name = ds_sci.attrs['deployment_name']
+    deployment_name = utils.get_deployment_name(ds_sci)
 
     # Delete old plots
     if base_path is not None:
@@ -295,7 +292,7 @@ def esd_all_plots(
     scatter_plot(
         ds_raw, 
         "raw_gps", 
-        base_path,         
+        base_path,          
         lon_var="m_gps_lon",
         lat_var="m_gps_lat",
     )
@@ -309,11 +306,10 @@ def esd_all_plots(
     )
     eng_timeseries_loop(ds_eng, base_path)
     eng_tvt_loop(ds_raw, base_path)
-    # sci_ts_loop(ds_sci, base_path)
 
     # QC PLOTS
     if base_path is not None:
-        plot_qc_path = os.path.join(base_path, qc_path)
+        plot_qc_path = os.path.join(base_path, QC_PATH)
         _ = plot_qc_summary(
             ds_sci,
             plot_file=os.path.join(
@@ -357,11 +353,12 @@ def esd_all_plots(
     if base_path is not None and combine_pdf:
         _log.info("Combining output plots into a single data review PDF")
         target_folders = [
-            surfacemap_sci_path, 
-            timesection_path, 
-            timesection_gt_path, 
-            qc_path, 
-            ts_path, 
+            SURFACEMAP_SCI_PATH, 
+            TIMESERIES_SCI_PATH, 
+            TIMESECTION_GT_PATH, 
+            QC_PATH, 
+            TS_PATH, 
+            MEANPROFILE_PATH, 
         ]
 
         png_files = sorted(
@@ -405,16 +402,17 @@ def sci_gridded_loop(
     _log.info("LOOP: making gridded science plots")
     # If doing the loop, remove past plots
     if base_path is not None:
-        utils.rmtree(os.path.join(base_path, timesection_path))
-        utils.rmtree(os.path.join(base_path, spatialsection_path))
-        utils.rmtree(os.path.join(base_path, spatialgrid_path))
+        utils.rmtree(os.path.join(base_path, TIMESECTION_PATH))
+        utils.rmtree(os.path.join(base_path, SPATIALSECTION_PATH))
+        utils.rmtree(os.path.join(base_path, SPATIALGRID_PATH))
 
-    vars_toloop = sci_vars
+    vars_toloop = SCI_VARS
     for var in vars_toloop:
         _log.debug(f"var {var}")
         sci_timesection_plot(var, ds, base_path=base_path, show=show)
         sci_spatialsection_plot(var, ds, base_path=base_path, show=show)
         sci_spatialgrid_plot(var, ds, base_path=base_path, show=show)
+        sci_mean_profile_plot(var, ds, base_path=base_path, show=show)
 
     _log.info("Completed gridded science plots")
 
@@ -449,7 +447,7 @@ def eng_tvt_loop(
     _log.info("LOOP: making engineering tvt plots")
     # If doing the loop, remove past plots
     if base_path is not None:
-        utils.rmtree(os.path.join(base_path, tvt_path))
+        utils.rmtree(os.path.join(base_path, TVT_PATH))
 
     eng_dict = eng_plots_to_make(ds)
     vars_toloop = eng_dict.keys()
@@ -500,12 +498,11 @@ def sci_timeseries_loop(
     _log.info("LOOP: making science timeseries plots")
     # If doing the loop, remove past plots
     if base_path is not None:
-        utils.rmtree(os.path.join(base_path, timeseries_sci_path))
-        utils.rmtree(os.path.join(base_path, timesection_gt_path))
-        utils.rmtree(os.path.join(base_path, ts_path))
+        utils.rmtree(os.path.join(base_path, TIMESERIES_SCI_PATH))
+        utils.rmtree(os.path.join(base_path, TIMESECTION_GT_PATH))
+        utils.rmtree(os.path.join(base_path, TS_PATH))
 
-    vars_toloop = sci_vars
-    for var in vars_toloop:
+    for var in SCI_VARS:
         _log.debug(f"var {var}")
         sci_timeseries_plot(
             var,
@@ -522,6 +519,8 @@ def sci_timeseries_loop(
             show=show,
         )
         ts_plot(var, ds, base_path=base_path, show=show)
+    
+    ts_plot("depth", ds, base_path=base_path, show=show)
 
     _log.info("Completed science timeseries plots")
 
@@ -557,75 +556,14 @@ def eng_timeseries_loop(
     _log.info("LOOP: making engineering timeseries plots")
     # If doing the loop, remove past plots
     if base_path is not None:
-        utils.rmtree(os.path.join(base_path, timeseries_eng_path))
+        utils.rmtree(os.path.join(base_path, TIMESERIES_ENG_PATH))
 
-    vars_toloop = eng_vars
+    vars_toloop = ENG_VARS
     for var in vars_toloop:
         _log.debug(f"var {var}")
         eng_timeseries_plot(var, ds, base_path=base_path, show=show)
 
     _log.info("Completed engineering timeseries plots")
-
-
-# def sci_ts_loop(
-#     ds: xr.Dataset,
-#     base_path: str | None = None,
-#     show: bool = False,
-#     max_workers=None,
-# ):
-#     """
-#     A loop/wrapper function to use a timeseries science dataset to make plots
-#     of all sci_vars kyes.
-#     Specifically, for each sci_vars key present in the dataset,
-#     create a ts plot
-
-#     Arguments let the user specify if these plots should be saved, and/or shown
-
-#     Parameters
-#     ----------
-#     ds : xarray Dataset
-#         Timeseries science dataset
-#     base_path : str
-#         The 'base' of the plot path. If None, then the plot will not be saved
-#         Intended to be the 'plotdir' output of glider.get_path_glider
-#     show : bool
-#         Boolean indicating if the plots should be shown before being closed
-#     max_workers : int | None
-#         Number of workers with which to make the plots.
-#         If 1, a normal for loop is used.
-#         If None, all cores are used, as determiend by os.cpu_count()
-#         Else, max_workers is the number of cores used
-
-#     Returns
-#     -------
-#         Nothing
-#     """
-
-#     _log.info("LOOP: making ts plots")
-#     # If doing the loop, remove past plots
-#     if base_path is not None:
-#         utils.rmtree(os.path.join(base_path, ts_path))
-
-#     vars_toloop = sci_vars
-#     if max_workers == 1:
-#         _log.info("Plotting with one worker, not in parallel")
-#         for var in vars_toloop:
-#             _log.debug(f"var {var}")
-#             ts_plot(var, ds, base_path=base_path, show=show)
-#     else:
-#         if max_workers is None:
-#             max_workers = max(1, os.cpu_count()) # type: ignore
-#         _log.info("Starting parallel plotting with %s workers", max_workers)
-#         task_function = functools.partial(
-#             ts_plot,
-#             ds=ds,
-#             base_path=base_path,
-#             show=show,
-#         )
-#         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-#             executor.map(task_function, vars_toloop)
-
-#     _log.info("Completed ts plots")
 
 
 def sci_surface_map_loop(
@@ -664,12 +602,17 @@ def sci_surface_map_loop(
         Nothing
     """
 
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if not np.any(valid):
+        _log.warning("No valid coordinates in ds. Skipping surface maps.")
+        return
+
     _log.info("LOOP: making surface maps")
     # If doing the loop, remove past plots
     if base_path is not None:
-        utils.rmtree(os.path.join(base_path, surfacemap_sci_path))
+        utils.rmtree(os.path.join(base_path, SURFACEMAP_SCI_PATH))
 
-    vars_toloop = sci_vars
+    vars_toloop = SCI_VARS
     for var in vars_toloop:
         _log.debug(f"var {var}")
         sci_surface_map(
@@ -709,12 +652,6 @@ def save_plot(fig: matplotlib.figure.Figure, fname: str | Path):
 
     _log.debug(f"Saving {fname}")
     fig.savefig(fname)
-
-
-import matplotlib.dates as mdates
-import matplotlib.pyplot as plt
-import os
-import xarray as xr
 
 
 def scatter_plot(
@@ -761,11 +698,17 @@ def scatter_plot(
 
     # Prep
     _log.info(f"Making basic scatter plot for {ds_type} timeseries")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     title_str = (
-        f"{deployment}: All {lat_var}/{lon_var} points for {ds_type} "
+        f"{deployment_name}: All {lat_var}/{lon_var} points for {ds_type} "
         "timeseries"
     )
+
+    valid = ~(np.isnan(ds[lon_var]) | np.isnan(ds[lat_var]))
+    if not np.any(valid):
+        _log.warning(f"No valid {lat_var}/{lon_var} points in ds for {ds_type}. Skipping scatter plot.")
+        return None
+    ds = ds.where(valid, drop=True)
 
     # Plot
     fig, ax = plt.subplots(figsize=(11, 8.5))
@@ -784,21 +727,21 @@ def scatter_plot(
         # Dynamic, compact date ticks and formatting for the colorbar
         locator = mdates.AutoDateLocator()
         # formatter = mdates.ConciseDateFormatter(locator)
-        formatter = mdates.DateFormatter(xaxis_format)
+        formatter = mdates.DateFormatter(XAXIS_FORMAT)
         cbar = fig.colorbar(sc, ax=ax, ticks=locator, format=formatter)
-        cbar.set_label("Time", size=label_size)
+        cbar.set_label("Time", size=LABEL_SIZE)
     else:
         ax.scatter(ds[lon_var], ds[lat_var], s=3)
 
     # ax.tick_params(axis="x", rotation=30)
     # plt.setp(
-    #     ax.get_xticklabels(), rotation=30, ha="right", rotation_mode="anchor"
+    #      ax.get_xticklabels(), rotation=30, ha="right", rotation_mode="anchor"
     # )
 
     # Labels and title
-    ax.set_xlabel("Longitude", size=label_size)
-    ax.set_ylabel("Latitude", size=label_size)
-    ax.set_title(title_str, loc="left", wrap=True, pad=16, size=title_size)
+    ax.set_xlabel("Longitude", size=LABEL_SIZE)
+    ax.set_ylabel("Latitude", size=LABEL_SIZE)
+    ax.set_title(title_str, loc="left", wrap=True, pad=16, size=TITLE_SIZE)
     for label in ax.get_xticklabels(which="major"):
         label.set(rotation=15, horizontalalignment="center")
     ax.grid(True)
@@ -806,8 +749,8 @@ def scatter_plot(
     if base_path is not None:
         fname = os.path.join(
             base_path,
-            scatter_path,
-            f"{deployment}_{ds_type}_scatter.png",
+            SCATTER_PATH,
+            f"{deployment_name}_{ds_type}_scatter.png",
         )
         save_plot(fig, fname)
 
@@ -851,7 +794,14 @@ def scatter_drop_plot(
 
     # Prep
     _log.info(f"Making drop scatter plot for {ds_type} timeseries")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
+
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if not np.any(valid):
+        _log.warning(f"No valid coordinates in ds for {ds_type}. Skipping drop scatter plot.")
+        return None
+    ds = ds.where(valid, drop=True)
+    todrop = todrop[valid.values]
 
     color_kept = "#0072B2"  # Blue
     color_dropped = "#D55E00"  # Orange
@@ -863,11 +813,11 @@ def scatter_drop_plot(
     ax.scatter(ds.longitude, ds.latitude, c=colors, s=3)
 
     # Labels and title
-    ax.set_xlabel("Longitude", size=label_size)
-    ax.set_ylabel("Latitude", size=label_size)
+    ax.set_xlabel("Longitude", size=LABEL_SIZE)
+    ax.set_ylabel("Latitude", size=LABEL_SIZE)
     ax.set_title(
-        f"{deployment}: Dropped points for {ds_type} timeseries",
-        size=title_size,
+        f"{deployment_name}: Dropped points for {ds_type} timeseries",
+        size=TITLE_SIZE,
     )
     ax.grid(True)
 
@@ -881,8 +831,8 @@ def scatter_drop_plot(
     if base_path is not None:
         fname = os.path.join(
             base_path,
-            scatter_path,
-            f"{deployment}_{ds_type}_dropped.png",
+            SCATTER_PATH,
+            f"{deployment_name}_{ds_type}_dropped.png",
         )
         save_plot(fig, fname)
 
@@ -929,7 +879,7 @@ def sci_timesection_plot(
         return
 
     _log.info(f"Making timesection plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     # glider = utils.split_deployment(deployment)[0]
     ds = ds.dropna(dim="depth", how="all")
 
@@ -937,29 +887,29 @@ def sci_timesection_plot(
     std = np.nanstd(ds[var])
     mean = np.nanmean(ds[var])
 
-    p1 = ax.pcolormesh(ds.time, ds.depth, adj_var(ds, var), cmap=sci_vars[var])
-    fig.colorbar(p1).set_label(label=adj_var_label(ds, var), size=label_size)
+    p1 = ax.pcolormesh(ds.time, ds.depth, _adj_var(ds, var), cmap=SCI_COLORS[var])
+    fig.colorbar(p1).set_label(label=_adj_var_label(ds, var), size=LABEL_SIZE)
     ax.invert_yaxis()
 
     ax.set_title(
-        f"Deployment {deployment} - time section\n std={std:0.2f} mean={mean:0.2f}",
+        f"Deployment {deployment_name} - time section\n std={std:0.2f} mean={mean:0.2f}",
         size=14,
     )  # use set_title so that title is centered over the plot
-    ax.set_xlabel("Time", size=label_size)
-    ax.set_ylabel("Depth [m]", size=label_size)
+    ax.set_xlabel("Time", size=LABEL_SIZE)
+    ax.set_ylabel("Depth [m]", size=LABEL_SIZE)
     # t = ax.text(0, -0.18, caption, horizontalalignment='left', verticalalignment='center', transform=ax.transAxes, wrap=True)
 
     # for label in ax.get_xticklabels(which='major'):
-    #     label.set(rotation=15, horizontalalignment='center')
-    ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
+    #      label.set(rotation=15, horizontalalignment='center')
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(XAXIS_FORMAT))
     fig.autofmt_xdate()
     # fig_cnt += 1
 
     if base_path is not None:
         fname = os.path.join(
             base_path,
-            timesection_path,
-            f"{deployment}_{var}_timesection.png",
+            TIMESECTION_PATH,
+            f"{deployment_name}_{var}_timesection.png",
         )
         save_plot(fig, fname)
 
@@ -1005,8 +955,14 @@ def sci_spatialsection_plot(
         return
 
     _log.info(f"Making spatialsection plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     ds = ds.dropna(dim="depth", how="all")
+
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if np.count_nonzero(valid) < 2:
+        _log.warning("Not enough valid coordinates in ds for spatial section. Skipping plot.")
+        return
+    ds = ds.where(valid, drop=True)
 
     fig, axs = plt.subplots(1, 2, figsize=(11, 8.5), sharey=True)
     std = np.nanstd(ds[var])
@@ -1017,12 +973,12 @@ def sci_spatialsection_plot(
     axs[0].pcolormesh(
         ds0.longitude,
         ds0.depth,
-        adj_var(ds0, var),
-        cmap=sci_vars[var],
+        _adj_var(ds0, var),
+        cmap=SCI_COLORS[var],
     )
     axs[0].invert_yaxis()
-    axs[0].set_xlabel("Longitude [Deg]", size=label_size)
-    axs[0].set_ylabel("Depth [m]", size=label_size)
+    axs[0].set_xlabel("Longitude [Deg]", size=LABEL_SIZE)
+    axs[0].set_ylabel("Depth [m]", size=LABEL_SIZE)
     axs[0].text(
         0.05,
         0.95,
@@ -1040,13 +996,13 @@ def sci_spatialsection_plot(
     p2 = axs[1].pcolormesh(
         ds1.latitude,
         ds1.depth,
-        adj_var(ds1, var),
-        cmap=sci_vars[var],
+        _adj_var(ds1, var),
+        cmap=SCI_COLORS[var],
     )
-    fig.colorbar(p2).set_label(label=adj_var_label(ds, var), size=label_size)
+    fig.colorbar(p2).set_label(label=_adj_var_label(ds, var), size=LABEL_SIZE)
     # axs[1].invert_yaxis()
 
-    axs[1].set_xlabel("Latitude [Deg]", size=label_size)
+    axs[1].set_xlabel("Latitude [Deg]", size=LABEL_SIZE)
     axs[1].text(
         0.05,
         0.95,
@@ -1061,8 +1017,8 @@ def sci_spatialsection_plot(
     # axs[1].set_ylabel(f"Depth [m]", size=14)
 
     fig.suptitle(
-        f"Deployment {deployment} - spatial section\n std={std:0.2f} mean={mean:0.2f}",
-        size=title_size,
+        f"Deployment {deployment_name} - spatial section\n std={std:0.2f} mean={mean:0.2f}",
+        size=TITLE_SIZE,
     )
 
     # t = fig.text(0, -0.18, caption, horizontalalignment='left', verticalalignment='center', transform=axs[0].transAxes, wrap=True)
@@ -1076,8 +1032,8 @@ def sci_spatialsection_plot(
     if base_path is not None:
         fname = os.path.join(
             base_path,
-            spatialsection_path,
-            f"{deployment}_{var}_spatialSections.png",
+            SPATIALSECTION_PATH,
+            f"{deployment_name}_{var}_spatialSections.png",
         )
         save_plot(fig, fname)
 
@@ -1134,8 +1090,14 @@ def sci_spatialgrid_plot(
         wspace=0.05,
         hspace=0.05,
     )
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     ds = ds.dropna(dim="depth", how="all")
+
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if np.count_nonzero(valid) < 2:
+        _log.warning("Not enough valid coordinates in ds for spatial grid. Skipping plot.")
+        return
+    ds = ds.where(valid, drop=True)
 
     fig = plt.figure(figsize=(11, 8.5))
 
@@ -1152,47 +1114,46 @@ def sci_spatialgrid_plot(
         ds.longitude,
         ds.latitude,
         c=ds[var].sel(depth=0, method="nearest"),
-        cmap=sci_vars[var],
+        cmap=SCI_COLORS[var],
     )
 
-    ax0.set_ylabel("Latitude [Deg]", size=label_size)
+    ax0.set_ylabel("Latitude [Deg]", size=LABEL_SIZE)
     ax0.set_xticks([])
     ax0.set_xticklabels([])
 
-    # ax0.scatter(sci_ds.longitude, sci_ds.latitude, c=sci_ds[var], cmap=sci_vars[var])
     ds1 = ds.sortby("longitude")
     ax1.pcolormesh(
-        ds1.longitude, ds1.depth, adj_var(ds1, var), cmap=sci_vars[var]
+        ds1.longitude, ds1.depth, _adj_var(ds1, var), cmap=SCI_COLORS[var]
     )
-    ax1.set_ylabel("Depth [m]", size=label_size)
-    ax1.set_xlabel("Longitude [Deg]", size=label_size)
+    ax1.set_ylabel("Depth [m]", size=LABEL_SIZE)
+    ax1.set_xlabel("Longitude [Deg]", size=LABEL_SIZE)
     ax1.invert_yaxis()
 
     ds2 = ds.sortby("latitude")
     ax2.pcolormesh(
         ds2.depth,
         ds2.latitude,
-        np.transpose(adj_var(ds2, var).values),
-        cmap=sci_vars[var],
+        np.transpose(_adj_var(ds2, var).values),
+        cmap=SCI_COLORS[var],
         # shading="gouraud",
     )
-    ax2.set_xlabel("Depth [m]", size=label_size)
+    ax2.set_xlabel("Depth [m]", size=LABEL_SIZE)
     ax2.set_yticks([])
     ax2.set_yticklabels([])
 
     fig.colorbar(p, location="top", ax=[ax2, ax0]).set_label(
-        label=adj_var_label(ds, var),
-        size=label_size,
+        label=_adj_var_label(ds, var),
+        size=LABEL_SIZE,
     )
     fig.suptitle(
-        f"Deployment {deployment} - spatial grid", size=title_size
+        f"Deployment {deployment_name} - spatial grid", size=TITLE_SIZE
     )
 
     if base_path is not None:
         fname = os.path.join(
             base_path,
-            spatialgrid_path,
-            f"{deployment}_{var}_spatialGrids.png",
+            SPATIALGRID_PATH,
+            f"{deployment_name}_{var}_spatialGrids.png",
         )
         save_plot(fig, fname)
 
@@ -1246,23 +1207,23 @@ def eng_plots_to_make(ds: xr.Dataset) -> dict:
         missing = [v for v in req_energy if v not in ds]
         _log.warning("Skipping 'diveEnergy' plot: missing variable(s) %s in dataset", missing)
 
-    # 3. diveDepth
-    req_divedepth = ["c_dive_target_depth", "m_depth"]
-    if all(v in ds for v in req_divedepth):
-        try:
-            da_c_tdepth = ds["c_dive_target_depth"].dropna(dim="time")
-            da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
-            plots_to_make["diveDepth"] = {
-                "X": da_c_tdepth,
-                "Y": [da_c_mdepth],
-                "C": ["C0"],
-                "cb": None,
-            }
-        except Exception as e:  # noqa: BLE001
-            _log.warning("Skipping 'diveDepth' plot due to processing error: %s", e)
-    else:
-        missing = [v for v in req_divedepth if v not in ds]
-        _log.warning("Skipping 'diveDepth' plot: missing variable(s) %s in dataset", missing)
+    # # 3. diveDepth
+    # req_divedepth = ["c_dive_target_depth", "m_depth"]
+    # if all(v in ds for v in req_divedepth):
+    #     try:
+    #         da_c_tdepth = ds["c_dive_target_depth"].dropna(dim="time")
+    #         da_c_mdepth = ds["m_depth"].interp(time=da_c_tdepth.time)
+    #         plots_to_make["diveDepth"] = {
+    #             "X": da_c_tdepth,
+    #             "Y": [da_c_mdepth],
+    #             "C": ["C0"],
+    #             "cb": None,
+    #         }
+    #     except Exception as e: 
+    #         _log.warning("Skipping 'diveDepth' plot due to processing error: %s", e)
+    # else:
+    #     missing = [v for v in req_divedepth if v not in ds]
+    #     _log.warning("Skipping 'diveDepth' plot: missing variable(s) %s in dataset", missing)
 
     # 4. diveDepthComp
     req_comp = ["depth_ctd", "m_depth"]
@@ -1389,7 +1350,7 @@ def eng_tvt_plot(
         _log.warning("Incomplete data for key '%s' in eng_dict. Skipping tvt plot.", key)
         return None
 
-    deployment = getattr(ds, "deployment_name", ds.attrs.get("deployment_name", "unknown"))
+    deployment_name = utils.get_deployment_name(ds)
     _log.info("Making tvt plot for dictionary key %s", key)
 
     fig, ax = plt.subplots(figsize=(8.5, 8.5))
@@ -1412,8 +1373,8 @@ def eng_tvt_plot(
     x_name = getattr(plot_info["X"], "name", "X")
     y_name = getattr(plot_info["Y"][0], "name", "Y")
 
-    ax.set_xlabel(x_name, size=label_size)
-    ax.set_ylabel(y_name, size=label_size)
+    ax.set_xlabel(x_name, size=LABEL_SIZE)
+    ax.set_ylabel(y_name, size=LABEL_SIZE)
 
     if len(plot_info["C"]) > 1:
         if key.lower() == "diveenergy":
@@ -1424,11 +1385,11 @@ def eng_tvt_plot(
     if x_name == "time":
         fig.autofmt_xdate()
 
-    ax.set_title(f"Deployment {deployment}", size=title_size)
+    ax.set_title(f"Deployment {deployment_name}", size=TITLE_SIZE)
 
     if base_path is not None:
         fname = os.path.join(
-            base_path, tvt_path, f"{deployment}_{key}_engtvt.png"
+            base_path, TVT_PATH, f"{deployment_name}_{key}_engtvt.png"
         )
         save_plot(fig, fname)
 
@@ -1472,26 +1433,26 @@ def eng_timeseries_plot(
         return
 
     _log.info(f"Making eng timeseries plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
 
-    ax.set_xlabel("Time", size=label_size)
-    ax.set_ylabel(adj_var_label(ds, var), size=label_size)
+    ax.set_xlabel("Time", size=LABEL_SIZE)
+    ax.set_ylabel(_adj_var_label(ds, var), size=LABEL_SIZE)
     # ax.invert_yaxis()
     ax.set_title(
-        f"Deployment {deployment} - timeseries", size=title_size
+        f"Deployment {deployment_name} - timeseries", size=TITLE_SIZE
     )
 
     ax.scatter(ds.time, ds[var], s=3)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(XAXIS_FORMAT))
     fig.autofmt_xdate()
 
     if base_path is not None:
         fname = os.path.join(
             base_path,
-            timeseries_eng_path,
-            f"{deployment}_{var}_timeseries.png",
+            TIMESERIES_ENG_PATH,
+            f"{deployment_name}_{var}_timeseries.png",
         )
         save_plot(fig, fname)
 
@@ -1542,32 +1503,32 @@ def sci_timeseries_plot(
         return
 
     _log.info(f"Making sci timeseries plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
 
-    ax.set_xlabel("Time", size=label_size)
-    ax.set_ylabel("Depth [m]", size=label_size)
+    ax.set_xlabel("Time", size=LABEL_SIZE)
+    ax.set_ylabel("Depth [m]", size=LABEL_SIZE)
     ax.invert_yaxis()
     ax.set_title(
-        f"Deployment {deployment} - timeseries", size=title_size
+        f"Deployment {deployment_name} - timeseries", size=TITLE_SIZE
     )
 
     p = ax.scatter(
-        ds.time, ds[depth_var], c=adj_var(ds, var), cmap=sci_vars[var], s=3
+        ds.time, ds[depth_var], c=_adj_var(ds, var), cmap=SCI_COLORS[var], s=3
     )
     fig.colorbar(p, location="right").set_label(
-        adj_var_label(ds, var), size=label_size
+        _adj_var_label(ds, var), size=LABEL_SIZE
     )
 
-    ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(XAXIS_FORMAT))
     fig.autofmt_xdate()
 
     if base_path is not None:
         fname = os.path.join(
             base_path,
-            timeseries_sci_path,
-            f"{deployment}_{var}_timeseries.png",
+            TIMESERIES_SCI_PATH,
+            f"{deployment_name}_{var}_timeseries.png",
         )
         save_plot(fig, fname)
 
@@ -1634,8 +1595,8 @@ def sci_timesection_gt_plot(
     _log.info(
         f"Making sci timesection plot for variable {var}, using glidertools",
     )
-    deployment = ds.deployment_name
-    title_str = f"Deployment {deployment} - time section"
+    deployment_name = utils.get_deployment_name(ds)
+    title_str = f"Deployment {deployment_name} - time section"
     if robust:
         title_str += " - [0.5, 99.5] percentiles"
 
@@ -1645,20 +1606,20 @@ def sci_timesection_gt_plot(
 
     fig, ax = plt.subplots(figsize=(11, 8.5))
     ax = gt.plot(
-        x, y, adj_var(dat, var), cmap=sci_vars[var], ax=ax, robust=robust
+        x, y, _adj_var(dat, var), cmap=SCI_COLORS[var], ax=ax, robust=robust
     )
-    ax.set_xlabel("Profile", size=label_size) # type: ignore
-    ax.set_ylabel("Depth [m]", size=label_size) # type: ignore
-    ax.set_title(title_str, size=title_size) # type: ignore
+    ax.set_xlabel("Profile", size=LABEL_SIZE) # type: ignore
+    ax.set_ylabel("Depth [m]", size=LABEL_SIZE) # type: ignore
+    ax.set_title(title_str, size=TITLE_SIZE) # type: ignore
 
     # Sometimes glidertools won't plot label, so guarantee it
-    ax.cb.set_label(adj_var_label(ds, var), size=label_size)  # type: ignore
+    ax.cb.set_label(_adj_var_label(ds, var), size=LABEL_SIZE)  # type: ignore
 
     if base_path is not None:
         fname = os.path.join(
             base_path,
-            timesection_gt_path,
-            f"{deployment}_{var}_gt.png",
+            TIMESECTION_GT_PATH,
+            f"{deployment_name}_{var}_gt.png",
         )
         save_plot(fig, fname)
 
@@ -1672,6 +1633,9 @@ def sci_timesection_gt_plot(
 def ts_plot(
     var: str,
     ds: xr.Dataset,
+    *,
+    salinity_var: str = "salinity",
+    temp_var: str = "potential_temperature",
     base_path: str | None = None,
     show: bool = False,
 ):
@@ -1683,9 +1647,12 @@ def ts_plot(
     ----------
     ds : xarray dataset
         Timeseries glider science dataset.
-        This is intended to be produced by slocum.binary_to_nc
     var : str
         The name of the variable to plot
+    salinity_var : str
+        The name of the salinity variable in the dataset
+    temp_var : str
+        The name of the temperature variable in the dataset
     base_path : str
         The 'base' of the plot path. If None, then the plot will not be saved
         Intended to be the 'plotdir' output of glider.get_path_glider
@@ -1697,7 +1664,7 @@ def ts_plot(
         matplotlib.Figure.figure object
     """
 
-    if var not in list(ds.data_vars):
+    if var not in ds:
         _log.info(f"Variable name {var} not present in ds. Skipping plot")
         return
 
@@ -1706,7 +1673,7 @@ def ts_plot(
         return
 
     _log.info(f"Making ts plot for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     start, end = utils.get_date_start_end(ds)
 
     Sg, Tg, sigma = utils.calc_ts(ds)
@@ -1716,28 +1683,26 @@ def ts_plot(
     C0 = ax.contour(Sg, Tg, sigma, colors="grey", zorder=1)
     plt.clabel(C0, colors="k", fontsize=9)
     p0 = ax.scatter(
-        ds.salinity,
-        ds.potential_temperature,
-        c=adj_var(ds, var),
-        cmap=sci_vars[var],
-        s=5,
+        ds[salinity_var],
+        ds[temp_var],
+        c=_adj_var(ds, var),
+        cmap=SCI_COLORS[var],
+        s=3,
     )
     fig.colorbar(
         p0,
         orientation="vertical",
         location="right",
         shrink=1,
-    ).set_label(label=adj_var_label(ds, var), size=label_size)
+    ).set_label(label=_adj_var_label(ds, var), size=LABEL_SIZE)
 
-    ax.set_title(f"{deployment} from {start} to {end}", size=title_size)
-    ax.set_xlabel(adj_var_label(ds, "salinity"), size=label_size)
-    ax.set_ylabel(adj_var_label(ds, "potential_temperature"), size=label_size)
-    # ax.set_xlabel("Salinity [PSU]", size=label_size)
-    # ax.set_ylabel("Potential temperature [°C]", size=label_size)
+    ax.set_title(f"{deployment_name} from {start} to {end}", size=TITLE_SIZE)
+    ax.set_xlabel(_adj_var_label(ds, salinity_var), size=LABEL_SIZE)
+    ax.set_ylabel(_adj_var_label(ds, temp_var), size=LABEL_SIZE)
 
     if base_path is not None:
         fname = os.path.join(
-            base_path, ts_path, f"{deployment}_{var}_tsPlot.png"
+            base_path, TS_PATH, f"{deployment_name}_{var}_tsPlot.png"
         )
         save_plot(fig, fname)
 
@@ -1811,8 +1776,14 @@ def sci_surface_map(
         _log.info("Variable name %s not present in ds. Skipping plot", var)
         return
 
+    valid = ~(np.isnan(ds.longitude) | np.isnan(ds.latitude))
+    if not np.any(valid):
+        _log.warning("No valid coordinates in ds for surface map. Skipping plot.")
+        return
+    ds = ds.where(valid, drop=True)
+
     _log.info(f"Making surface map for variable {var}")
-    deployment = ds.deployment_name
+    deployment_name = utils.get_deployment_name(ds)
     start, end = utils.get_date_start_end(ds)
 
     map_lon_border = 0.1
@@ -1857,19 +1828,19 @@ def sci_surface_map(
     # Special considerations for profile_index
     if var == "profile_index":
         c = ds["profile"]
-        title = f"{deployment}: {var}\nfrom {start} to {end}"
+        title = f"{deployment_name}: {var}\nfrom {start} to {end}"
         cbar_label = "profile_index [1]"
     else:
         c = ds[var].where(ds.depth <= 10, drop=True).mean(dim="depth")
-        title = f"{deployment}: 0 - 10m average {var}\nfrom {start} to {end}"
-        cbar_label = adj_var_label(ds, var)
+        title = f"{deployment_name}: 0 - 10m average {var}\nfrom {start} to {end}"
+        cbar_label = _adj_var_label(ds, var)
 
     # Scatter plot data given data, colored by values in the top 10m
     p = ax.scatter(
         ds.longitude,
         ds.latitude,
         c=c,
-        cmap=sci_vars[var],
+        cmap=SCI_COLORS[var],
         s=10,
         zorder=2.5,
         transform=ccrs.PlateCarree(),
@@ -1891,15 +1862,15 @@ def sci_surface_map(
     # Add colorbar and title
     fig.colorbar(p, ax=ax, shrink=0.6, location="right").set_label(
         label=cbar_label,
-        size=label_size,
+        size=LABEL_SIZE,
     )
-    ax.set_title(title, size=title_size)
+    ax.set_title(title, size=TITLE_SIZE)
 
     if base_path is not None:
         fname = os.path.join(
             base_path,
-            surfacemap_sci_path,
-            f"{deployment}_{var}_map_0-10.png",
+            SURFACEMAP_SCI_PATH,
+            f"{deployment_name}_{var}_map_0-10.png",
         )
         save_plot(fig, fname)
 
@@ -2202,14 +2173,14 @@ def plot_qc_timeseries(
                 ax.scatter(
                     time[mask],
                     depth[mask],
-                    s=18,
+                    s=3,
                     color=QC_COLORS[flag],
                     edgecolors="none",
                 )
 
         ax.invert_yaxis()
-        ax.set_xlabel("Time", size=label_size)
-        ax.set_ylabel("Depth (m)", size=label_size)
+        ax.set_xlabel("Time", size=LABEL_SIZE)
+        ax.set_ylabel("Depth (m)", size=LABEL_SIZE)
 
         # BUILD FIGURE TITLE
         if deployment_name is None:
@@ -2224,7 +2195,7 @@ def plot_qc_timeseries(
         ax.set_title(title)
 
         # FORMAT X-AXIS AS MM/DD HH:MM
-        ax.xaxis.set_major_formatter(mdates.DateFormatter(xaxis_format))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter(XAXIS_FORMAT))
         fig.autofmt_xdate()
 
         # MAKE CUSTOM LEGEND
@@ -2300,3 +2271,99 @@ def combine_images_to_pdf(
         append_images=images[1:],
     )
     _log.info(f"Successfully created summary PDF: {output_pdf_path}")
+
+
+def sci_mean_profile_plot(
+    var: str,
+    ds: xr.Dataset,
+    base_path: str | None = None,
+    show: bool = False,
+):
+    """
+    Create a mean depth profile plot for a science variable by averaging
+    across the 'profile' dimension for each 5m depth bin.
+
+    Parameters
+    ----------
+    var : str
+        The name of the variable to plot.
+    ds : xarray.Dataset
+        Gridded science dataset with dimensions ('depth', 'profile') or ('depth', 'time').
+    base_path : str | None, default None
+        The 'base' of the plot path. If None, then the plot will not be saved.
+        Intended to be the 'plotdir' output of glider.get_path_glider.
+    show : bool, default False
+        Boolean indicating if the plots should be shown before being closed.
+
+    Returns
+    -------
+    matplotlib.figure.Figure or None
+        The generated figure object, or None if skipped.
+    """
+    if var in ["profile_index"]:
+        _log.info("Skipping %s because it is not relevant", var)
+        return None
+    if var not in list(ds.data_vars):
+        _log.info("Variable name %s not present in ds. Skipping plot", var)
+        return None
+    if "depth" not in ds.dims and "depth" not in ds.coords:
+        _log.warning("Dimension 'depth' not present in ds. Skipping mean profile plot.")
+        return None
+
+    # Identify profile dimension to average across
+    if "time" in ds[var].dims:
+        prof_dim = "time"
+    else:
+        _log.error("No time dimension found for variable %s", var)
+        raise ValueError(f"No time dimension found for variable {var}")
+
+    _log.info(f"Making mean profile plot for variable {var}")
+    deployment_name = utils.get_deployment_name(ds)
+    ds = ds.dropna(dim="depth", how="all")
+
+    if len(ds.depth) < 1:
+        _log.info("Variable %s has no valid depth levels. Skipping plot", var)
+        return None
+
+    da = _adj_var(ds, var)
+    if np.count_nonzero(~np.isnan(da.values)) == 0:
+        _log.info("Variable %s has no valid data. Skipping plot", var)
+        return None
+
+    # Average across profiles for each depth bin
+    mean_profile = da.mean(dim=prof_dim, skipna=True)
+
+    fig, ax = plt.subplots(figsize=(8, 10))
+
+    # Single mean profile curve
+    ax.plot(
+        mean_profile,
+        ds.depth,
+        color="#0072B2",
+        linewidth=2.0,
+    )
+
+    if ds.depth.min() >= 0:
+        ax.invert_yaxis()
+
+    ax.set_xlabel(_adj_var_label(ds, var), size=LABEL_SIZE)
+    ax.set_ylabel("Depth [m]", size=LABEL_SIZE)
+    ax.set_title(
+        f"Deployment {deployment_name} - Mean {var} Profile",
+        size=TITLE_SIZE,
+    )
+    ax.grid(True)
+
+    if base_path is not None:
+        fname = os.path.join(
+            base_path,
+            MEANPROFILE_PATH,
+            f"{deployment_name}_{var}_meanProfile.png",
+        )
+        save_plot(fig, fname)
+
+    if show:
+        plt.show()
+    plt.close(fig)
+
+    return fig

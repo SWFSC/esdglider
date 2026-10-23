@@ -9,95 +9,92 @@ import subprocess
 from functools import wraps
 from pathlib import Path, PurePosixPath
 
+import google.auth
 import google_crc32c
 from google.cloud import secretmanager, storage
 
+from esdglider import defaults
+
 _log = logging.getLogger(__name__)
 
-# Instantiate client once at module level for connection reuse
-_SECRET_CLIENT = secretmanager.SecretManagerServiceClient()
 
-def log_and_raise_shell_errors(command_name: str):
+def resolve_project_id(project_id: str | None = None) -> str:
     """
-    Decorator to log stdout/stderr when a subprocess fails, then let
-    the exception bubble up to halt the orchestration script.
+    Resolve the GCP project ID following a priority cascade:
+    1. Explicit function argument
+    2. Environment variables ('GOOGLE_CLOUD_PROJECT', 'GCP_PROJECT_ID')
+    3. Google Application Default Credentials (ADC)
+    4. Package default constant from defaults.py
 
     Parameters
     ----------
-    command_name : str
-        The name of the CLI tool being executed (e.g., 'gcsfuse',
-        'fusermount'). Used to format clean and clear log statements.
-
-    Returns
-    -------
-    callable
-        The wrapped function capable of catching and logging subprocess
-        failures.
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except subprocess.CalledProcessError as e:
-                _log.critical(f"{command_name} failed with exit code {e.returncode}")
-                if e.stdout:
-                    _log.debug(f"{command_name} stdout:\n{e.stdout.strip()}")
-                if e.stderr:
-                    _log.error(f"{command_name} stderr:\n{e.stderr.strip()}")
-                raise
-            except Exception as e:
-                _log.exception(f"Unexpected system error during {command_name}: {e}")
-                raise
-        return wrapper
-    return decorator
-
-
-def check_gcsfuse_installed() -> None:
-    """
-    Ensure gcsfuse is available in the system environment.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the gcsfuse binary dependency is missing from the system path.
-    """
-    if shutil.which("gcsfuse") is None:
-        msg = "gcsfuse dependency missing: Not found in system PATH."
-        _log.critical(msg)
-        raise FileNotFoundError(msg)
-
-
-def access_secret_version(project_id: str, secret_id: str, version_id: str = "latest") -> str:
-    """Access the payload for the given secret version if one exists.
-    
-    Verifies payload data integrity via a CRC32c checksum verification
-    step before returning the decoded string.
-
-    Parameters
-    ----------
-    project_id : str
-        The GCP project ID or project number (e.g., 'amlr-gliders-dev').
-    secret_id : str
-        The name/ID of the secret to retrieve from Secret Manager.
-    version_id : str, optional
-        The specific version number as a string (e.g., "5") or an alias.
-        Defaults to "latest".
+    project_id : str | None, optional
+        Explicitly passed project ID.
 
     Returns
     -------
     str
-        The decrypted secret payload material decoded as a UTF-8 string.
+        The resolved GCP project ID.
+    """
+    if project_id:
+        return project_id
+
+    # 1. Check standard environment variables
+    env_project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID")
+    if env_project:
+        return env_project
+
+    # 2. Auto-discover from ADC / metadata server
+    try:
+        _, adc_project = google.auth.default()
+        if adc_project:
+            return adc_project
+    except Exception:  # noqa: BLE001, S110
+        # Pass silently if running offline or in an unauthenticated test environment
+        pass
+
+    # 3. Fall back to package constant
+    return defaults.GCP_PROJECT_ID
+
+
+def access_secret_version(
+    secret_id: str,
+    project_id: str | None = None,
+    version_id: str = "latest",
+) -> str:
+    """
+    Access a decrypted payload from Google Cloud Secret Manager.
+
+    Parameters
+    ----------
+    secret_id : str
+        The name or ID of the secret to retrieve.
+    project_id : str | None, optional
+        The GCP project ID. Defaults to esdglider.defaults.GCP_PROJECT_ID.
+    version_id : str, optional
+        The secret version number or alias (default is "latest").
+
+    Returns
+    -------
+    str
+        The decrypted secret payload decoded as a UTF-8 string.
 
     Raises
     ------
     ValueError
-        If data corruption is detected via an invalid CRC32c checksum.
+        If the payload fails CRC32c integrity verification.
     """
-    name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
-    response = _SECRET_CLIENT.access_secret_version(request={"name": name})
+    project_id = resolve_project_id(project_id)
 
-    # Verify payload checksum if provided by the response
+    # Initialized only when called; safe for machines without GCP credentials
+    client = secretmanager.SecretManagerServiceClient()
+    resource_name = (
+        f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+    )
+
+    _log.debug("Accessing Secret Manager payload: %s", resource_name)
+    response = client.access_secret_version(request={"name": resource_name})
+
     if response.payload.data_crc32c is not None:
         crc32c = google_crc32c.Checksum()
         crc32c.update(response.payload.data)
@@ -109,48 +106,6 @@ def access_secret_version(project_id: str, secret_id: str, version_id: str = "la
     return response.payload.data.decode("UTF-8")
 
 
-# def access_secret_version(project_id: str, secret_id: str, version_id: str = "latest") -> str:
-#     """
-#     Access the payload for the given secret version if one exists.
-    
-#     Verifies payload data integrity via a CRC32c checksum verification
-#     step before returning the decoded string.
-
-#     Parameters
-#     ----------
-#     project_id : str
-#         The GCP project ID or project number (e.g., 'amlr-gliders-dev').
-#     secret_id : str
-#         The name/ID of the secret to retrieve from Secret Manager.
-#     version_id : str, optional
-#         The specific version number as a string (e.g., "5") or an alias.
-#         Defaults to "latest".
-
-#     Returns
-#     -------
-#     str
-#         The decrypted secret payload material decoded as a UTF-8 string.
-
-#     Raises
-#     ------
-#     ValueError
-#         If data corruption is detected via an invalid CRC32c checksum.
-#     """
-#     client = secretmanager.SecretManagerServiceClient()
-#     name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
-#     response = client.access_secret_version(request={"name": name})
-
-#     # Verify payload checksum
-#     crc32c = google_crc32c.Checksum()
-#     crc32c.update(response.payload.data)
-#     if response.payload.data_crc32c != int(crc32c.hexdigest(), 16):
-#         msg = f"Data corruption detected while retrieving secret: {secret_id}"
-#         _log.critical(msg)
-#         raise ValueError(msg)
-
-#     return response.payload.data.decode("UTF-8")
-
-
 def sync_directory_to_gcs(
     local_dir: Path,
     bucket_name: str,
@@ -160,6 +115,8 @@ def sync_directory_to_gcs(
     """
     Uploads files from a local directory to a GCS bucket using native Python SDK.
     Only uploads files if they do not already exist at the destination prefix.
+    If specified, will sync directories, 
+    i.e., delete files in the GCS bucket that do not exist locally.
     
     Parameters
     ----------
@@ -221,8 +178,56 @@ def sync_directory_to_gcs(
                 blob.delete()
 
 
-# ---------------------------------------
-# GCS bucket mount management
+def log_and_raise_shell_errors(command_name: str):
+    """
+    Decorator to log stdout/stderr when a subprocess fails, then let
+    the exception bubble up to halt the orchestration script.
+
+    Parameters
+    ----------
+    command_name : str
+        The name of the CLI tool being executed (e.g., 'gcsfuse',
+        'fusermount'). Used to format clean and clear log statements.
+
+    Returns
+    -------
+    callable
+        The wrapped function capable of catching and logging subprocess
+        failures.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except subprocess.CalledProcessError as e:
+                _log.critical(f"{command_name} failed with exit code {e.returncode}")
+                if e.stdout:
+                    _log.debug(f"{command_name} stdout:\n{e.stdout.strip()}")
+                if e.stderr:
+                    _log.error(f"{command_name} stderr:\n{e.stderr.strip()}")
+                raise
+            except Exception as e:
+                _log.exception(f"Unexpected system error during {command_name}: {e}")
+                raise
+        return wrapper
+    return decorator
+
+
+def check_gcsfuse_installed() -> None:
+    """
+    Ensure gcsfuse is available in the system environment.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the gcsfuse binary dependency is missing from the system path.
+    """
+    if shutil.which("gcsfuse") is None:
+        msg = "gcsfuse dependency missing: Not found in system PATH."
+        _log.critical(msg)
+        raise FileNotFoundError(msg)
+
 
 @log_and_raise_shell_errors(command_name="fusermount")
 def gcs_unmount_bucket(mountpoint: str) -> None:

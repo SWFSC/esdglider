@@ -9,12 +9,12 @@ import xarray as xr
 _log = logging.getLogger(__name__)
 
 
-_profile_idx_comment = (
+_PROFILE_IDX_COMMENT = (
     "N = inside profile N, N + 0.5 = between profiles N and N + 1. "
     + "Parameters listed as attributes"
 )
 
-prof_optionsList = {
+PROF_OPTIONS_LIST = {
     "length": 10,
     "period": 0,
     "inversion": 3,
@@ -71,7 +71,7 @@ def findProfiles(stamp: np.ndarray, depth: np.ndarray, **kwargs):
 
     # Filter for relevant kwargs, in case any others got passed in
     # Added because optionsList is now returned
-    optionsList = prof_optionsList.copy()
+    optionsList = PROF_OPTIONS_LIST.copy()
     kwargs = {key: value for key, value in kwargs.items() if key in optionsList}
     optionsList.update(kwargs)
     _log.info(
@@ -188,7 +188,7 @@ def get_fill_profiles(
         [
             ("long_name", "profile index"),
             ("units", "1"),
-            ("comment", _profile_idx_comment),
+            ("comment", _PROFILE_IDX_COMMENT),
             ("sources", f"{time_var} {depth_var}"),
             ("method", "esdglider.utils.findProfiles"),
             ("method_configuration", json.dumps(prof_opt))

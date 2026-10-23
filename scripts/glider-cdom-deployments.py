@@ -1,10 +1,10 @@
 import logging
 
 import gspread
-import sqlalchemy
 import pandas as pd
+import sqlalchemy
 
-import esdglider.config as config
+from esdglider import metadata
 
 """
 CDOM
@@ -22,7 +22,7 @@ if __name__ == "__main__":
         engine = sqlalchemy.create_engine(conn_string)
         with engine.connect() as connection:
             # Generate deployment table
-            df_depl = config.get_deployment_table(connection)
+            df_depl = metadata.get_deployment_table(connection)
             x = df_depl.copy(deep=True)
             x = x[["Deployment_Name", "Project", "Start", "Glider_Deployment_ID"]]
             x = x.sort_values(['Project', 'Deployment_Name'])
@@ -47,7 +47,7 @@ if __name__ == "__main__":
                 db_device_flbbcd = Deployment_Device[
                     (
                         (Deployment_Device["Glider_Deployment_ID"] == depl_id)
-                        & (Deployment_Device["Component"] == config.db_components[flbbcd_key])
+                        & (Deployment_Device["Component"] == metadata.db_components[flbbcd_key])
                     )
                 ]
                 db_cals = Deployment_Device_Calibration[
@@ -55,7 +55,7 @@ if __name__ == "__main__":
                 ]
 
                 if db_device_flbbcd.shape[0] > 0:
-                    instr = config._get_instrument_attrs(
+                    instr = metadata._get_instrument_attrs(
                         "flbbcd", 
                         db_device_flbbcd, 
                         db_cals

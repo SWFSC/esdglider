@@ -1,11 +1,11 @@
 import logging
 from pathlib import Path
 
-from esdglider import gcp, imagery, paths, utils
+from esdglider import defaults, gcp, imagery, paths, utils
 
 logger = logging.getLogger(__name__)
 
-deployment_name = "calanus-20260824" # Deployment name
+deployment_name = "chovy-20261005" # Deployment name
 dir_chunk_size = 50                  # Number of directories per json file
 
 # List of directories to include; set to None to include all. 
@@ -37,7 +37,7 @@ if __name__ == "__main__":
         deployment_name = deployment_name, 
         home_path=home, 
     )
-    gcp.gcs_mount_bucket(paths.imagery_meta_bucket_name, img_paths["metadir"], ro=False)
+    gcp.gcs_mount_bucket(defaults.BUCKET_IMAGERY_META, img_paths["imagery_meta_path"], ro=False)
 
     if not use_tmp_dir:
         output_path_pre = Path(img_paths["metadir"]) / f"osi-manifests-{dir_chunk_size:03d}dirs"
@@ -65,11 +65,14 @@ if __name__ == "__main__":
         logger.debug("Chunk %d directories: %s", chunk_num, chunk)
 
         # Usage:
+        bucket_name = defaults.BUCKET_IMAGERY_IN
+        yr = utils.get_path_year(deployment_name)
+        base_uri = f"gs://{bucket_name}/{yr}/{deployment_name}/images"
         imagery.generate_osi_manifest(
             jsonl_filepath=img_paths["imgmetapath"],
             output_filepath=output_filepath,
             target_dirs=chunk,
-            deployment_name=deployment_name, 
+            base_uri=base_uri, 
             log_interval=100000, 
         )
 
@@ -77,7 +80,7 @@ if __name__ == "__main__":
             print(
                 "Command to run to copy from temp directory to bucket, if necessary:\n"
                 f"gcloud storage cp -r {output_path_pre} "
-                f"gs://{paths.imagery_meta_bucket_name}/"
+                f"gs://{defaults.BUCKET_IMAGERY_META}/"
                 f"{utils.get_path_year(deployment_name)}/{deployment_name}/"
             )
         

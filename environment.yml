@@ -12,8 +12,8 @@ dependencies:
 
   - SQLAlchemy
   - pyodbc
-  - numpy
-  - pandas=3.0
+  - numpy=2
+  - pandas=3
   - xarray
   - scipy
   - matplotlib
@@ -29,6 +29,7 @@ dependencies:
   - timezonefinder
   - ioos_qc
   - plotly
+  - gsw
 
   - rsync
   - sshpass
@@ -38,7 +39,6 @@ dependencies:
     - python-dateutil
     - gspread #conda-forge version is not the latest
     - git+https://github.com/smwoodman/pyglider.git@main
-    - git+https://github.com/SWFSC/esdglider.git@v1.0.0
     # - git+https://github.com/c-proof/pyglider.git@main
 
 # Create env
@@ -48,4 +48,5 @@ dependencies:
 # Within active conda env, run to install esdglider as editable:
 #   conda activate esdglider && pip install -e esdglider --config-settings editable_mode=compat
 # Within active conda env, run the following to for install
+#   pip install --force-reinstall --no-deps git+https://github.com/SWFSC/esdglider.git@v1.0.0
 #   pip install --force-reinstall --no-deps git+https://github.com/smwoodman/pyglider.git@main

@@ -2,7 +2,9 @@ import logging
 
 import sqlalchemy
 
-from esdglider import config
+from esdglider import defaults, metadata
+
+logger = logging.getLogger(__name__) 
 
 """
 Scrape info from database, and generate draft of
@@ -13,9 +15,9 @@ from a local computer to access the database
 sqlalchemy engine. It should not be committed to GitHub.
 """
 
-deployment_name = "calanus-20260403"
-path_config = "C:/Users/sam.woodman/Downloads"
-# path_config = "C:/Users/sam.woodman/Documents/GitHub/glider-lab/deployment-configs"
+deployment_name = "amlr01-20181216"
+# path_config = "C:/Users/sam.woodman/Downloads"
+path_config = "C:/Users/sam.woodman/Documents/GitHub/glider-processing/deployment-configs/2018"
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -25,12 +27,13 @@ if __name__ == "__main__":
     )
 
     with open("db/glider-db-prod.txt", "r") as f:
+        logger.info("Creating database connection")
         conn_string = f.read()
         engine = sqlalchemy.create_engine(conn_string)
         with engine.connect() as connection:
-            config.make_deployment_yaml(
+            metadata.make_deployment_yaml(
                 con=connection,
                 deployment_name=deployment_name,
                 outdir=path_config,
-                schema="dbo", 
+                schema=defaults.DB_SCHEMA, 
             )

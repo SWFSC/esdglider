@@ -3,7 +3,7 @@ import logging
 # import gspread
 import sqlalchemy
 
-from esdglider import config
+from esdglider import metadata
 
 """
 Make a yaml file for all glider deployments to display on the website
@@ -34,10 +34,10 @@ if __name__ == "__main__":
         engine = sqlalchemy.create_engine(conn_string)
         with engine.connect() as connection:
             # Generate deployment table
-            df_depl = config.get_deployment_table(connection)
+            df_depl = metadata.get_deployment_table(connection)
 
             # Make website yaml
-            config.make_website_yaml(
+            metadata.make_website_yaml(
                 df=df_depl, 
                 outdir=yaml_path, 
                 glider_data_out_bucket_name="swfscesd-glider-deployments-data-out", 

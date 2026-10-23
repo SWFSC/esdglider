@@ -4,13 +4,12 @@ import logging
 import os
 import shutil
 import statistics
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import gsw
 import numpy as np
 import pandas as pd
-import pytz
 import xarray as xr
 import yaml
 from dateutil.parser import isoparse
@@ -308,7 +307,7 @@ def datetime_now_utc(format="%Y-%m-%dT%H:%M:%SZ"):
     Returns a string with the current date/time, in UTC,
         controlled by 'format' input
     """
-    return datetime.now(timezone.utc).strftime(format)
+    return datetime.now(UTC).strftime(format)
 
 
 def parse_iso8601(dstring: str | datetime) -> datetime | None:
@@ -448,9 +447,47 @@ def get_deployment_date(deployment_name: str):
     deployment_split = _split_deployment(deployment_name)
     deployment_date = deployment_split[1]
 
-    
 
-    return  datetime.strptime(deployment_date, "%Y%m%d").date()  # noqa: DTZ007
+    return  datetime.strptime(deployment_date, "%Y%m%d").date()
+
+
+def get_deployment_name(ds: xr.Dataset) -> str:
+    """
+    Extract and validate the deployment name from an xarray Dataset.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Glider dataset containing the global 'deployment_name' attribute.
+
+    Returns
+    -------
+    str
+        The validated deployment name (e.g., 'amlr08-20220513').
+
+    Raises
+    ------
+    KeyError
+        If 'deployment_name' is missing from ds.attrs.
+    ValueError
+        If 'deployment_name' is empty or not a string.
+    """
+    if "deployment_name" not in ds.attrs:
+        _log.error("Dataset is missing required global attribute 'deployment_name'")
+        raise KeyError(
+            "Required global attribute 'deployment_name' not found in dataset. "
+            "Ensure deployment metadata has been assigned before calling this function."
+        )
+
+    deployment_name = ds.attrs["deployment_name"]
+
+    if not isinstance(deployment_name, str) or not deployment_name.strip():
+        _log.error("Invalid 'deployment_name' attribute value: %r", deployment_name)
+        raise ValueError(
+            f"Global attribute 'deployment_name' must be a non-empty string, got {deployment_name!r}"
+        )
+
+    return deployment_name.strip()
 
 
 # def _parse_deployment_info(delpoyment_info: dict):
@@ -579,19 +616,39 @@ def count_binary_files(dir: str | Path, log_pre: str = ""):
     return total_files, dcd_files, ecd_files, dbd_files, ebd_files
 
 
-def calc_ts(ds):
+def calc_ts(
+    ds: xr.Dataset,         
+    salinity_var: str = "salinity",
+    temp_var: str = "potential_temperature",
+) -> tuple:
     """
     Calculate variables for temperature/salinity plots
     Code adapted from Jacob Partida
+    
+    Parameters
+    ----------
+    ds : xarray dataset
+        Timeseries glider science dataset.
+    var : str
+        The name of the variable to plot
+    salinity_var : str
+        The name of the salinity variable in the dataset
+    temp_var : str
+        The name of the temperature variable in the dataset
+
+    Returns
+    -------
+    tuple: A tuple containing the gridded salinity (Sg), 
+    temperature (Tg), and density (sigma) arrays.
     """
     s_lims = (
-        np.floor(np.min(ds.salinity) - 0.5),
-        np.ceil(np.max(ds.salinity) + 0.5),
+        np.floor(np.min(ds[salinity_var]) - 0.5),
+        np.ceil(np.max(ds[salinity_var]) + 0.5),
     )
 
     t_lims = (
-        np.floor(np.min(ds.potential_temperature) - 0.5),
-        np.ceil(np.max(ds.potential_temperature) + 0.5),
+        np.floor(np.min(ds[temp_var]) - 0.5),
+        np.ceil(np.max(ds[temp_var]) + 0.5),
     )
     # print(t_lims)
     S = np.arange(s_lims[0], s_lims[1] + 0.1, 0.1)
@@ -736,205 +793,6 @@ def get_date_start_end(ds: xr.Dataset) -> tuple[str, str]:
     end = np.datetime_as_string(dt[-1], unit='D')
 
     return start, end
-
-
-def get_utc_offset_integer(timezone_name, dt_object, is_dst=None):
-    """
-    Returns the integer UTC offset in hours for a given Olsen (IANA) timezone
-    and a specific datetime object.
-    Adapted from Gemini
-
-    Parameters
-    ----------
-    timezone_name: str
-        The Olsen (IANA) time zone name (e.g., 'America/New_York').
-    dt_object : datetime.datetime
-        A datetime object representing the point in time for which to calculate the offset
-    is_dst : boolean | None (default None)
-        Passed to pytz's localize. 'None' allows pytz to determine DST
-
-    Returns
-    -------
-    int
-        The UTC offset, in hours as an integer, for the given timezone and date
-    """
-
-    try:
-        tz = pytz.timezone(timezone_name)
-        localized_dt = tz.localize(dt_object, is_dst=is_dst)
-        offset_timedelta = localized_dt.utcoffset()
-        # Convert timedelta to total seconds and then to hours
-        offset_hours = int(offset_timedelta.total_seconds() / 3600)  # type: ignore
-        return offset_hours
-    except pytz.UnknownTimeZoneError:
-        print(f"Error: Unknown time zone '{timezone_name}'.")
-        return None
-    except Exception as e:  # noqa: BLE001
-        print(f"An error occurred: {e}")
-        return None
-
-
-def get_sunrise_sunset(time, lat, lon):
-    """
-    Heavily based on GliderTools.optics.sunset_sunrise.
-    The glidertools function calculates the local sunrise/sunset of the
-    glider location using the Skyfield package.
-    However, it does not account for the local time, and thus the
-    joined sunrise/sunset times are often not right for the given local day.
-    Would like to submit this as a PR to GliderTools, but have
-    not had the bandwidth.
-
-    Currently, this function groups the timestamps by local day,
-    and calculates the mean lat/lon. These are passed to the skyfield package
-    to calculate a single sunrise/sunset for each day, rather than calculating
-    sunrise/sunset for each individual point. Thus, this assumes the glider
-    doesn't travel far enough in one day to make the sunrise/sunset
-    meaningfully different for different points during that day.
-
-    If there is a 'polar' sunrise/sunset, i.e. the sun doesn't actually
-    rise or set as defined by skyfield,
-    then a nan is returned for sunrise/sunset for that day.
-
-    Specifically:
-    1) Calculates local timezone string for each image using timezonefinder,
-        lat, and lon. because of the grouping (described next), if there are
-        multiple timezones the most common is chosen
-    2) Groups the image timestamps by local day,
-        and calculates the mean lat/lon for each day.
-        This greatly reduces the processing time required for the calculations,
-        vs calculating a sunrise/sunset for each individual timestamp.
-    3) For each day timestamp, which has a local time of 00:00:00:
-        - Calculate the UTC time.
-        - Use skyfield to calculate any sunrises/sunsets for the given lat/lon,
-        between the UTC time, and the UTC time + one day. This guarantees
-        there will be exactly one sunrise and one sunset in the given window.
-        If there is a 'polar' sunrise or sunset, return nan.
-        Add these values to the grouped data frame.
-    4) Left join the original data frame and the grouped data frame
-        (with sunrise/sunset times) by local day.
-    5) Return sunrise_local, sunset_local, time_local
-
-    Parameters
-    ----------
-    time: numpy.ndarray or pandas.Series
-        The date & time array in a numpy.datetime64 format, in UTC.
-        This parameter cannot have nans.
-    lat: numpy.ndarray or pandas.Series
-        The latitude of the glider position. This parameter cannot have nans.
-    lon: numpy.ndarray or pandas.Series
-        The longitude of the glider position. This parameter cannot have nans.
-
-    Returns
-    -------
-    All arrays are of the same length as input time, and of type datetime64[s]
-
-    sunrise: numpy.ndarray
-        An array of the sunrise times, in local time.
-    sunset: numpy.ndarray
-        An array of the sunset times, in local time.
-    local time: numpy.ndarray
-        An array of the calculated local times.
-    """
-
-    from skyfield import almanac, api
-    from timezonefinder import TimezoneFinder
-
-    ts = api.load.timescale()
-    eph = api.load("de421.bsp")
-    sun = eph["Sun"]
-
-    # Determine local timezones
-    _log.info("Calculating local timezone string")
-    tf = TimezoneFinder()
-    tz_all = np.array([tf.timezone_at(lat=i, lng=j) for i, j in zip(lat, lon)])
-
-    # Establish working dataframe, and convert times to local
-    df = pd.DataFrame.from_dict(
-        {"time": time, "lat": lat, "lon": lon},
-    )
-    df["time"] = df["time"].dt.tz_localize("UTC")
-
-    uq, counts = np.unique(tz_all, return_counts=True)
-    if uq.shape[0] == 1:
-        tz = uq[0]
-    else:
-        _log.warning("The points span multiple timezones. Using the most frequent tz")
-        _log.warning("unique %s ", uq)
-        _log.warning("counts %s ", counts)
-        tz = uq[np.argmax(counts)]
-    _log.info("Timezone '%s'", tz)
-
-    # Calculate a column for local day
-    df["time_local"] = df["time"].dt.tz_convert(tz.item())
-    df["day_local"] = (
-        df["time_local"].dt.tz_localize(None).values.astype("datetime64[D]") # type: ignore
-    ) 
-
-    # Group by local day
-    grp_avg = (
-        df.groupby(pd.Grouper(key="time_local", freq="D"))
-        .mean(numeric_only=False)
-        .reset_index(drop=False)
-    )
-    grp_avg["time_utc"] = grp_avg["time_local"].dt.tz_convert("UTC")
-
-    # Caluclate and save relevant sunrises and sunsets
-    sunrise_list = []
-    sunset_list = []
-    for n, row in grp_avg.iterrows():
-        _log.debug("n %s", n)
-        _log.debug("row %s", row)
-        observer = eph["Earth"] + api.wgs84.latlon(row["lat"], row["lon"])
-        date = row["time_utc"]
-
-        t0 = ts.utc(date.year, date.month, date.day, date.hour)
-        t1 = ts.utc(date.year, date.month, date.day + 1, date.hour)
-
-        tu, yu = almanac.find_risings(observer, sun, t0, t1)
-        td, yd = almanac.find_settings(observer, sun, t0, t1)
-
-        # Since the times span exactly 24hrs, we assume there will be exactly
-        # one each sunrise/sunset. But might as well check
-        if (len(tu) != 1) or (len(td) != 1):
-            _log.warning("An almanac output has a length of not one")
-            _log.warning("row %s", row)
-
-        # Sunrise
-        if yu:
-            su_local = pd.to_datetime(tu.utc_iso(" ")).tz_convert(tz)
-        else:
-            _log.debug("polar sunrise")
-            su_local = np.nan
-        sunrise_list.append(su_local)
-
-        # Sunset
-        if yd:
-            sd_local = pd.to_datetime(td.utc_iso(" ")).tz_convert(tz)
-        else:
-            _log.debug("polar sunset")
-            sd_local = np.nan
-        sunset_list.append(sd_local)
-
-    # Join local sunrise/sunset with data by local day
-    sunrise_local = np.array(sunrise_list).squeeze()
-    sunset_local = np.array(sunset_list).squeeze()
-    grp_avg["sunrise_local"] = sunrise_local
-    grp_avg["sunset_local"] = sunset_local
-    grp_avg_tojoin = grp_avg[["day_local", "sunrise_local", "sunset_local"]]
-
-    # Coerce to np.datetime64, while maintaining local timezone
-    df_out = pd.merge(df, grp_avg_tojoin, how="left", on="day_local")
-    sunrise_local = (
-        df_out["sunrise_local"].dt.tz_localize(None).to_numpy().astype("datetime64[s]")
-    )
-    sunset_local = (
-        df_out["sunset_local"].dt.tz_localize(None).to_numpy().astype("datetime64[s]")
-    )
-    time_local = (
-        df_out["time_local"].dt.tz_localize(None).to_numpy().astype("datetime64[s]")
-    )
-
-    return sunrise_local, sunset_local, time_local
 
 
 def get_instrument_sn_date(ds: xr.Dataset, instrument_str: str) -> tuple:
@@ -1331,7 +1189,7 @@ def combine_datasets(nc_dir):
 
     # PROCESS EACH PROFILE FILE
     for nc_file in nc_files:
-        ds = xr.open_dataset(nc_file)
+        ds = xr.load_dataset(nc_file)
 
         # STORE THE PROFILE FILENAME FOR EACH OBSERVATION
         profile_name = nc_file.stem.replace("_qc", "")
@@ -1353,3 +1211,31 @@ def combine_datasets(nc_dir):
     return deployment_ds
 
 
+def get_unique_file_sizes(directory_path: str) -> set[int]:
+    """
+    Recursively scans a directory and returns a set of all unique file sizes in bytes.
+
+    Parameters
+    ----------
+    directory_path : str
+        Path to the directory to scan for file sizes.
+
+    Returns
+    -------
+    set[int]
+        Set of unique file sizes in bytes.
+    """
+    file_sizes = set()
+    
+    for root, _, files in os.walk(directory_path):
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
+            try:
+                # Get the file size in bytes and add to the set
+                size = os.path.getsize(file_path)
+                file_sizes.add(size)
+            except (OSError, FileNotFoundError):
+                # Handles broken symlinks or permission errors smoothly
+                continue
+                
+    return file_sizes

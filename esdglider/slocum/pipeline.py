@@ -6,6 +6,8 @@ import ast
 import logging
 import math
 import os
+import shutil
+import subprocess
 import tempfile
 from datetime import datetime
 from importlib import metadata
@@ -20,7 +22,7 @@ import xarray as xr
 import yaml
 
 import esdglider.profiles as prof
-from esdglider import paths, plots, qartod, utils
+from esdglider import defaults, paths, qartod, utils
 from esdglider.slocum import core
 
 _log = logging.getLogger(__name__)
@@ -28,20 +30,20 @@ _log = logging.getLogger(__name__)
 
 """
 Glider values for ESD slocum pipeline
-Note that depth bins will be defined by `np.arange(0, depth_max, i)`,
-where i is in element of bin_size
+Note that depth bins will be defined by `np.arange(0, DEPTH_MAX, i)`,
+where i is in element of BIN_SIZES
 
-bin_size: list
-    a list of the gridded depth bin sizes
-depth_max: float
+BIN_SIZES: list (integer)
+    a list of the (integer) gridded depth bin sizes 
+DEPTH_MAX: float
     The maximum value to use when making depth bins
-maxgap_esd : float
+MAXGAP_SECONDS: float
     The maximum allowed gap (in seconds) for ESD processing.
 """
 
-bin_size = [1, 5]
-depth_max = 1200.1
-maxgap_esd = 60
+BIN_SIZES = [1, 5]
+DEPTH_MAX = 1200.1
+MAXGAP_SECONDS = 60
 
 
 def generate_timeseries(
@@ -57,7 +59,7 @@ def generate_timeseries(
     run_qc: bool = False,
     file_info: str | None = None,
     binary_search: str | None = None,
-    maxgap: int | None = None,
+    maxgap: int = MAXGAP_SECONDS,
     prof_args: dict | None = None,
 ) -> dict:
     """
@@ -100,9 +102,9 @@ def generate_timeseries(
     binary_search : str | None, optional
         The search pattern for binary files.
         If None (default), will default to all uncompressed binary files
-    maxgap : int | None, optional
+    maxgap : int, optional
         The maximum allowed gap (in seconds) for interpolation. 
-        If None (default), will use the module's maxgap_esd value.
+        By default, will use the module's MAXGAP_SECONDS value.
     prof_args : dict | None, optional
         named optional arguments, passed to esdglider.profiles.findProfiles
 
@@ -149,10 +151,6 @@ def generate_timeseries(
     else:
         _log.error("mode must be either 'rt' or 'delayed'")
         raise ValueError("mode must be either 'rt' or 'delayed'")
-
-    # Set defaults
-    if maxgap is None:
-        maxgap = maxgap_esd
 
     if prof_args is None:
         prof_args = {}
@@ -240,7 +238,7 @@ def generate_timeseries(
         tsraw.to_netcdf(
             outname_tsraw, 
             mode="w", 
-            encoding={'time': core.time_encoding}, 
+            encoding={'time': core.TIME_ENCODING}, 
         )
 
         # Save profile summary, get profile index attributes
@@ -310,7 +308,7 @@ def generate_timeseries(
             fnamesuffix=f"-{mode}-eng",
             time_base="m_depth",
             profile_filt_time=None,  # type: ignore
-            maxgap=maxgap_esd,
+            maxgap=maxgap,
         )
 
         _log.info(f"Post-processing engineering timeseries: {outname_tseng}")
@@ -329,7 +327,7 @@ def generate_timeseries(
             outname_tseng, 
             deployment, 
             mode='w',
-            encoding={'time': core.time_encoding},
+            encoding={'time': core.TIME_ENCODING},
         )
         del tseng
 
@@ -363,7 +361,7 @@ def generate_timeseries(
                     tsdir,
                     deploymentyaml,
                     fnamesuffix=f"-{mode}-sci",
-                    maxgap=maxgap_esd,
+                    maxgap=maxgap,
                 )
             drop_vars = None
 
@@ -383,7 +381,7 @@ def generate_timeseries(
                 fnamesuffix=f"-{mode}-sci",
                 time_base=time_base_var,
                 profile_filt_time=None,  # type: ignore
-                maxgap=maxgap_esd,
+                maxgap=maxgap,
             )
 
             # Drop rows in science where pressure is nan, because:
@@ -411,7 +409,7 @@ def generate_timeseries(
             outname_tssci, 
             deployment, 
             mode='w',
-            encoding={'time': core.time_encoding},
+            encoding={'time': core.TIME_ENCODING},
         )        
         del tssci
 
@@ -523,10 +521,13 @@ def _clear_sci_ts(glider_paths: dict, mode: str):
             utils.remove_file(f)
 
     # Clear imagery timeseries and echoview files, if they exist
-    imgcsv = paths._get_path_imgcsv(glider_paths["deployment_name"], glider_paths["ancillarydir"])
+    imgcsv = paths.get_helper_path_imgcsv(
+        glider_paths["deployment_name"], 
+        glider_paths["ancillarydir"]
+    )
     utils.remove_file(imgcsv)
     
-    echoview_path = paths._get_path_echoview(glider_paths["ancillarydir"])
+    echoview_path = paths.get_helper_path_echoview(glider_paths["ancillarydir"])
     utils.rmtree(echoview_path)
 
 
@@ -620,6 +621,7 @@ def postproc_attrs(
         "date_issued", 
         "time_coverage_end", 
         "time_coverage_start", 
+        "start_date", 
     ]
     for attr in attrs_z:
         _log.debug("Checking attribute %s for Z suffix", attr)
@@ -641,7 +643,7 @@ def postproc_attrs(
         file_info = "netCDF files created using"
     ds.attrs["history"] = f"{utils.datetime_now_utc()}: {file_info}: " + "; ".join(
         [
-            f"deployment_name={ds.deployment_name}",
+            f"deployment_name={utils.get_deployment_name(ds)}",
             f"mode={mode}",
             f"esdglider v{metadata.version('esdglider')}",
             f"pyglider v{metadata.version('pyglider')}",
@@ -964,6 +966,8 @@ def postproc_tsl1_sci(
 def generate_gridded(
     glider_paths: dict,
     write_gridded: bool = True,
+    bin_sizes: list[int] = BIN_SIZES, 
+    depth_bin_max: float = DEPTH_MAX,
 ) -> dict:
     """
     Generate gridded netCDF files for the slocum glider deployment.
@@ -974,6 +978,10 @@ def generate_gridded(
         A dictionary containing paths relevant to the glider deployment.
     write_gridded : bool, optional
         Whether to write gridded netCDF files, by default True.
+    bin_sizes : list[int], optional
+        List of bin sizes for gridding, by default BIN_SIZES.
+    depth_bin_max : float, optional
+        Maximum depth for gridding, by default DEPTH_MAX.
     
     Returns
     -------
@@ -981,15 +989,16 @@ def generate_gridded(
         A dictionary containing the paths to the gridded netCDF files.
     """
     
-    if bin_size != [1, 5]:
+    if BIN_SIZES != [1, 5]:
         _log.warning(
             "The bin_size variable is not the default [1, 5]. "
             "The output paths may be different than expected."
         )
     
-    keys_to_extract = [f"gr{i}path" for i in bin_size]
-    keys_to_return = [f"outname_gr{i}m" for i in bin_size]
+    keys_to_extract = [f"gr{i}path" for i in BIN_SIZES]
+    keys_to_return = [f"outname_gr{i}m" for i in BIN_SIZES]
     outname_tssci = glider_paths["tsscipath"]
+    outnames = {}
 
     if write_gridded:
         if not os.path.isfile(outname_tssci):
@@ -1001,53 +1010,25 @@ def generate_gridded(
             utils.remove_file(glider_paths[ke])
 
         _log.info("Gridding science data using given 'depth' var")
-        outnames = _run_pyglider_gridding(outname_tssci, glider_paths)
+        # outnames = _run_pyglider_gridding(outname_tssci, glider_paths)
+
+        for i in bin_sizes:
+            _log.info("Generating %sm gridded data", i)
+            outname_gr = pgncprocess.make_gridfiles(
+                outname_tssci,
+                glider_paths["griddir"],
+                glider_paths["deploymentyaml"],
+                depth_bins=np.arange(0, depth_bin_max, i),
+                fnamesuffix=f"-{glider_paths['mode']}-{i}m",
+            )
+            outnames = outnames | {f"outname_gr{i}m": outname_gr}
         _log.debug("gridded outnames %s", "; ".join(outnames))
 
     else:
         _log.info("Not writing gridded nc")
-        outnames = {}
         for kr, ke in zip(keys_to_return, keys_to_extract):
             outnames |= {kr: glider_paths[ke]}
         
-    return outnames
-
-
-def _run_pyglider_gridding(inname, glider_paths) -> dict:
-    """
-    A consistent way of creating gridded datafiles for ESD. 
-    Note that this function uses the module-level variables: 
-    bin_size, depth_max. 
-
-    Parameters
-    ----------
-    inname : str or Path
-        netcdf file to break into profiles.
-        Passed directly to inname argument of pyglider.ncprocess.make_gridfiles
-    glider_paths : dict
-        A dictionary of file/directory paths for various processing steps.
-        Intended to be the output of get_path_glider()
-        See this function for the expected key/value pairs
-
-    Returns
-    -------
-    dict
-        A dictionary of the generated gridded datasets, 
-        with keys like "outname_gr1m" and "outname_gr5m"
-    """
-
-    outnames = {}
-
-    for i in bin_size:
-        _log.info("Generating %sm gridded data", i)
-        outname_gr = pgncprocess.make_gridfiles(
-            inname,
-            glider_paths["griddir"],
-            glider_paths["deploymentyaml"],
-            depth_bins=np.arange(0, depth_max, i),
-            fnamesuffix=f"-{glider_paths['mode']}-{i}m",
-        )
-        outnames = outnames | {f"outname_gr{i}m": outname_gr}
     return outnames
 
 
@@ -1161,6 +1142,7 @@ def correct_flbbcd_raw_sci(
     chlor_cal: tuple | None = None,
     cdom_cal: tuple | None = None,
     bb_cal: tuple | None = None,
+    maxgap: float = MAXGAP_SECONDS,
 ) -> tuple:
     """
     Calculate and save corrected ecopuck (FLBBCD) output values
@@ -1254,7 +1236,7 @@ def correct_flbbcd_raw_sci(
             
             # Interpolate raw values to sci timestamps, and do screens
             val_interp = np.interp(t, _t, val, left=np.nan, right=np.nan)
-            tg_ind = pgutils.find_gaps(_t, t, maxgap_esd)
+            tg_ind = pgutils.find_gaps(_t, t, maxgap)
             val_interp[tg_ind] = np.nan
             val_interp = pgutils._zero_screen(val_interp)
 
@@ -1272,8 +1254,8 @@ def correct_flbbcd_raw_sci(
     ds_sci_cor = utils.drop_bogus(ds_sci_cor)
 
     _log.info("Writing corrected raw and science timeseries to netcdf")
-    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.time_encoding})
-    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.time_encoding})
+    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.TIME_ENCODING})
+    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.TIME_ENCODING})
 
     _log.info("Done FLBBCD correction")
     return outname_tsraw, outname_tssci
@@ -1305,12 +1287,12 @@ def correct_cdom_raw_sci(glider_paths: dict):
     _log.info("Starting CDOM correction for raw dataset")
     ds_raw_cor = utils.correct_cdom(ds_raw)
     _log.info("Writing corrected raw timeseries to netcdf")
-    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.time_encoding})
+    ds_raw_cor.to_netcdf(outname_tsraw, encoding={'time': core.TIME_ENCODING})
 
     _log.info("Starting CDOM correction for science dataset")
     ds_sci_cor = utils.correct_cdom(ds_sci)
     _log.info("Writing corrected science timeseries to netcdf")
-    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.time_encoding})
+    ds_sci_cor.to_netcdf(outname_tssci, encoding={'time': core.TIME_ENCODING})
 
     _log.info("Done CDOM correction")
     return outname_tsraw, outname_tssci
@@ -1376,6 +1358,13 @@ def drop_ts_ranges(
         Input ds, with points within specified time ranges dropped.
         Also saves 'dropped' scatter plots to plotdir, if specified.
     """
+    try:
+        from esdglider.plots import scatter_drop_plot
+    except ImportError as exc:
+        raise ImportError(
+            "Plotting dependencies are missing. "
+            "Install them with `pip install 'esdglider[plots]'`."
+        ) from exc
 
     _log.info(
         "There are %d points in the original %s dataset",
@@ -1397,7 +1386,7 @@ def drop_ts_ranges(
 
     # Make plot
     if plotdir is not None:
-        plots.scatter_drop_plot(ds, todrop, dstype, plotdir)
+        scatter_drop_plot(ds, todrop, dstype, plotdir)
 
     # Drop time(s)
     todrop_mask = xr.DataArray(todrop, dims="time", coords={"time": ds.time})
@@ -1512,7 +1501,7 @@ def complete_profile_correction(
     # Save raw dataset
     tsraw.to_netcdf(
         glider_paths["tsrawpath"], 
-        encoding={'time': core.time_encoding}
+        encoding={'time': core.TIME_ENCODING}
     )
     _log.info("Wrote raw timeseries to %s", glider_paths["tsrawpath"])
 
@@ -1521,7 +1510,7 @@ def complete_profile_correction(
         tseng = prof.join_profiles(tseng, prof_summ, prof_index_attrs)
         tseng.to_netcdf(
             glider_paths["tsengpath"], 
-            encoding={'time': core.time_encoding}
+            encoding={'time': core.TIME_ENCODING}
         )
         _log.info("Wrote eng timeseries with new profiles to %s", glider_paths["tsengpath"])
 
@@ -1529,7 +1518,7 @@ def complete_profile_correction(
         tssci = prof.join_profiles(tssci, prof_summ, prof_index_attrs)
         tssci.to_netcdf(
             glider_paths["tsscipath"], 
-            encoding={'time': core.time_encoding}
+            encoding={'time': core.TIME_ENCODING}
         )
         _log.info("Wrote science timeseries with new profiles to %s", glider_paths["tsscipath"])
 
@@ -1733,3 +1722,305 @@ def create_ngdac_profiles(
                     outname,
                     mode="w",
                 )
+
+
+def sync_to_ngdac(
+    local_dir: str | Path,
+    # remote_dir: str | Path,
+    *,
+    host: str = defaults.NGDAC_HOST, 
+    username: str = defaults.NGDAC_USER,
+    secret_id: str = defaults.SECRET_ID_NGDAC,
+    project_id: str = defaults.GCP_PROJECT_ID,
+    exclude_patterns: list[str] | str | None = None,
+    log_file: str | Path | None = None,
+    dry_run: bool = False,
+) -> None:
+    """
+    Mirror local glider files to the IOOS NGDAC FTPS server (gliders.ioos.us).
+
+    Retrieves credentials from GCP Secret Manager, ensures 'deployment.json'
+    is preserved remotely, and delegates transfer to `sync_directory_to_ftp`.
+
+    Parameters
+    ----------
+    local_dir : str | Path
+        The local directory path to synchronize.
+    # remote_dir : str | Path
+    #     The target directory path on the remote FTP server.
+    host : str, optional
+        The IOOS NGDAC FTP host. Defaults to `defaults.NGDAC_HOST`.
+    username : str, optional
+        The IOOS NGDAC FTP username. 
+        Defaults to `defaults.NGDAC_USER`.
+    secret_id : str, optional
+        The secret ID in Secret Manager containing the FTP password. 
+        Defaults to `defaults.SECRET_ID_NGDAC`.
+    project_id : str, optional
+        The GCP project ID containing the Secret Manager secret. 
+        Defaults to `defaults.GCP_PROJECT_ID`.
+    exclude_patterns : list[str] | str | None, optional
+        Additional glob patterns to preserve on the remote server
+        (default is None). 'deployment.json' is always preserved.
+    log_file : str | Path | None, optional
+        Local file path where LFTP will log operations.
+        If None (default), logging will be directed to the module logger.
+    dry_run : bool, optional
+        Whether to simulate the mirror without transferring or deleting files
+        (default is False).
+    """
+    try:
+        from esdglider.gcp import access_secret_version
+    except ImportError as exc:
+        raise ImportError(
+            "Google Cloud dependencies are required to run this function. "
+            "Install them with `pip install 'esdglider[gcp]'`."
+        ) from exc
+
+    _log.info(
+        "Preparing sync to IOOS NGDAC (%s) for user %s", 
+        host, 
+        username
+    )
+
+    # Get the file ID, which is also the remote directory path
+    nc0 = next(Path(local_dir).glob("*.nc"), None)    
+    if nc0 is None:
+        raise FileNotFoundError(f"No NetCDF files found in {local_dir}")
+    with xr.open_dataset(nc0) as ds:
+        remote_dir = ds.attrs["id"]
+    _log.debug("remote_dir: %s", remote_dir)
+
+    combined_excludes = {"deployment.json"}
+    if exclude_patterns:
+        if isinstance(exclude_patterns, str):
+            combined_excludes.add(exclude_patterns)
+        else:
+            combined_excludes.update(exclude_patterns)
+
+    ftp_password = access_secret_version(secret_id, project_id)
+
+    sync_directory_to_ftp(
+        local_dir=local_dir,
+        remote_dir=remote_dir,
+        host=host,
+        username=username,
+        password=ftp_password,
+        exclude_patterns=sorted(combined_excludes),
+        log_file=log_file,
+        dry_run=dry_run,
+        ssl_force=True,
+        ssl_protect_data=True,
+        timeout=30,
+        max_retries=3,
+    )
+
+
+def sync_directory_to_ftp(
+    local_dir: str | Path,
+    remote_dir: str | Path,
+    host: str,
+    username: str,
+    password: str,
+    *,
+    exclude_patterns: list[str] | str | None = None,
+    log_file: str | Path | None = None,
+    dry_run: bool = False,
+    ssl_force: bool = True,
+    ssl_protect_data: bool = True,
+    parallel: int = 1,
+    timeout: int = 30,
+    max_retries: int = 3,
+) -> None:
+    """
+    Mirror a local directory to a remote FTPS server using LFTP.
+
+    Uploads new and modified files, removes remote files missing locally,
+    preserves excluded patterns, and passes passwords securely through the
+    LFTP_PASSWORD environment variable.
+
+    Parameters
+    ----------
+    local_dir : str | Path
+        The local directory path to synchronize.
+    remote_dir : str | Path
+        The target directory path on the remote FTP server.
+    host : str
+        The FTP server hostname or IP address.
+    username : str
+        The FTP account username.
+    password : str
+        The FTP account password.
+    exclude_patterns : list[str] | str | None, optional
+        Glob patterns to ignore and protect from remote deletion (default is None).
+    log_file : str | Path | None, optional
+        Local file path where LFTP will log operations (default is None).
+    dry_run : bool, optional
+        Whether to simulate the mirror without transferring/deleting files
+        (default is False).
+    ssl_force : bool, optional
+        Whether to enforce FTP over TLS (default is True).
+    ssl_protect_data : bool, optional
+        Whether to encrypt the data channel (default is True).
+    parallel : int, optional
+        Number of parallel file transfers (default is 1).
+    timeout : int, optional
+        Connection and network timeout in seconds (default is 30).
+    max_retries : int, optional
+        Maximum number of connection retry attempts (default is 3).
+
+    Raises
+    ------
+    FileNotFoundError
+        If LFTP is not installed or the local directory does not exist.
+    ValueError
+        If the LFTP command exits with a non-zero exit code.
+    """
+    if not shutil.which("lftp"):
+        _log.error("The 'lftp' binary was not found in PATH.")
+        raise FileNotFoundError("The 'lftp' binary is not installed or not in PATH.")
+
+    local_path = Path(local_dir).expanduser().resolve()
+    if not local_path.is_dir():
+        _log.error("Local directory does not exist: %s", local_path)
+        raise FileNotFoundError(f"Local directory does not exist: {local_path}")
+
+    remote_path = Path(remote_dir).as_posix()
+
+    if exclude_patterns is None:
+        patterns: list[str] = []
+    elif isinstance(exclude_patterns, str):
+        patterns = [exclude_patterns]
+    else:
+        patterns = list(exclude_patterns)
+
+    mirror_opts = [
+        "--reverse",
+        "--delete",
+        # "--only-newer",
+        "--ignore-time",
+        "--verbose",
+    ]
+
+    if dry_run:
+        _log.info("Running LFTP mirror in dry-run mode")
+        mirror_opts.append("--dry-run")
+    if parallel > 1:
+        mirror_opts.append(f"--parallel={parallel}")
+    for pat in patterns:
+        mirror_opts.append(f'--exclude-glob "{pat}"')
+
+    if log_file:
+        resolved_log = Path(log_file).expanduser().resolve()
+        resolved_log.parent.mkdir(parents=True, exist_ok=True)
+        mirror_opts.append(f'--log="{resolved_log.as_posix()}"')
+
+    mirror_flags = " ".join(mirror_opts)
+    ssl_force_str = "true" if ssl_force else "false"
+    ssl_data_str = "true" if ssl_protect_data else "false"
+    _log.debug("mirror flags:\n%s", mirror_flags)
+
+    lftp_script = f"""
+    set cmd:fail-exit true
+    set net:max-retries {max_retries}
+    set net:timeout {timeout}
+    set ftp:ssl-force {ssl_force_str}
+    set ftp:ssl-protect-data {ssl_data_str}
+
+    open -u "{username}" --env-password "{host}"
+
+    mirror {mirror_flags} "{local_path.as_posix()}" "{remote_path}"
+
+    quit
+    """
+
+    env = dict(os.environ, LFTP_PASSWORD=password)
+
+    _log.info(
+        "Starting LFTP mirror from %s to %s:%s (dry_run=%s)",
+        local_path,
+        host,
+        remote_path,
+        dry_run,
+    )
+    _log.debug("LFTP script:\n%s", lftp_script)
+
+    retcode = subprocess.run(
+        ["lftp"],
+        input=lftp_script,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    if retcode.returncode != 0:
+        _log.error("Error syncing via LFTP to %s: %s", host, retcode.stderr)
+        raise ValueError(f"Unsuccessful LFTP sync with {host}: {retcode.stderr.strip()}")
+
+    _log.info("Successfully completed LFTP mirror to %s.", host)
+    if retcode.stdout:
+        for line in retcode.stdout.strip().splitlines():
+            _log.info("LFTP: %s", line)
+
+
+def rsync_from_sfmc(
+    local_dir: str | Path,
+    remote_dir: str | Path,
+    password: str,
+) -> None:
+    """
+    Fetch files from the SFMC server via rsync using the account swoodman.
+
+    Rsync is run with the specified local and remote directories, 
+    using the provided password for authentication, 
+    and with the flags `-aP --delete`.
+
+    Parameters
+    ----------
+    local_dir : str | Path
+        Local directory to store the fetched files.
+    remote_dir : str | Path
+        Remote directory on the SFMC server to fetch files from.
+    password : str
+        Password for the SFMC dockserver user.
+
+    Raises
+    ------
+    ValueError
+        If the rsync process exits with a non-zero status code.
+    """
+    target_path = Path(local_dir).expanduser().resolve()
+    remote_dir = Path(remote_dir).as_posix()
+
+    _log.info("Starting rsync with SFMC dockserver")
+
+    sfmc_server_path = f"swoodman@sfmc.webbresearch.com:{remote_dir}/"
+    ssh_cmd = "sshpass -e ssh -o StrictHostKeyChecking=accept-new"
+
+    rsync_args = [
+        "rsync",
+        "-aP",
+        "--delete",
+        "-e", ssh_cmd,
+        sfmc_server_path,
+        f"{target_path.as_posix()}/",
+    ]
+    _log.debug("rsync_args: %s", rsync_args)
+
+    env = dict(os.environ, SSHPASS=password)
+
+    _log.info("Starting rsync from SFMC server...")
+    retcode = subprocess.run(
+        rsync_args,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if retcode.returncode != 0:
+        _log.error("Error rsyncing with SFMC dockserver: %s", retcode.stderr)
+        raise ValueError(f"Unsuccessful rsync with SFMC dockserver: {retcode.stderr.strip()}")
+
+    _log.info("Successfully completed rsync from SFMC.")

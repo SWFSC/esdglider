@@ -7,8 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from PIL import Image
-from PIL.ExifTags import TAGS
+import pytz
 
 from esdglider import utils
 
@@ -18,38 +17,10 @@ from esdglider import utils
 
 _log = logging.getLogger(__name__)
 
-
-# def solocam_filename_dt(filename, dt_idx_start, format="%Y%m%d-%H%M%S"):
-#     """
-#     Parse solocam (imagery) filename to return associated datetime
-#     Requires index of start of datetime part of string
-
-#     Parameters
-#     ----------
-#     filename : str
-#         Full filename
-#     dt_idx_start : int
-#         The index of the start of the datetime string.
-#         The datetime includes this index, plus the next 15 characters
-#         Specifically: filename[dt_idx_start : (dt_idx_start + 15)]
-#     format : str
-#         format passed to datetime.strptime
-
-#     Returns
-#     -------
-#         The datetime extracted from the imagery filename,
-#         returned as a 'datetime64[s]' object
-#     """
-
-#     solocam_substr = filename[dt_idx_start : (dt_idx_start + 15)]
-#     _log.debug(f"datetime substring: {solocam_substr}")
-#     solocam_dt = datetime.strptime(solocam_substr, format)
-#     solocam_dt64s = np.datetime64(solocam_dt).astype("datetime64[s]")
-
-#     return solocam_dt64s
-
-
-def get_solocam_dt(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
+def get_solocam_dt(
+    path: str | Path, 
+    format: str = "%Y:%m:%d %H:%M:%S"
+)->pd.DataFrame:
     """
     Parse solocam (imagery) filename to return associated datetime
     Requires index of start of datetime part of string
@@ -104,7 +75,7 @@ def get_solocam_dt(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
         .rename(columns=df_columns)
         .sort_values(by="img_file", ignore_index=True)
     )
-    df["time_dt"] = df['time_str'].apply(lambda x: datetime.strptime(x, format))  # noqa: DTZ007
+    df["time_dt"] = df['time_str'].apply(lambda x: datetime.strptime(x, format))
     df["time"] = df["time_dt"].astype("datetime64[s]")
 
     return df[["img_file", "img_dir", "time"]]
@@ -128,12 +99,14 @@ def imagery_timeseries(ds, img_paths):
         DataFrame: pd.DataFrame of imagery timeseries
     """
 
-    deployment_name = ds.attrs["deployment_name"]
     # imagedir = img_paths["imagedir"]
     metadir = img_paths["metadir"]
     ancdir = img_paths["ancdir"]
     
-    _log.info("Creating imagery ancillary data file for %s", deployment_name)
+    _log.info(
+        "Creating imagery ancillary data file for %s", 
+        utils.get_deployment_name(ds)
+    )
     # _log.info(f"Using images directory {imagedir}")
     _log.info("Using image metadata directory %s", metadir)
 
@@ -152,51 +125,6 @@ def imagery_timeseries(ds, img_paths):
         return
     
     df = get_solocam_dt(img_paths["imgmetapath"])
-
-
-    # # imagery_files = 
-    # _log.debug("Processing imagery file names")
-
-    # # Check that all filenames have the same number of characters
-    # utils.check_string_length(imagery_files)
-    # # imagery_files_nchar = [len(i) for i in imagery_files]
-    # # if not len(set(imagery_files_nchar)) == 1:
-    # #     _log.warning(
-    # #         "The imagery file names are not all the same length, "
-    # #         + "and thus shuld be checked carefully",
-    # #     )
-    # #     nchar_mode = statistics.mode(imagery_files_nchar)
-    # #     diff_idx = [i for i, f in enumerate(imagery_files) if len(f) != nchar_mode]
-    # #     diff_files = [f"{imagery_dirs[i]}/{imagery_files[i]}" for i in diff_idx]
-    # #     _log.warning(
-    # #         "The following filenames are of a different length: %s",
-    # #         ", ".join(diff_files),
-    # #     )
-
-    # if dt_idx_start is None:
-    #     _log.info("Calculating the datetime index, ...")
-    #     # i0_split = imagery_files[0].split("-")
-    #     space_idx = str.index(imagery_files[0], " ")
-    #     if space_idx == -1:
-    #         _log.error(
-    #             "The imagery file name year index could not be found, "
-    #             + "and thus the imagery ancillary data file cannot be generated",
-    #         )
-    #         raise ValueError("Incompatible file name spaces")
-    #     dt_idx_start = space_idx + 1
-    # _log.debug("dt_idx_start %s", dt_idx_start)
-
-    # imagery_files_dt = np.array(
-    #     [solocam_filename_dt(i, dt_idx_start) for i in imagery_files],
-    # )
-
-    # df = pd.DataFrame(
-    #     data={
-    #         "img_file": imagery_files,
-    #         "img_dir": imagery_dirs,
-    #         "time": imagery_files_dt,
-    #     },
-    # ).sort_values(by="img_file", ignore_index=True)
 
     # --------------------------------------------
     # Create ancillary data file
@@ -274,7 +202,7 @@ def imagery_timeseries(ds, img_paths):
     ds_linear_ll = ds_linear.where(time_mask, drop=True)
 
     # Calculate sunrise and sunset
-    su, sd, tl = utils.get_sunrise_sunset(
+    su, sd, tl = get_sunrise_sunset(
         time=ds_linear_ll["time"].values,
         lat=ds_linear_ll["latitude"].values,
         lon=ds_linear_ll["longitude"].values,
@@ -301,7 +229,7 @@ def imagery_timeseries(ds, img_paths):
     return df
 
 
-def extract_deployment_metadata(image_path: str, deployment_name: str):
+def extract_deployment_metadata(image_path: str | Path, deployment_name: str):
     """
     Extracts deployment-wide tags, i.e. metadata, from a single image.
 
@@ -309,7 +237,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
 
     Parameters
     ----------
-    image_path : str
+    image_path : str |path
         The path to the imagery file from which to get 'global', 
         i.e., deployment-level, metadata
     deployment_name : str
@@ -325,6 +253,15 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
         - image format (e.g., JPEG, PNG)
         - image mode (e.g., RGB, or L (grayscale))
     """
+    try:
+        from PIL import Image
+        from PIL.ExifTags import TAGS
+    except ImportError as exc:
+        raise ImportError(
+            "Pillow is required for image metadata extraction. "
+            "Install it with `pip install pillow`."
+        ) from exc
+
     _log.info("Extracting deployment-level metadata from %s", image_path)
     try:
         with Image.open(image_path) as img:            
@@ -343,7 +280,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
 
                 # Get the value, and format it
                 value = exifdata.get(tagid)
-                _log.debug(f"{tagname}: {value}")
+                # _log.debug(f"{tagname}: {value}")
                 if isinstance(value, bytes):
                     value = value.decode(errors='ignore').strip('\x00')
                 elif hasattr(value, 'numerator'):
@@ -358,7 +295,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
     return global_metadata
 
 
-def extract_image_metadata(image_path):
+def extract_image_metadata(image_path: Path):
     """
     Worker function for per-image high-frequency data.
     
@@ -366,7 +303,7 @@ def extract_image_metadata(image_path):
 
     Parameters
     ----------
-    image_path : str
+    image_path : Path
         The path to the imagery file from which to extract metadata
 
     Returns
@@ -376,6 +313,13 @@ def extract_image_metadata(image_path):
         - p: directory name
         - dt: Datetime string, from the tag ID 306 ('Datetime')
     """
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise ImportError(
+            "Pillow is required for image metadata extraction. "
+            "Install it with `pip install pillow`."
+        ) from exc
     
     try:
         with Image.open(image_path) as img:
@@ -403,24 +347,41 @@ def generate_osi_manifest(
     jsonl_filepath: str | Path,
     output_filepath: str | Path,
     target_dirs: set[str] | list[str],
-    deployment_name: str, 
+    base_uri: str,
     log_interval: int = 10000
 ) -> None:
     """
-    Streams a JSONL file line-by-line, filters by directory, and writes a streaming
+    Streams a JSONL file line-by-line, 
+    filters by directory, and writes a streaming
     JSON manifest format without holding the full dataset in memory.
 
-    This function generates an OSI-compatible image manifest. 
+    This function generates an image manifest compatible with the
+    Optics SI (OSI) DAG Pipelines. 
+
+    Parameters
+    ----------
+    jsonl_filepath : str | Path
+        Path to the input JSONL file containing image metadata.
+    output_filepath : str | Path
+        Path to the output JSON manifest file.
+    target_dirs : set[str] | list[str]
+        Directories to include in the manifest.
+    base_uri : str
+        Base URI for constructing image URLs.
+    log_interval : int, optional
+        Interval for logging progress, by default 10000.
+
+    Returns
+    -------
+    None
     """
-    _log.info(f"Starting processing for file: '{jsonl_filepath}'")
+    _log.info("Generating OSI manifest using file: '%s'", jsonl_filepath)
 
-    jsonl_filepath = str(jsonl_filepath)
-    output_filepath = str(output_filepath)
+    # jsonl_filepath = str(jsonl_filepath)
+    # output_filepath = str(output_filepath)
 
-    yr = utils.get_path_year(deployment_name)
-    base_uri = f"gs://swfscesd-glider-imagery-data-in/{yr}/{deployment_name}/images"
     target_dirs_set = set(target_dirs)
-    _log.info(f"Target directories to filter: {target_dirs_set}")
+    _log.debug("Target directories to filter: %s", target_dirs_set)
 
     total_lines = 0
     matched_count = 0
@@ -439,7 +400,11 @@ def generate_osi_manifest(
                 
                 # Log progress periodically for large files
                 if total_lines % log_interval == 0:
-                    _log.info(f"Processed {total_lines:,} lines... ({matched_count:,} matches found so far)")
+                    _log.debug(
+                        "Processed %d lines... (%d matches found so far)", 
+                        total_lines, 
+                        matched_count
+                    )
                 
                 line = line.strip()
                 if not line or not line.startswith('{'):
@@ -449,7 +414,10 @@ def generate_osi_manifest(
                     data = json.loads(line)
                 except json.JSONDecodeError:
                     malformed_count += 1
-                    _log.warning(f"Line {total_lines:,}: Malformed JSON syntax. Skipping.")
+                    _log.warning(
+                        "Line %d: Malformed JSON syntax. Skipping.", 
+                        total_lines
+                    )
                     continue
                 
                 # Check target filter
@@ -458,7 +426,10 @@ def generate_osi_manifest(
                     dir_name = data.get("p")
                     
                     if not file_name:
-                        _log.warning(f"Line {total_lines:,}: Missing filename key 'n'. Skipping.")
+                        _log.warning(
+                            "Line %d: Missing filename key 'n'. Skipping.", 
+                            total_lines
+                        )
                         continue
 
                     uri = f"{base_uri}/{dir_name}/{file_name}"
@@ -473,18 +444,22 @@ def generate_osi_manifest(
 
             outfile.write(']}]}')
 
-        _log.info("Processing complete.")
-        _log.info(f"Total lines read: {total_lines:,}")
-        _log.info(f"Total matched records written to '{output_filepath}': {matched_count:,}")
+        _log.debug("Total lines read: %d", total_lines)
+        _log.info(
+            "Processing complete. Total matched records: %d. Written to '%s'", 
+            matched_count,
+            output_filepath
+        )
         if malformed_count > 0:
-            _log.warning(f"Encountered {malformed_count:,} malformed or skipped lines.")
+            _log.warning("Encountered %d malformed or skipped lines.", malformed_count)
 
     except FileNotFoundError:
-        _log.error(f"Input file not found at: '{jsonl_filepath}'")
+        _log.error("Input file not found at: '%s'", jsonl_filepath)
         raise
     except Exception as e:
-        _log.error(f"An unexpected error occurred on line {total_lines:,}: {e!s}")
+        _log.error("An unexpected error occurred on line %d: %s", total_lines, str(e))
         raise
+
 
 def get_unique_directories(jsonl_path: str) -> list[str]:
     """
@@ -512,11 +487,228 @@ def get_unique_directories(jsonl_path: str) -> list[str]:
                     if 'p' in data:
                         unique_dirs.add(data['p'])
                 except json.JSONDecodeError as e:
-                    _log.warning(f"Skipping invalid JSON on line {line_number}: {e}")
+                    _log.warning(
+                        "Skipping invalid JSON on line %d: %s", 
+                        line_number, 
+                        e
+                    )
 
-        _log.info(f"Successfully extracted {len(unique_dirs)} unique directory name(s).")
+        _log.info(
+            "Successfully extracted %d unique directory name(s).", 
+            len(unique_dirs)
+        )
     except Exception as e:
-        _log.error(f"Failed to read file at {jsonl_path}: {e}")
+        _log.error("Failed to read file at %s: %s", jsonl_path, e)
         raise
 
     return sorted(unique_dirs)
+
+
+def get_utc_offset_integer(
+    timezone_name: str, 
+    dt_object: datetime, 
+    is_dst: bool | None = None
+) -> int | None:
+    """
+    Returns the integer UTC offset in hours for a given Olsen (IANA) timezone
+    and a specific datetime object.
+    Adapted from Gemini
+
+    Parameters
+    ----------
+    timezone_name: str
+        The Olsen (IANA) time zone name (e.g., 'America/New_York').
+    dt_object : datetime.datetime
+        A datetime object representing the point in time for which to calculate the offset
+    is_dst : boolean | None (default None)
+        Passed to pytz's localize. 'None' allows pytz to determine DST
+
+    Returns
+    -------
+    int | None
+        The UTC offset, in hours as an integer, for the given timezone and date, 
+        or None if there is an error
+    """
+
+    try:
+        tz = pytz.timezone(timezone_name)
+        localized_dt = tz.localize(dt_object, is_dst=is_dst)
+        offset_timedelta = localized_dt.utcoffset()
+        # Convert timedelta to total seconds and then to hours
+        offset_hours = int(offset_timedelta.total_seconds() / 3600)  # type: ignore
+        return offset_hours
+    except pytz.UnknownTimeZoneError:
+        _log.error("Error: Unknown time zone '%s'.", timezone_name)
+        return None
+    except Exception as e:  # noqa: BLE001
+        _log.error("An error occurred: %s", e)
+        return None
+
+
+def get_sunrise_sunset(time, lat, lon):
+    """
+    Heavily based on GliderTools.optics.sunset_sunrise.
+    The glidertools function calculates the local sunrise/sunset of the
+    glider location using the Skyfield package.
+    However, it does not account for the local time, and thus the
+    joined sunrise/sunset times are often not right for the given local day.
+    Would like to submit this as a PR to GliderTools, but have
+    not had the bandwidth.
+
+    Currently, this function groups the timestamps by local day,
+    and calculates the mean lat/lon. These are passed to the skyfield package
+    to calculate a single sunrise/sunset for each day, rather than calculating
+    sunrise/sunset for each individual point. Thus, this assumes the glider
+    doesn't travel far enough in one day to make the sunrise/sunset
+    meaningfully different for different points during that day.
+
+    If there is a 'polar' sunrise/sunset, i.e. the sun doesn't actually
+    rise or set as defined by skyfield,
+    then a nan is returned for sunrise/sunset for that day.
+
+    Specifically:
+    1) Calculates local timezone string for each image using timezonefinder,
+        lat, and lon. because of the grouping (described next), if there are
+        multiple timezones the most common is chosen
+    2) Groups the image timestamps by local day,
+        and calculates the mean lat/lon for each day.
+        This greatly reduces the processing time required for the calculations,
+        vs calculating a sunrise/sunset for each individual timestamp.
+    3) For each day timestamp, which has a local time of 00:00:00:
+        - Calculate the UTC time.
+        - Use skyfield to calculate any sunrises/sunsets for the given lat/lon,
+        between the UTC time, and the UTC time + one day. This guarantees
+        there will be exactly one sunrise and one sunset in the given window.
+        If there is a 'polar' sunrise or sunset, return nan.
+        Add these values to the grouped data frame.
+    4) Left join the original data frame and the grouped data frame
+        (with sunrise/sunset times) by local day.
+    5) Return sunrise_local, sunset_local, time_local
+
+    Parameters
+    ----------
+    time: numpy.ndarray or pandas.Series
+        The date & time array in a numpy.datetime64 format, in UTC.
+        This parameter cannot have nans.
+    lat: numpy.ndarray or pandas.Series
+        The latitude of the glider position. This parameter cannot have nans.
+    lon: numpy.ndarray or pandas.Series
+        The longitude of the glider position. This parameter cannot have nans.
+
+    Returns
+    -------
+    All arrays are of the same length as input time, and of type datetime64[s]
+
+    sunrise: numpy.ndarray
+        An array of the sunrise times, in local time.
+    sunset: numpy.ndarray
+        An array of the sunset times, in local time.
+    local time: numpy.ndarray
+        An array of the calculated local times.
+    """
+
+    try:
+        from skyfield import almanac, api
+        from timezonefinder import TimezoneFinder
+    except ImportError as exc:
+        raise ImportError(
+            "Skyfield and TimezoneFinder are required for sunrise/sunset calculations. "
+            "Install them with `pip install 'esdglider[optics]'`."
+        ) from exc
+
+    ts = api.load.timescale()
+    eph = api.load("de421.bsp")
+    sun = eph["Sun"]
+
+    # Determine local timezones
+    _log.info("Calculating local timezone string")
+    tf = TimezoneFinder()
+    tz_all = np.array([tf.timezone_at(lat=i, lng=j) for i, j in zip(lat, lon)])
+
+    # Establish working dataframe, and convert times to local
+    df = pd.DataFrame.from_dict(
+        {"time": time, "lat": lat, "lon": lon},
+    )
+    df["time"] = df["time"].dt.tz_localize("UTC")
+
+    uq, counts = np.unique(tz_all, return_counts=True)
+    if uq.shape[0] == 1:
+        tz = uq[0]
+    else:
+        _log.warning("The points span multiple timezones. Using the most frequent tz")
+        _log.warning("unique %s ", uq)
+        _log.warning("counts %s ", counts)
+        tz = uq[np.argmax(counts)]
+    _log.info("Timezone '%s'", tz)
+
+    # Calculate a column for local day
+    df["time_local"] = df["time"].dt.tz_convert(tz.item())
+    df["day_local"] = (
+        df["time_local"].dt.tz_localize(None).values.astype("datetime64[D]") # type: ignore
+    ) 
+
+    # Group by local day
+    grp_avg = (
+        df.groupby(pd.Grouper(key="time_local", freq="D"))
+        .mean(numeric_only=False)
+        .reset_index(drop=False)
+    )
+    grp_avg["time_utc"] = grp_avg["time_local"].dt.tz_convert("UTC")
+
+    # Caluclate and save relevant sunrises and sunsets
+    sunrise_list = []
+    sunset_list = []
+    for n, row in grp_avg.iterrows():
+        _log.debug("n %s", n)
+        _log.debug("row %s", row)
+        observer = eph["Earth"] + api.wgs84.latlon(row["lat"], row["lon"])
+        date = row["time_utc"]
+
+        t0 = ts.utc(date.year, date.month, date.day, date.hour)
+        t1 = ts.utc(date.year, date.month, date.day + 1, date.hour)
+
+        tu, yu = almanac.find_risings(observer, sun, t0, t1)
+        td, yd = almanac.find_settings(observer, sun, t0, t1)
+
+        # Since the times span exactly 24hrs, we assume there will be exactly
+        # one each sunrise/sunset. But might as well check
+        if (len(tu) != 1) or (len(td) != 1):
+            _log.warning("An almanac output has a length of not one")
+            _log.warning("row %s", row)
+
+        # Sunrise
+        if yu:
+            su_local = pd.to_datetime(tu.utc_iso(" ")).tz_convert(tz)
+        else:
+            _log.debug("polar sunrise")
+            su_local = np.nan
+        sunrise_list.append(su_local)
+
+        # Sunset
+        if yd:
+            sd_local = pd.to_datetime(td.utc_iso(" ")).tz_convert(tz)
+        else:
+            _log.debug("polar sunset")
+            sd_local = np.nan
+        sunset_list.append(sd_local)
+
+    # Join local sunrise/sunset with data by local day
+    sunrise_local = np.array(sunrise_list).squeeze()
+    sunset_local = np.array(sunset_list).squeeze()
+    grp_avg["sunrise_local"] = sunrise_local
+    grp_avg["sunset_local"] = sunset_local
+    grp_avg_tojoin = grp_avg[["day_local", "sunrise_local", "sunset_local"]]
+
+    # Coerce to np.datetime64, while maintaining local timezone
+    df_out = pd.merge(df, grp_avg_tojoin, how="left", on="day_local")
+    sunrise_local = (
+        df_out["sunrise_local"].dt.tz_localize(None).to_numpy().astype("datetime64[s]")
+    )
+    sunset_local = (
+        df_out["sunset_local"].dt.tz_localize(None).to_numpy().astype("datetime64[s]")
+    )
+    time_local = (
+        df_out["time_local"].dt.tz_localize(None).to_numpy().astype("datetime64[s]")
+    )
+
+    return sunrise_local, sunset_local, time_local
