@@ -8,15 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Changed data file 'slocum-netcdf-variables-sci.yml' so that cdom and backscatter_700 variables have a `valid_min: 0`. 
 - Added functions `sync_to_ngdac` and `sync_directory_to_ftp` to module `slocum.pipeline`, to automate and standardize sending profile NetCDF files to the DAC. 
-- Added function `fetch_from_sfmc` in `slocum.rt` to isolate fetching data from the SFMC.
+- Added function `rsync_from_sfmc` in `slocum.pipeline` to isolate rsyncing directories from the SFMC.
 - Changed the names of functions in `slocum.rt` to be more consistent and follow best practices. Specifically, changes `scrape_sfmc` to `sync_sfmc_deployment`, and changed `transfer_files_to_gcs` to `_stage_and_sync_to_gcs`. 
 - Changed the name of `config` module to `metadata`, to better reflect its functionality. The `config` module still exists, but now re-exports everything from the `metadata` module and issues a standard `DeprecationWarning` when imported.
 - Added a `defaults` module, to consolidate ESD-specific default values. These values include GCP project and secret names, and bucket names from the `paths` module. 
 - Changed module-level constants to follow PEP 8 conventions: all capital letters with underscores separating words. 
-- Changed package design to make some lightly-used dependencies optional. 
+- Changed package design to make some lightly used dependencies optional. 
 - Changed relevant functions in `plots` module to subset the dataset to finite coordinates (i.e., no nan latitude and longitude values) before plotting
 - Added function `sci_mean_profile_plot` to the `plots` module, for creating a mean depth profile plot. 
-- Changed several suspect/fail ranges in `qartod-config.yml` to be appropriate for Antarctic waters, and be consistent with deployment valid mins/maxes.
+- Changed several suspect/fail ranges in `qartod-config.yml` to be appropriate for Antarctic waters and be consistent with deployment valid mins/maxes.
 - Added a TS plot color-coded by depth to `esd_all_plots`. 
 - Added function `get_unique_file_sizes` to `utils`, for checking the size of nested files (e.g., images) in a given directory. 
 
@@ -38,7 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### QC Flags
 - Added a qartod module, for generating qartod flags using the `ioos_qc` package for the science dataset. Full functionality is run via `run_qartod_qc`
 - Added dynamic QARTOD threshold calculation utilities to the `qartod` module and added create_qc_summary_table for generating profile-level deployment QC summary tables.
-- Changed  `add_missing_variables_to_config` to use the 'valid_min' and 'valid_max' attributes from 'density' and 'temperature' as fallback gross-range limits when those attributes are unavailable for 'potential_density' and 'potential_temperature'.
+- Changed `add_missing_variables_to_config` to use the 'valid_min' and 'valid_max' attributes from 'density' and 'temperature' as fallback gross-range limits when those attributes are unavailable for 'potential_density' and 'potential_temperature'.
 - Changed `create_qc_variables` and `create_placeholder_qc_variables` to explicitly store the 'valid_min' and 'valid_max' QC attributes as 'int8'.
 - Changed QARTOD flag aggregation to use `ioos_qc.qartod_compare` instead of `np.maximum.reduce`, ensuring aggregate QC flags follow the QARTOD-defined flag precedence.
 - Added deployment QC plotting utilities in `plots`, including stacked QC flag summary plots and variable-specific QC flag time-series plots.

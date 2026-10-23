@@ -1961,4 +1961,65 @@ def sync_directory_to_ftp(
     if retcode.stdout:
         for line in retcode.stdout.strip().splitlines():
             _log.info("LFTP: %s", line)
-            
+
+
+def rsync_from_sfmc(
+    local_dir: str | Path,
+    remote_dir: str | Path,
+    password: str,
+) -> None:
+    """
+    Fetch files from the SFMC server via rsync using the account swoodman.
+
+    Rsync is run with the specified local and remote directories, 
+    using the provided password for authentication, 
+    and with the flags `-aP --delete`.
+
+    Parameters
+    ----------
+    local_dir : str | Path
+        Local directory to store the fetched files.
+    remote_dir : str | Path
+        Remote directory on the SFMC server to fetch files from.
+    password : str
+        Password for the SFMC dockserver user.
+
+    Raises
+    ------
+    ValueError
+        If the rsync process exits with a non-zero status code.
+    """
+    target_path = Path(local_dir).expanduser().resolve()
+    remote_dir = Path(remote_dir).as_posix()
+
+    _log.info("Starting rsync with SFMC dockserver")
+
+    sfmc_server_path = f"swoodman@sfmc.webbresearch.com:{remote_dir}/"
+    ssh_cmd = "sshpass -e ssh -o StrictHostKeyChecking=accept-new"
+
+    rsync_args = [
+        "rsync",
+        "-aP",
+        "--delete",
+        "-e", ssh_cmd,
+        sfmc_server_path,
+        f"{target_path.as_posix()}/",
+    ]
+    _log.debug("rsync_args: %s", rsync_args)
+
+    env = dict(os.environ, SSHPASS=password)
+
+    _log.info("Starting rsync from SFMC server...")
+    retcode = subprocess.run(
+        rsync_args,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if retcode.returncode != 0:
+        _log.error("Error rsyncing with SFMC dockserver: %s", retcode.stderr)
+        raise ValueError(f"Unsuccessful rsync with SFMC dockserver: {retcode.stderr.strip()}")
+
+    _log.info("Successfully completed rsync from SFMC.")
