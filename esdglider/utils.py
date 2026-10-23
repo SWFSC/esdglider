@@ -616,19 +616,39 @@ def count_binary_files(dir: str | Path, log_pre: str = ""):
     return total_files, dcd_files, ecd_files, dbd_files, ebd_files
 
 
-def calc_ts(ds):
+def calc_ts(
+    ds: xr.Dataset,         
+    salinity_var: str = "salinity",
+    temp_var: str = "potential_temperature",
+) -> tuple:
     """
     Calculate variables for temperature/salinity plots
     Code adapted from Jacob Partida
+    
+    Parameters
+    ----------
+    ds : xarray dataset
+        Timeseries glider science dataset.
+    var : str
+        The name of the variable to plot
+    salinity_var : str
+        The name of the salinity variable in the dataset
+    temp_var : str
+        The name of the temperature variable in the dataset
+
+    Returns
+    -------
+    tuple: A tuple containing the gridded salinity (Sg), 
+    temperature (Tg), and density (sigma) arrays.
     """
     s_lims = (
-        np.floor(np.min(ds.salinity) - 0.5),
-        np.ceil(np.max(ds.salinity) + 0.5),
+        np.floor(np.min(ds[salinity_var]) - 0.5),
+        np.ceil(np.max(ds[salinity_var]) + 0.5),
     )
 
     t_lims = (
-        np.floor(np.min(ds.potential_temperature) - 0.5),
-        np.ceil(np.max(ds.potential_temperature) + 0.5),
+        np.floor(np.min(ds[temp_var]) - 0.5),
+        np.ceil(np.max(ds[temp_var]) + 0.5),
     )
     # print(t_lims)
     S = np.arange(s_lims[0], s_lims[1] + 0.1, 0.1)
@@ -1189,3 +1209,33 @@ def combine_datasets(nc_dir):
     )
 
     return deployment_ds
+
+
+def get_unique_file_sizes(directory_path: str) -> set[int]:
+    """
+    Recursively scans a directory and returns a set of all unique file sizes in bytes.
+
+    Parameters
+    ----------
+    directory_path : str
+        Path to the directory to scan for file sizes.
+
+    Returns
+    -------
+    set[int]
+        Set of unique file sizes in bytes.
+    """
+    file_sizes = set()
+    
+    for root, _, files in os.walk(directory_path):
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
+            try:
+                # Get the file size in bytes and add to the set
+                size = os.path.getsize(file_path)
+                file_sizes.add(size)
+            except (OSError, FileNotFoundError):
+                # Handles broken symlinks or permission errors smoothly
+                continue
+                
+    return file_sizes

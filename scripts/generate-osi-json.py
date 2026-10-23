@@ -5,7 +5,7 @@ from esdglider import defaults, gcp, imagery, paths, utils
 
 logger = logging.getLogger(__name__)
 
-deployment_name = "calanus-20260824" # Deployment name
+deployment_name = "chovy-20261005" # Deployment name
 dir_chunk_size = 50                  # Number of directories per json file
 
 # List of directories to include; set to None to include all. 
@@ -37,7 +37,7 @@ if __name__ == "__main__":
         deployment_name = deployment_name, 
         home_path=home, 
     )
-    gcp.gcs_mount_bucket(defaults.BUCKET_IMAGERY_META, img_paths["metadir"], ro=False)
+    gcp.gcs_mount_bucket(defaults.BUCKET_IMAGERY_META, img_paths["imagery_meta_path"], ro=False)
 
     if not use_tmp_dir:
         output_path_pre = Path(img_paths["metadir"]) / f"osi-manifests-{dir_chunk_size:03d}dirs"

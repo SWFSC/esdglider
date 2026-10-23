@@ -17,38 +17,10 @@ from esdglider import utils
 
 _log = logging.getLogger(__name__)
 
-
-# def solocam_filename_dt(filename, dt_idx_start, format="%Y%m%d-%H%M%S"):
-#     """
-#     Parse solocam (imagery) filename to return associated datetime
-#     Requires index of start of datetime part of string
-
-#     Parameters
-#     ----------
-#     filename : str
-#         Full filename
-#     dt_idx_start : int
-#         The index of the start of the datetime string.
-#         The datetime includes this index, plus the next 15 characters
-#         Specifically: filename[dt_idx_start : (dt_idx_start + 15)]
-#     format : str
-#         format passed to datetime.strptime
-
-#     Returns
-#     -------
-#         The datetime extracted from the imagery filename,
-#         returned as a 'datetime64[s]' object
-#     """
-
-#     solocam_substr = filename[dt_idx_start : (dt_idx_start + 15)]
-#     _log.debug(f"datetime substring: {solocam_substr}")
-#     solocam_dt = datetime.strptime(solocam_substr, format)
-#     solocam_dt64s = np.datetime64(solocam_dt).astype("datetime64[s]")
-
-#     return solocam_dt64s
-
-
-def get_solocam_dt(path, format="%Y:%m:%d %H:%M:%S")->pd.DataFrame:
+def get_solocam_dt(
+    path: str | Path, 
+    format: str = "%Y:%m:%d %H:%M:%S"
+)->pd.DataFrame:
     """
     Parse solocam (imagery) filename to return associated datetime
     Requires index of start of datetime part of string
@@ -154,51 +126,6 @@ def imagery_timeseries(ds, img_paths):
     
     df = get_solocam_dt(img_paths["imgmetapath"])
 
-
-    # # imagery_files = 
-    # _log.debug("Processing imagery file names")
-
-    # # Check that all filenames have the same number of characters
-    # utils.check_string_length(imagery_files)
-    # # imagery_files_nchar = [len(i) for i in imagery_files]
-    # # if not len(set(imagery_files_nchar)) == 1:
-    # #     _log.warning(
-    # #         "The imagery file names are not all the same length, "
-    # #         + "and thus shuld be checked carefully",
-    # #     )
-    # #     nchar_mode = statistics.mode(imagery_files_nchar)
-    # #     diff_idx = [i for i, f in enumerate(imagery_files) if len(f) != nchar_mode]
-    # #     diff_files = [f"{imagery_dirs[i]}/{imagery_files[i]}" for i in diff_idx]
-    # #     _log.warning(
-    # #         "The following filenames are of a different length: %s",
-    # #         ", ".join(diff_files),
-    # #     )
-
-    # if dt_idx_start is None:
-    #     _log.info("Calculating the datetime index, ...")
-    #     # i0_split = imagery_files[0].split("-")
-    #     space_idx = str.index(imagery_files[0], " ")
-    #     if space_idx == -1:
-    #         _log.error(
-    #             "The imagery file name year index could not be found, "
-    #             + "and thus the imagery ancillary data file cannot be generated",
-    #         )
-    #         raise ValueError("Incompatible file name spaces")
-    #     dt_idx_start = space_idx + 1
-    # _log.debug("dt_idx_start %s", dt_idx_start)
-
-    # imagery_files_dt = np.array(
-    #     [solocam_filename_dt(i, dt_idx_start) for i in imagery_files],
-    # )
-
-    # df = pd.DataFrame(
-    #     data={
-    #         "img_file": imagery_files,
-    #         "img_dir": imagery_dirs,
-    #         "time": imagery_files_dt,
-    #     },
-    # ).sort_values(by="img_file", ignore_index=True)
-
     # --------------------------------------------
     # Create ancillary data file
     _log.info("Interpolating glider data to image timestamps")
@@ -302,7 +229,7 @@ def imagery_timeseries(ds, img_paths):
     return df
 
 
-def extract_deployment_metadata(image_path: str, deployment_name: str):
+def extract_deployment_metadata(image_path: str | Path, deployment_name: str):
     """
     Extracts deployment-wide tags, i.e. metadata, from a single image.
 
@@ -310,7 +237,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
 
     Parameters
     ----------
-    image_path : str
+    image_path : str |path
         The path to the imagery file from which to get 'global', 
         i.e., deployment-level, metadata
     deployment_name : str
@@ -353,7 +280,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
 
                 # Get the value, and format it
                 value = exifdata.get(tagid)
-                _log.debug(f"{tagname}: {value}")
+                # _log.debug(f"{tagname}: {value}")
                 if isinstance(value, bytes):
                     value = value.decode(errors='ignore').strip('\x00')
                 elif hasattr(value, 'numerator'):
@@ -368,7 +295,7 @@ def extract_deployment_metadata(image_path: str, deployment_name: str):
     return global_metadata
 
 
-def extract_image_metadata(image_path):
+def extract_image_metadata(image_path: Path):
     """
     Worker function for per-image high-frequency data.
     
@@ -376,7 +303,7 @@ def extract_image_metadata(image_path):
 
     Parameters
     ----------
-    image_path : str
+    image_path : Path
         The path to the imagery file from which to extract metadata
 
     Returns
@@ -448,13 +375,13 @@ def generate_osi_manifest(
     -------
     None
     """
-    _log.info(f"Starting processing for file: '{jsonl_filepath}'")
+    _log.info("Generating OSI manifest using file: '%s'", jsonl_filepath)
 
-    jsonl_filepath = str(jsonl_filepath)
-    output_filepath = str(output_filepath)
+    # jsonl_filepath = str(jsonl_filepath)
+    # output_filepath = str(output_filepath)
 
     target_dirs_set = set(target_dirs)
-    _log.info(f"Target directories to filter: {target_dirs_set}")
+    _log.debug("Target directories to filter: %s", target_dirs_set)
 
     total_lines = 0
     matched_count = 0
@@ -473,7 +400,11 @@ def generate_osi_manifest(
                 
                 # Log progress periodically for large files
                 if total_lines % log_interval == 0:
-                    _log.info(f"Processed {total_lines:,} lines... ({matched_count:,} matches found so far)")
+                    _log.debug(
+                        "Processed %d lines... (%d matches found so far)", 
+                        total_lines, 
+                        matched_count
+                    )
                 
                 line = line.strip()
                 if not line or not line.startswith('{'):
@@ -483,7 +414,10 @@ def generate_osi_manifest(
                     data = json.loads(line)
                 except json.JSONDecodeError:
                     malformed_count += 1
-                    _log.warning(f"Line {total_lines:,}: Malformed JSON syntax. Skipping.")
+                    _log.warning(
+                        "Line %d: Malformed JSON syntax. Skipping.", 
+                        total_lines
+                    )
                     continue
                 
                 # Check target filter
@@ -492,7 +426,10 @@ def generate_osi_manifest(
                     dir_name = data.get("p")
                     
                     if not file_name:
-                        _log.warning(f"Line {total_lines:,}: Missing filename key 'n'. Skipping.")
+                        _log.warning(
+                            "Line %d: Missing filename key 'n'. Skipping.", 
+                            total_lines
+                        )
                         continue
 
                     uri = f"{base_uri}/{dir_name}/{file_name}"
@@ -507,18 +444,22 @@ def generate_osi_manifest(
 
             outfile.write(']}]}')
 
-        _log.info("Processing complete.")
-        _log.info(f"Total lines read: {total_lines:,}")
-        _log.info(f"Total matched records written to '{output_filepath}': {matched_count:,}")
+        _log.debug("Total lines read: %d", total_lines)
+        _log.info(
+            "Processing complete. Total matched records: %d. Written to '%s'", 
+            matched_count,
+            output_filepath
+        )
         if malformed_count > 0:
-            _log.warning(f"Encountered {malformed_count:,} malformed or skipped lines.")
+            _log.warning("Encountered %d malformed or skipped lines.", malformed_count)
 
     except FileNotFoundError:
-        _log.error(f"Input file not found at: '{jsonl_filepath}'")
+        _log.error("Input file not found at: '%s'", jsonl_filepath)
         raise
     except Exception as e:
-        _log.error(f"An unexpected error occurred on line {total_lines:,}: {e!s}")
+        _log.error("An unexpected error occurred on line %d: %s", total_lines, str(e))
         raise
+
 
 def get_unique_directories(jsonl_path: str) -> list[str]:
     """
@@ -546,17 +487,28 @@ def get_unique_directories(jsonl_path: str) -> list[str]:
                     if 'p' in data:
                         unique_dirs.add(data['p'])
                 except json.JSONDecodeError as e:
-                    _log.warning(f"Skipping invalid JSON on line {line_number}: {e}")
+                    _log.warning(
+                        "Skipping invalid JSON on line %d: %s", 
+                        line_number, 
+                        e
+                    )
 
-        _log.info(f"Successfully extracted {len(unique_dirs)} unique directory name(s).")
+        _log.info(
+            "Successfully extracted %d unique directory name(s).", 
+            len(unique_dirs)
+        )
     except Exception as e:
-        _log.error(f"Failed to read file at {jsonl_path}: {e}")
+        _log.error("Failed to read file at %s: %s", jsonl_path, e)
         raise
 
     return sorted(unique_dirs)
 
 
-def get_utc_offset_integer(timezone_name, dt_object, is_dst=None):
+def get_utc_offset_integer(
+    timezone_name: str, 
+    dt_object: datetime, 
+    is_dst: bool | None = None
+) -> int | None:
     """
     Returns the integer UTC offset in hours for a given Olsen (IANA) timezone
     and a specific datetime object.
@@ -586,10 +538,10 @@ def get_utc_offset_integer(timezone_name, dt_object, is_dst=None):
         offset_hours = int(offset_timedelta.total_seconds() / 3600)  # type: ignore
         return offset_hours
     except pytz.UnknownTimeZoneError:
-        _log.error(f"Error: Unknown time zone '{timezone_name}'.")
+        _log.error("Error: Unknown time zone '%s'.", timezone_name)
         return None
     except Exception as e:  # noqa: BLE001
-        _log.error(f"An error occurred: {e}")
+        _log.error("An error occurred: %s", e)
         return None
 
 

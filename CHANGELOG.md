@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed module-level constants to follow PEP 8 conventions: all capital letters with underscores separating words. 
 - Changed package design to make some lightly-used dependencies optional. 
 - Changed relevant functions in `plots` module to subset the dataset to finite coordinates (i.e., no nan latitude and longitude values) before plotting
+- Added function `sci_mean_profile_plot` to the `plots` module, for creating a mean depth profile plot. 
+- Changed several suspect/fail ranges in `qartod-config.yml` to be appropriate for Antarctic waters, and be consistent with deployment valid mins/maxes.
+- Added a TS plot color-coded by depth to `esd_all_plots`. 
+- Added function `get_unique_file_sizes` to `utils`, for checking the size of nested files (e.g., images) in a given directory. 
 
 ## [1.0.0] - 2026-10-16
 

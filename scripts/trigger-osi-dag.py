@@ -12,8 +12,8 @@ JSON_BUCKET_NAME = "swfscesd-glider-imagery-metadata"
 OUTPUT_BUCKET_NAME = "ggn-nmfs-osi-dev-1-data"
 
 # GCS Paths
-JSON_FOLDER_PATH = "2026/calanus-20260824/osi-manifests-050dirs"
-OUTPUT_FOLDER_PATH = "SWFSC/glider/calanus-20260824/050dirs"
+JSON_FOLDER_PATH = "2026/chovy-20261005/osi-manifests-050dirs"
+OUTPUT_FOLDER_PATH = "SWFSC/glider/chovy-20261005/050dirs"
 
 # --- DAG Run Parameters ---
 MODEL_TYPE = "andy-6d-v1-detector-model" 
