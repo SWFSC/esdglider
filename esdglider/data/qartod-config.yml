@@ -60,8 +60,8 @@ contexts:
       pressure:
         qartod:
           gross_range_test:
-            suspect_span: [0, 1000]
-            fail_span: [0, 6000]
+            suspect_span: [0, 1200]
+            fail_span: [0, 2000]
 
           spike_test:
             suspect_threshold: 0.0
@@ -95,8 +95,8 @@ contexts:
       temperature:
         qartod:
           gross_range_test:
-            suspect_span: [0, 35]
-            fail_span: [-2, 40]
+            suspect_span: [-3, 35]
+            fail_span: [-5, 50]
 
           spike_test:
             suspect_threshold: 0.0
@@ -118,7 +118,7 @@ contexts:
         qartod:
           gross_range_test:
             suspect_span: [0, 6]
-            fail_span: [0, 9]
+            fail_span: [0, 10]
 
           spike_test:
             suspect_threshold: 0.0
