@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "esdglider"
-version = "1.1.0-dev"
+version = "1.1.0"
 description = "Functions for processing ESD glider data"
 readme = "README.md"
 requires-python = ">=3.12"
