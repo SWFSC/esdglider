@@ -17,9 +17,10 @@ binary files, as a light wrapper around dbdreader functions.
 Potentially relevant command line samples:
 
 # Copy binary files to local, for testing
+mkdir -p tmp-binary/chovy-20261005-delayed/
 gcloud storage cp \
-    gs://swfscesd-glider-deployments-data-in/2026/calanus-20260824/binary/delayed/* \
-    tmp-binary/calanus-20260824-delayed/
+    gs://swfscesd-glider-deployments-data-in/2026/chovy-20261005/binary/delayed/* \
+    tmp-binary/chovy-20261005-delayed/
 
 # Delete any existing decompressed files to start fresh
 find tmp-binary/calanus-20260824-delayed \
@@ -32,9 +33,10 @@ rclone check calanus-20260824-delayed calanus-20260824-delayed-compex
 """
 
 ### User-supplied variables
-deployment_name = "calanus-20260824"
+deployment_name = "chovy-20261005"
 mode = "delayed"
 decompress_tool = "dbdreader" #dbdreader, compex
+use_tmp = False
 
 # Ignored unless `decompress_tool` is "compex"
 compex_exe_path = "" # "/home/user/compexp.exe" 
@@ -48,7 +50,11 @@ log_file_name = f"{deployment_name}-{mode}-decompress-{decompress_tool}.log"
 
 
 if __name__ == "__main__":
-    gcp.gcs_mount_bucket(logs_bucket_name, logs_path, ro=False)
+    if use_tmp:
+        os.makedirs(f"/home/user/tmp-binary/{deployment_name}-delayed", exist_ok=True)
+        logs_path = Path("/home/user/tmp-binary")
+    else:
+        gcp.gcs_mount_bucket(logs_bucket_name, logs_path, ro=False)
 
     logging.basicConfig(
         filename=logs_path / log_file_name,
@@ -67,8 +73,10 @@ if __name__ == "__main__":
     gcp.gcs_mount_bucket(defaults.BUCKET_DATA_IN, glider_paths["data_in_path"], ro=False)
 
 
-    binary_dir = glider_paths["binarydir"]
-    # binary_dir = "/home/user/tmp-binary/calanus-20260824-delayed-compex"
+    if use_tmp:
+        binary_dir = f"/home/user/tmp-binary/{deployment_name}-delayed"
+    else:
+        binary_dir = glider_paths["binarydir"]
     binary_dir_files = os.listdir(binary_dir)
 
     utils.count_binary_files(binary_dir, "Start: ")
