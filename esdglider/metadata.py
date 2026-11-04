@@ -259,7 +259,7 @@ def make_deployment_yaml(
 
 def make_website_yaml(
         df: pd.DataFrame, 
-        outdir: str, 
+        outfile: str | None, 
         glider_data_out_bucket_name: str, 
         aa_in_bucket_name: str, 
         imagery_in_bucket_name: str, 
@@ -272,9 +272,9 @@ def make_website_yaml(
     ----------
     df : pandas DataFrame
         Intended to be output of config.make_deployment_table
-    outdir : str
-        Directory to which to write the website yaml. The full output file
-        path will be `os.path.join(outdir, "esd-gliders.yml")`
+    outfile : str | None
+        Directory to which to write the website yaml. 
+        If None, the yaml file will not be written to disk.
     glider_data_out_bucket_name : str
         Name of the glider data out bucket
     aa_in_bucket_name : str
@@ -349,33 +349,41 @@ def make_website_yaml(
         mode = "delayed"
         path_pre = os.path.join(year, deployment_name).replace("\\", "/")
         # paths_acoustics = get_path_acoustics_deployment(path_pre, deployment_name, mode)
-        glider_paths = paths.get_path_glider(deployment_name, mode)
+        glider_paths = paths.get_path_glider(
+            deployment_name, 
+            mode, 
+            data_out_path=glider_data_out_bucket_name, 
+        )
         # aa_paths = get_path_aa(deployment_name)
-        img_paths = paths.get_path_imagery(deployment_name)
+        img_paths = paths.get_path_imagery(
+            deployment_name, 
+            data_out_path=glider_data_out_bucket_name, 
+            imagery_in_path=imagery_in_bucket_name
+        )
         _log.debug("url/path prefix %s", path_pre)
         
         ### Check for File and Directories
         # Check for general outdir
-        outdir_path = glider_paths["outdir"].replace("\\", "/")
+        outdir_path = glider_paths["outdir"].replace("\\", "/").replace(f"{glider_data_out_bucket_name}/", "")
         if check_gcs_directory_exists(glider_data_out_bucket, outdir_path):
             url = href_url(console_url, glider_data_out_bucket_name, outdir_path, "glider")
             df_foryaml.loc[i, "gcp_dir_link_glider"] = url  # type: ignore
 
             ## If outdir exists, check for various subdirs
             # Check for plots
-            plots_path = glider_paths["plotdir"].replace("\\", "/")
+            plots_path = glider_paths["plotdir"].replace("\\", "/").replace(f"{glider_data_out_bucket_name}/", "")
             if check_gcs_directory_exists(glider_data_out_bucket, plots_path):
                 url = href_url(console_url, glider_data_out_bucket_name, plots_path, "plots")
                 df_foryaml.loc[i, "gcp_dir_link_plots"] = url  # type: ignore
 
             # Check for science timeseries
-            tssci_file = glider_paths["tsscipath"].replace("\\", "/")
+            tssci_file = glider_paths["tsscipath"].replace("\\", "/").replace(f"{glider_data_out_bucket_name}/", "")
             if check_gcs_file_exists(glider_data_out_bucket, tssci_file):
                 url = href_url(auth_url, glider_data_out_bucket_name, tssci_file, "timeseries-sci")
                 df_foryaml.loc[i, "gcp_link_tssci"] = url  # type: ignore
 
             # Check for gr5 dataset
-            gr5_file = glider_paths["gr5path"].replace("\\", "/")
+            gr5_file = glider_paths["gr5path"].replace("\\", "/").replace(f"{glider_data_out_bucket_name}/", "")
             if check_gcs_file_exists(glider_data_out_bucket, gr5_file):
                 url = href_url(auth_url, glider_data_out_bucket_name, gr5_file, "gridded-5m")
                 df_foryaml.loc[i, "gcp_link_gr5"] = url  # type: ignore
@@ -383,9 +391,9 @@ def make_website_yaml(
             # Check for acoustics NetCDF (hold)
 
             # Check for imagery metadata CSV
-            imgcsv_file = img_paths["imgcsv"].replace("\\", "/")
-            if check_gcs_file_exists(imagery_in_bucket, imgcsv_file):
-                url = href_url(auth_url, imagery_in_bucket_name, imgcsv_file, "imagery-csv")
+            imgcsv_file = img_paths["imgcsv"].replace("\\", "/").replace(f"{glider_data_out_bucket_name}/", "")
+            if check_gcs_file_exists(glider_data_out_bucket, imgcsv_file):
+                url = href_url(auth_url, glider_data_out_bucket_name, imgcsv_file, "imagery-csv")
                 df_foryaml.loc[i, "gcp_link_imgcsv"] = url  # type: ignore
 
         # # Check for acoustics data in
@@ -394,17 +402,17 @@ def make_website_yaml(
         #     df_foryaml.loc[i, "gcp_dir_link_acoustics"] = url  # type: ignore
 
         # Check for imagery
-        images_path = img_paths["imagedir"].replace("\\", "/")
+        images_path = img_paths["imagedir"].replace("\\", "/").replace(f"{imagery_in_bucket_name}/", "")
         if check_gcs_directory_exists(imagery_in_bucket, images_path):
             url = href_url(console_url, imagery_in_bucket_name, images_path, "images")
             df_foryaml.loc[i, "gcp_dir_link_imagery"] = url  # type: ignore
 
     # Write to a yaml file
     yaml_data = df_foryaml.to_dict(orient="records")
-    yaml_file = os.path.join(outdir, "esd-gliders.yml")
-    _log.info(f"writing {yaml_file}")
-    with open(yaml_file, "w") as file:
-        yaml.dump(yaml_data, file, sort_keys=False, default_flow_style=False)
+    if outfile is not None:
+        _log.info(f"writing {outfile}")
+        with open(outfile, "w") as file:
+            yaml.dump(yaml_data, file, sort_keys=False, default_flow_style=False)
 
     return yaml_data
 
