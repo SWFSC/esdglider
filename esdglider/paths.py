@@ -150,7 +150,7 @@ def get_path_glider(
         config_path = str(config_path)
     deploymentyaml = os.path.join(config_path, f"{deployment_name}.yml")    
     if not os.path.isfile(deploymentyaml):
-        _log.warning(
+        _log.debug(
             "The deployment yaml ('%s') does not exist", 
             deploymentyaml
         )

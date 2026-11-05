@@ -404,9 +404,9 @@ def make_website_yaml(
             #     df_foryaml.loc[i, "gcp_link_imgcsv"] = url  # type: ignore
 
         # Check for acoustics data in
-        aa_in_path = aa_paths["aa_in_path"].replace("\\", "/").replace(f"{aa_in_bucket_name}/", "")
+        aa_in_path = aa_paths["rawdatadir"].replace("\\", "/").replace(f"{aa_in_bucket_name}/", "")
         if check_gcs_directory_exists(aa_in_bucket, aa_in_path):
-            url = href_url(console_url, aa_in_bucket_name, aa_in_path, "aa")
+            url = href_url(console_url, aa_in_bucket_name, aa_in_path, "active-acoustics")
             df_foryaml.loc[i, "gcp_link_in_aa"] = url  # type: ignore
 
         # Check for imagery

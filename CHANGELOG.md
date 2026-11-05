@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 - Changed the `make_website_yaml` metadata function to output a new format of yaml file for the glider lab manual website display. 
-
+- Changed several `path` functions to report 'debug' log messages if paths don't exist, rather than warnings
 
 ## [1.1.0] - 2026-10-23
 
