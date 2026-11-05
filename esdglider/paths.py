@@ -199,6 +199,7 @@ def get_path_glider(
         "data_out_path": data_out_path,
         "archivesfmc": os.path.join(glider_data_in_path, "archive-sfmc"), 
         "binarydir": os.path.join(glider_data_in_path, "binary", mode), 
+        "indir": glider_data_in_path,
         "outdir": glider_data_out_path,
         "rawdir": rawdir,
         "tsdir": tsdir,
@@ -284,6 +285,7 @@ def get_path_aa(
     return {
         "aa_in_path": aa_in_path,
         "data_out_path": data_out_path,
+        "indir": aa_glider_in_path,
         "rawdatadir": os.path.join(aa_glider_in_path, "data", mode),
         "configdir": os.path.join(aa_glider_in_path, "config"),
         "ancdir": ancillarydir,
@@ -370,6 +372,7 @@ def get_path_imagery(
         "imagery_in_path": imagery_in_path,
         "imagery_meta_path": imagery_meta_path,
         "data_out_path": data_out_path,
+        "indir": imagery_glider_in_path,
         "imagedir": os.path.join(imagery_glider_in_path, "images"),
         # "configdir": os.path.join(imagery_glider_in_path, "config"), 
         "metadir": imagery_glider_meta_path, 
