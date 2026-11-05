@@ -485,7 +485,7 @@ def _resolve_path(p: str | Path, home: Path, type: str):
         # Else, use the user-specified path 
         p = str(p)
 
-    _log.info("Using %s path: %s", type, p)
+    _log.debug("Using %s path: %s", type, p)
 
     return p
 
