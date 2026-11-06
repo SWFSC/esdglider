@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed several `path` functions to report 'debug' log messages if paths don't exist, rather than warnings
 - Changed main `paths` functions to output a standard 'indir' key in the dictionary
 - Changed default email contacts in metadata yaml to "swfsc-gliderdata@noaa.gov"
+- Changed `esd_all_plots` to accept x and y figsize arguments, to pass to `sci_surface_map_loop` to specify map dimensions. 
 
 ## [1.1.0] - 2026-10-23
 

@@ -231,7 +231,9 @@ def esd_all_plots(
     base_path: str | None = None,
     crs: str | None = None,
     bar_file: str | None = None,
-    combine_pdf: bool = True,
+    combine_pdf: bool = True, 
+    figsize_x: float = 8.5,
+    figsize_y: float = 11,
 ):
     """
     Wrapper to run all of the ESD plotting loop functions
@@ -261,6 +263,10 @@ def esd_all_plots(
         If True, searches all subdirectories in base_path for generated PNGs 
         and combines them into a single multi-page PDF.
         Ignored if base_path is None
+    figsize_x : float (default 8.5)
+        Width of the figure in inches. Passed to sci_surface_map_loop
+    figsize_y : float (default 11)
+        Height of the figure in inches. Passed to sci_surface_map_loop
 
     Returns
     -------
@@ -336,6 +342,8 @@ def esd_all_plots(
             crs=crs,
             base_path=base_path,
             bar=bar,
+            figsize_x=figsize_x,
+            figsize_y=figsize_y,
         )
     else:
         _log.info("crs is None - skipping surface maps")
