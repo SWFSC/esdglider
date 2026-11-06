@@ -7,7 +7,7 @@ acknowledgement: 'This work was supported by funding from NOAA Fisheries, SWFSC.
 comment: ' '
 contributor_name: 'Christian Reiss, George Watters, Jennifer Walsh, Anthony Cossio, Tegan Murray, Samuel Woodman'
 contributor_role: 'Principal Investigator, Principal Investigator, Glider Pilot, Glider Pilot, Glider Pilot, Data Manager'
-creator_email: swfsc-gliderdata@noaa.gov
+creator_email: swfsc.gliderdata@noaa.gov
 creator_name: 'NOAA SWFSC Ecosystem Science Division Glider Team'
 creator_url: https://www.fisheries.noaa.gov/about/southwest-fisheries-science-center
 format_version: IOOS_Glider_NetCDF_v2.0.nc
@@ -34,7 +34,7 @@ metadata_link: 'https://swfsc.github.io/glider-lab-manual/'
 naming_authority: gov.noaa.fisheries
 platform_type: 'Slocum Glider'
 project: <project name>
-publisher_email: swfsc-gliderdata@noaa.gov
+publisher_email: swfsc.gliderdata@noaa.gov
 publisher_name: 'NOAA SWFSC Ecosystem Science Division Glider Team'
 publisher_url: https://www.fisheries.noaa.gov/about/southwest-fisheries-science-center
 references: 'https://swfsc.github.io/glider-lab-manual/, https://github.com/c-proof/pyglider, https://github.com/SWFSC/esdglider'
