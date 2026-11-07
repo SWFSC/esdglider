@@ -88,7 +88,9 @@ def update_yaml_urls(
     logger.info("Updated links for %d deployments in %s", updated_count, yaml_file_path)
 
 
+
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
     logging.basicConfig(
         format="%(module)s:%(asctime)s:%(levelname)s:%(message)s [line %(lineno)d]",
         level=logging.INFO,
@@ -101,6 +103,9 @@ if __name__ == "__main__":
         with engine.connect() as connection:
             # 1. Generate deployment table from database
             df_depl = metadata.get_deployment_table(connection)
+
+            # REMOVE amlr01-20191206
+            df_depl = df_depl[(df_depl['Deployment_Name'] != 'amlr01-20191206')]
 
             # 2. Make website yaml
             metadata.make_website_yaml(
