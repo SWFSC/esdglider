@@ -42,9 +42,9 @@ NEW_BOUNDS = {
 NEW_METADATA = {
     "metadata": {
         # "creator_name": "NOAA SWFSC Ecosystem Science Division Glider Team",
-        # "creator_email": "nmfs.swfsc.esd-gliders@noaa.gov",
-        "institution": "NOAA National Marine Fisheries Service Southwest Fisheries Science Center", 
-        # "publisher_email": "nmfs.swfsc.esd-gliders@noaa.gov",
+        "creator_email": "swfsc.gliderdata@noaa.gov",
+        # "institution": "NOAA National Marine Fisheries Service Southwest Fisheries Science Center", 
+        "publisher_email": "swfsc.gliderdata@noaa.gov",
         # "contributor_name": "Heidi Taylor, Jennifer Walsh, Anthony Cossio, Tegan Murray, Kourtney Burger, Cara Wilson, Samuel Woodman",
         # "contributor_role": "Principal Investigator, Glider Pilot, Glider Pilot, Glider Pilot, Glider Pilot, Glider Pilot, Data Manager"
     }, 
@@ -214,12 +214,12 @@ if __name__ == "__main__":
 
         # Pipeline transformations
         # data = add_profile_variables(data)
-        data = add_license(data)
+        # data = add_license(data)
         # data = update_metadata_attr_values(data, NEW_BOUNDS)
-        # data = update_metadata_attrs(data, NEW_METADATA)
+        data = update_metadata_attrs(data, NEW_METADATA)
         # data = remove_deployment_id(data)
         # data = rename_deployment_min_dt(data)
-        data = update_20261007(data)
+        # data = update_20261007(data)
         
         # Sort the keys within the metadata dictionary alphabetically
         print(f"Sorting keys for metadata and glider_devices for file: {file_path.name}")
