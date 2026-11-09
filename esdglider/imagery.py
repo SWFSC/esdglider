@@ -295,7 +295,10 @@ def extract_deployment_metadata(image_path: str | Path, deployment_name: str):
     return global_metadata
 
 
-def extract_image_metadata(image_path: Path):
+def extract_image_metadata(
+    image_path: Path, 
+    fallback_to_filename: bool = False
+):
     """
     Worker function for per-image high-frequency data.
     
@@ -305,6 +308,10 @@ def extract_image_metadata(image_path: Path):
     ----------
     image_path : Path
         The path to the imagery file from which to extract metadata
+    fallback_to_filename : bool, optional
+        Whether to attempt to extract the datetime from the filename 
+        if EXIF metadata is unavailable.
+        Defaults to False.
 
     Returns
     -------
@@ -332,6 +339,34 @@ def extract_image_metadata(image_path: Path):
             if hasattr(dt, 'decode'): 
                 dt = dt.decode() # type: ignore
             dt_str = str(dt).strip('\x00') if dt else "UNKNOWN"
+
+            # # Fallback to filename parsing if EXIF timestamp wasn't found
+            # if dt_str == "UNKNOWN" and fallback_to_filename:
+            #     # Matches 8 digits (YYYYMMDD) followed by a hyphen and 6 digits (HHMMSS)
+            #     # Example matches: "20221216-225638" from "amlr07-20221216-225638-001.png"
+            #     match = re.search(r"(\d{8})-(\d{6})", image_path.name)
+            #     if match:
+            #         date_part, time_part = match.groups()
+            #         dt_obj = datetime.strptime(
+            #             f"{date_part}{time_part}", "%Y%m%d%H%M%S"
+            #         )
+            #         # Matches standard EXIF datetime string format: 'YYYY:MM:DD HH:MM:SS'
+            #         dt_str = dt_obj.strftime("%Y:%m:%d %H:%M:%S")
+
+            # Fallback using positional string splitting
+            if dt_str == "UNKNOWN" and fallback_to_filename:
+                # Splits 'amlr07-20221216-225638-001.png' on '-'
+                parts = image_path.name.split("-")
+                if len(parts) >= 3:
+                    date_part = parts[1]  # '20221216'
+                    time_part = parts[2]  # '225638'
+
+                    # Validate components contain expected digit lengths
+                    if len(date_part) == 8 and len(time_part) == 6:
+                        dt_obj = datetime.strptime(
+                            f"{date_part}{time_part}", "%Y%m%d%H%M%S"
+                        )
+                        dt_str = dt_obj.strftime("%Y:%m:%d %H:%M:%S")
 
             return {
                 "n": image_path.name,            # Filename

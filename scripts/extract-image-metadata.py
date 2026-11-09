@@ -1,5 +1,6 @@
 # This script was written by Gemini, and adapted by Sam Woodman
  
+import itertools
 import json
 import logging
 import os
@@ -14,7 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 deployment_name = "chovy-20261005"
-run_pipeline_bool = True
+run_pipeline_bool = True # Run the parallelized pipeline to extract image metadata
+fallback_to_filename = False  # Use filename if datetime cannot be extracted from metadata 
+clobber_existing_meta = False #clobber existing metadata files
 
 home = Path.home()
 mnt_path = home / "mnt-gcs"
@@ -37,7 +40,8 @@ def run_pipeline(
     deployment_name: str, 
     depl_meta_file: Path, 
     img_meta_file: Path, 
-    num_cores: int | None = None
+    num_cores: int | None = None, 
+    clobber: bool = False, 
 ):
     """
     Runs pipeline to generate the deployment-level and image-specific
@@ -56,6 +60,9 @@ def run_pipeline(
     num_cores : int | None
         Number of cores to use for extracing image datetime from metadata
         If None, uses all available cores (i.e., os.cpu_count())
+    clobber : bool, optional
+        Whether to overwrite existing metadata files.
+        Defaults to False.
 
     Returns
     -------
@@ -66,12 +73,32 @@ def run_pipeline(
         num_cores = os.cpu_count()
 
     if depl_meta_file.is_file():
-        logger.error(f"depl_meta_file file ({depl_meta_file}) already exists")
-        return  
+        if clobber:
+            logger.warning(
+                "Clobbering existing deployment metadata file (%s)", 
+                depl_meta_file
+            )
+            depl_meta_file.unlink(missing_ok=True)
+        else:
+            logger.error(
+                "depl_meta_file file (%s) already exists", 
+                depl_meta_file
+            )
+            return  
 
     if img_meta_file.is_file():
-        logger.error(f"img_meta_file file ({img_meta_file}) already exists")
-        return
+        if clobber:
+            logger.warning(
+                "Clobbering existing image metadata file (%s)", 
+                img_meta_file
+            )
+            img_meta_file.unlink(missing_ok=True)
+        else:
+            logger.error(
+                "img_meta_file file (%s) already exists", 
+                img_meta_file
+            )
+            return
 
     # Generate Manifest (from first valid image)
     depl_metadata = imagery.extract_deployment_metadata(files[0], deployment_name)
@@ -88,7 +115,11 @@ def run_pipeline(
     with img_meta_file.open("a", encoding="utf-8") as f:  # noqa: SIM117
         with ProcessPoolExecutor(max_workers=num_cores) as executor:
             for result in tqdm(
-                executor.map(imagery.extract_image_metadata, files), 
+                executor.map(
+                    imagery.extract_image_metadata, 
+                    files, 
+                    itertools.repeat(fallback_to_filename)
+                ), 
                 total=len(files), 
                 unit="images", 
             ):
@@ -165,6 +196,7 @@ if __name__ == "__main__":
                 depl_meta_file=depl_meta_file, 
                 img_meta_file=img_meta_file, 
                 num_cores=os.cpu_count(), 
+                clobber=clobber_existing_meta, 
             )
         logger.info("There are %s files", len(files))
 
