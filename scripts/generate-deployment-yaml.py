@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 import sqlalchemy
 
@@ -15,7 +16,7 @@ from a local computer to access the database
 sqlalchemy engine. It should not be committed to GitHub.
 """
 
-deployment_name = "amlr07-20221204"
+deployment_name = "amlr04-20221205"
 year = utils.get_path_year(deployment_name)
 # path_config = "C:/Users/sam.woodman/Downloads"
 path_config = f"C:/Users/sam.woodman/Documents/GitHub/glider-processing/deployment-configs/{year}"
@@ -26,6 +27,8 @@ if __name__ == "__main__":
         level=logging.INFO,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+    Path(path_config).mkdir(parents=True, exist_ok=True)
 
     with open("db/glider-db-prod.txt", "r") as f:
         logger.info("Creating database connection")

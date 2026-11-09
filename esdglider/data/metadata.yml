@@ -41,5 +41,6 @@ references: 'https://swfsc.github.io/glider-lab-manual/, https://github.com/c-pr
 sea_name: <sea name>
 source: Observational data from a profiling glider
 summary: <summary>
+start_date: <start date>
 transmission_system: IRIDIUM
 wmo_id: ' '
