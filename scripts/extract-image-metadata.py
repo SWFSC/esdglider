@@ -1,5 +1,22 @@
-# This script was written by Gemini, and adapted by Sam Woodman
- 
+"""Extract metadata for images in a configured glider deployment.
+
+When run as a script, reads JPEG and PNG images from the imagery-input bucket
+at ``{year}/{deployment_name}/images/``. Logs questionable image paths and
+filename lengths, extracts deployment-level metadata from the first image,
+and extracts per-image metadata in parallel.
+
+Writes two files to the imagery-metadata bucket at
+``{year}/{deployment_name}/``:
+
+* ``{deployment_name}-deployment-metadata.json``
+* ``{deployment_name}-image-metadata.jsonl``
+
+Writes a run log to the logs bucket at
+``{deployment_name}-image-metadata-extraction.log``. Metadata extraction is
+skipped if either output file already exists. Bucket names are configured
+below or in ``esdglider.defaults``.
+"""
+
 import json
 import logging
 import os
@@ -12,8 +29,7 @@ from esdglider import defaults, gcp, imagery, paths, utils
 
 logger = logging.getLogger(__name__)
 
-
-deployment_name = "chovy-20261005"
+deployment_name = "calanus-20261007"
 run_pipeline_bool = True
 
 home = Path.home()
@@ -30,36 +46,36 @@ imagery_meta_path = mnt_path / imagery_meta_bucket_name
 log_file_name = f"{deployment_name}-image-metadata-extraction.log"
 # num_cores = os.cpu_count()  # Uses all available cores
 # INPUT_DIR = Path("./images")
-    
+
 
 def run_pipeline(
-    files: list[Path], 
-    deployment_name: str, 
-    depl_meta_file: Path, 
-    img_meta_file: Path, 
-    num_cores: int | None = None
+    files: list[Path],
+    deployment_name: str,
+    depl_meta_file: Path,
+    img_meta_file: Path,
+    num_cores: int | None = None,
 ):
-    """
-    Runs pipeline to generate the deployment-level and image-specific
-    metadata files. 
+    """Generate deployment-level and image-specific metadata files.
 
-    Parameters
-    ----------
-    files : list
-        list of image file paths
-    deployment_name : str
-        name of the deployment
-    depl_meta_file : str
-        Path object of the deployment-level metadata file
-    img_meta_file : str
-        Path object of the image-level metadata file    
-    num_cores : int | None
-        Number of cores to use for extracing image datetime from metadata
-        If None, uses all available cores (i.e., os.cpu_count())
+    The deployment-level metadata is extracted from the first image in
+    ``files``. Per-image metadata is then extracted in parallel and written
+    as newline-delimited JSON.
 
-    Returns
-    -------
-    Nothing
+    Args:
+        files: Image file paths. Must contain at least one path.
+        deployment_name: Name of the deployment.
+        depl_meta_file: Output path for deployment-level metadata.
+        img_meta_file: Output path for per-image metadata.
+        num_cores: Number of worker processes. If ``None``, use the value
+            returned by ``os.cpu_count()``.
+
+    Returns:
+        None.
+
+    Raises:
+        IndexError: If ``files`` is empty.
+        OSError: If an output file or its parent directory cannot be opened
+            or created.
     """
 
     if num_cores is None:
@@ -67,7 +83,7 @@ def run_pipeline(
 
     if depl_meta_file.is_file():
         logger.error(f"depl_meta_file file ({depl_meta_file}) already exists")
-        return  
+        return
 
     if img_meta_file.is_file():
         logger.error(f"img_meta_file file ({img_meta_file}) already exists")
@@ -81,23 +97,23 @@ def run_pipeline(
         json.dump(depl_metadata, f, indent=4)
     logger.info("Completed deployment-level metadata")
 
-    # Generate Index via Multiprocessing
+    # Generate index via multiprocessing.
     logger.info("Extracting image-level metadata, and writing to %s", img_meta_file)
     img_meta_file.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Using %s cores", num_cores)
     with img_meta_file.open("a", encoding="utf-8") as f:  # noqa: SIM117
         with ProcessPoolExecutor(max_workers=num_cores) as executor:
             for result in tqdm(
-                executor.map(imagery.extract_image_metadata, files), 
-                total=len(files), 
-                unit="images", 
+                executor.map(imagery.extract_image_metadata, files),
+                total=len(files),
+                unit="images",
             ):
                 f.write(json.dumps(result) + "\n")
     logger.info("Completed image-level metadata")
 
 
 if __name__ == "__main__":
-    gcp.gcs_mount_bucket(logs_bucket_name, logs_path, ro=False)        
+    gcp.gcs_mount_bucket(logs_bucket_name, logs_path, ro=False)
     logging.basicConfig(
         filename=logs_path / log_file_name,
         filemode="w",
@@ -107,30 +123,31 @@ if __name__ == "__main__":
     )
     print(f"Writing logs to {logs_path / log_file_name}")
     logger.info(
-        "Starting image metadata extraction for deployment %s, via script %s", 
+        "Starting image metadata extraction for deployment %s, via script %s",
         deployment_name,
-        __file__
+        __file__,
     )
 
-    ### Mount bucket, and get paths
+    # Mount buckets and get paths.
     gcp.gcs_mount_bucket(imagery_in_bucket_name, imagery_in_path, ro=True)
     gcp.gcs_mount_bucket(imagery_meta_bucket_name, imagery_meta_path, ro=False)
 
     img_paths = paths.get_path_imagery(
-        deployment_name=deployment_name, 
-        imagery_in_path=imagery_in_path, 
-        imagery_meta_path=imagery_meta_path, 
-        data_out_path="", 
+        deployment_name=deployment_name,
+        imagery_in_path=imagery_in_path,
+        imagery_meta_path=imagery_meta_path,
+        data_out_path="",
     )
 
-    ### Generate file list
+    # Generate file list.
     # Supports both cases and png extensions
-    extensions = {'.jpg', '.jpeg', '.png'}
-    
+    extensions = {".jpg", ".jpeg", ".png"}
+
     # Gather all files that match the extension set
     logger.info("Getting all file paths")
     files = [
-        p for p in Path(img_paths["imagedir"]).rglob('*') 
+        p
+        for p in Path(img_paths["imagedir"]).rglob("*")
         if p.suffix.lower() in extensions
     ]
     if not files:
@@ -140,12 +157,12 @@ if __name__ == "__main__":
 
         # Check method 1 - substring
         logger.info("Checking for any questionable paths via substring check")
-        sub_check = 'checkpoint'
+        sub_check = "checkpoint"
         file_check = [i for i in files if sub_check in str(i)]
         if file_check:
             logger.warning("The substring '%s' is in the following paths:", sub_check)
-            for f in file_check:
-                logger.warning("path: %s", f)
+            for file_path in file_check:
+                logger.warning("path: %s", file_path)
 
         # Check method 2 - length
         logger.info("Checking for any questionable paths via length check")
@@ -154,17 +171,17 @@ if __name__ == "__main__":
         # tmp_folder = home / "tmp-meta" / deployment_name
         # depl_meta_file = (tmp_folder / Path(img_paths["deplmetapath"]).name)
         # img_meta_file = (tmp_folder / Path(img_paths["imgmetapath"]).name)
-        
+
         depl_meta_file = Path(img_paths["deplmetapath"])
         img_meta_file = Path(img_paths["imgmetapath"])
 
         if run_pipeline_bool:
             run_pipeline(
-                files=files, 
-                deployment_name=deployment_name, 
-                depl_meta_file=depl_meta_file, 
-                img_meta_file=img_meta_file, 
-                num_cores=os.cpu_count(), 
+                files=files,
+                deployment_name=deployment_name,
+                depl_meta_file=depl_meta_file,
+                img_meta_file=img_meta_file,
+                num_cores=os.cpu_count(),
             )
         logger.info("There are %s files", len(files))
 
