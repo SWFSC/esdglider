@@ -34,10 +34,18 @@ configuration file which lives in the cloud created by Sam, not the shared deplo
 
 1. Use a Linux environment with `gcsfuse` available for the file-generation
    stages. For the lab-managed workstation setup, see the
-   [workstation guide](https://github.com/SWFSC/glider-lab/blob/main/gcs-scripts/linux-workstation-ml-dag.md).
+   [workstation guide](https://github.com/SWFSC/glider-lab/blob/main/gcs-scripts/linux-workstation-ml-dag.md):
+   ```sh
+   bash ~/install_gcsfuse.sh
+   ```
 2. Clone this repository and activate a Python environment containing the
    installed local `esdglider` package and its cloud dependencies. Use a checkout
    containing the imagery CLI scripts described here.
+   
+   ```sh
+   cd ~/esdglider && conda activate esdglider
+   ```
+
 3. Configure Google Application Default Credentials. Your identity needs read
    access to imagery and write access to metadata for the file-generation
    stages. DAG preview needs read/list access to the metadata and output
@@ -56,15 +64,19 @@ into a file such as `~/calanus-imagery.yaml`:
 
 ```yaml
 deployment_name: calanus-20261007
-directory_chunk_size: 50
 
 dag:
   model_type: andy-6d-v1-detector-model
-  yaml_config_path: gs://ggn-nmfs-osi-dev-1-data/SWFSC/sam/viame-custom-pipeline-viamecsv-uploadno.yaml
 ```
+This file is your configuration file which will tell the program what model you want to run and on which data.
+For a more complicated example, see the
+[expanded deployment configuration example](#expanded-deployment-configuration-example).
+
+- `deployment_name` is simply the folder name for the deployment ([example from bucket land](https://console.cloud.google.com/storage/browser/swfscesd-glider-imagery-data-in/2026/amlr08-20260321)).
+- `model_type` must be a model which is already migrated to the DAG. For a list of migrated models, see [this JSON in the cloud](https://console.cloud.google.com/storage/browser/_details/ggn-nmfs-osi-dev-1-data/configs/model_runtime_definitions.json). To migrate a model yourself, follow the instructions in [this Google Doc](https://docs.google.com/document/d/12fqDmZUKytkDYhLj-7FLqf-RxoFs1BMrfv8ihtv5Zlc/edit?tab=t.0#heading=h.bka726cftr42).
 
 Keep the same configuration for all stages.
-The YAML configures these workstation commands; `dag.yaml_config_path` points
+The YAML you save here configures these workstation commands; `dag.yaml_config_path` points
 to the separate container pipeline configuration used by the remote DAG (not this YAML).
 
 ### Optional settings and precedence
@@ -82,8 +94,8 @@ Use `--help` on each script for its available options.
 | `imagery_bucket` | `swfscesd-glider-imagery-data-in` |
 | `metadata_bucket` | `swfscesd-glider-imagery-metadata` |
 | `dag.output_bucket` | `ggn-nmfs-osi-dev-1-data` |
-| `dag.model_type` | `andy-6d-v1-detector-model` |
-| `dag.yaml_config_path` | Existing VIAME CSV pipeline YAML, as shown above. |
+| `dag.model_type` | No default; required for the runner and DAG command, using YAML or `--model-type`. |
+| `dag.yaml_config_path` | Defaults to `gs://ggn-nmfs-osi-dev-1-data/SWFSC/sam/viame-custom-pipeline-viamecsv-uploadno.yaml`; override when your model needs another pipeline YAML. |
 | `dag.composer_url` | Existing OSI Composer Airflow URL; override for another environment. |
 | `dag.dag_id` | `optics-pipeline` |
 
@@ -91,7 +103,12 @@ Unknown keys, invalid types, invalid dates, and nonpositive counts fail before
 cloud operations. Live submission cannot be enabled through YAML: it always
 requires the explicit CLI option `--submit`.
 
-## 2. Run the complete workflow (recommended)
+Select `dag.model_type` deliberately; the model shown in the example is not a
+default. Metadata extraction and manifest generation do not require a model.
+The runner and DAG command require one even for previews. Ensure the pipeline
+YAML at `dag.yaml_config_path` is appropriate for the model you select.
+
+## 2. Run the complete workflow (recommended for new data)
 
 After creating the configuration above, preview the planned paths:
 
@@ -109,6 +126,58 @@ one command:
 ```bash
 python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/calanus-imagery.yaml --submit
 ```
+
+### Confirm submission and monitor progress
+
+Live processing may incur cloud costs. The runner waits for the local stages
+and submission requests, but **does not wait for remote inference to finish**.
+A `Submitted ... as ...` message means Airflow accepted that run, not that the
+images have finished processing.
+
+1. Open the configured Cloud Composer Airflow UI. With the default settings,
+   use the
+   [optics-pipeline DAG page](https://14668048b1ac46eba7798ad8ed19d75a-dot-us-central1.composer.googleusercontent.com/dags/optics-pipeline/grid).
+   Find the run ID printed by the command and inspect its state and task logs.
+   A queued or running state is not completion; check for `success` or investigate
+   failed tasks.
+2. Check the
+   [Batch jobs](https://console.cloud.google.com/batch/jobs?cloudshell=false&project=ggn-nmfs-osi-dev-1)
+   for the underlying processing jobs. A submitted Airflow run may not have
+   created its Batch job yet.
+3. Inspect the
+   [model outputs](https://console.cloud.google.com/storage/browser/ggn-nmfs-osi-dev-1-data/SWFSC/glider).
+   For the first chunk in this example, the requested output location is:
+
+   ```text
+   gs://ggn-nmfs-osi-dev-1-data/SWFSC/glider/calanus-20261007/050dirs/01/
+   ```
+
+These links reflect the default environment; use the corresponding Airflow UI,
+project, and bucket if you override them. The remote DAG and container YAML
+determine the actual result files beneath the output location. Output files
+alone do not prove that the entire run succeeded.
+
+Operational logs and errors go to the terminal's stderr stream, **not the cloud
+logs bucket**. Submission previews are printed to stdout. Zone allocation and
+remote task timeouts remain DAG/runtime configuration concerns.
+
+### What the workflow reads and writes
+
+With the default buckets, source images are read recursively from:
+
+```text
+gs://swfscesd-glider-imagery-data-in/{year}/{deployment_name}/images/
+```
+
+Metadata and manifests are written beneath
+`gs://swfscesd-glider-imagery-metadata/{year}/{deployment_name}/`:
+
+- `{deployment_name}-deployment-metadata.json`
+- `{deployment_name}-image-metadata.jsonl`
+- `osi-manifests-050dirs/{deployment_name}-image-manifest-chunk01.json`, etc.
+
+`050dirs` reflects the configured chunk size of 50 directories, not 50 images.
+The final chunk can contain fewer directories. No source images is an error.
 
 ### Prepare files and preview submissions instead
 
@@ -137,11 +206,50 @@ python ~/esdglider/scripts/trigger-osi-dag.py --config ~/calanus-imagery.yaml --
 - Existing outputs are refused by default. The runner does not silently reuse
   metadata or skip stages; use the individual commands to continue from a
   completed stage.
-- A failed stage stops the runner with a nonzero exit code. Earlier writes or
-  accepted submissions are not rolled back. Inspect outputs and Airflow run
-  states before retrying; see the recovery guidance below.
+- A failed stage stops the runner and reports failure with a nonzero exit code.
+  Earlier writes or accepted submissions are not undone. Inspect outputs and
+  Airflow run states before retrying; see the safeguards below.
 - Do not use `--overwrite` just to progress from a submission preview to live
   submission. Use the individual DAG command instead.
+
+### Existing and partial files (both workflows)
+
+Both file-generation commands refuse existing outputs by default and exit
+nonzero. After inspecting the files, explicitly pass `--overwrite` to replace
+them. Unexpected/stale JSON files in a manifest output directory must be
+archived or removed deliberately before regenerating; `--overwrite` does not
+silently delete old chunks.
+
+The commands stage complete results on local temporary disk before publishing.
+Allow enough temporary disk space for the generated metadata or manifests.
+Copying the final files to a bucket is **not all-or-nothing**: an interrupted
+copy can leave partial files or only some outputs updated. Inspect those
+outputs before recovering with `--overwrite`. Do not run overlapping writers
+for the same deployment.
+
+### Existing DAG runs and submission failures (both workflows)
+
+Before any new submission, the command checks every selected deterministic
+Airflow run ID:
+
+- A matching `success` run is reported as already successful and skipped.
+- A matching active or failed run blocks new submissions. Inspect/recover that
+  run in Airflow rather than creating duplicate work.
+- Output objects without a matching successful run also block new submissions.
+  Their presence alone does not establish completion. This includes outputs
+  from runs launched by the older script without deterministic IDs.
+
+IDs are derived from the manifest location and submitted settings, not the
+current contents of files at those locations. Do not overwrite manifests or
+pipeline YAML and expect the same location to create a fresh run automatically.
+Existing folders are not automatically deleted.
+
+All selected runs are checked before any new runs are submitted. However,
+submitting multiple runs is **not all-or-nothing**: jobs 1–4 could be accepted
+before a connection problem prevents job 5 from being submitted. The command
+stops and reports failure, but jobs 1–4 remain submitted. Retrying the same
+configuration uses the same IDs rather than creating duplicate copies.
+Successful runs skip; active or failed runs require inspection before proceeding.
 
 ## Alternative: run individual stages
 
@@ -205,20 +313,8 @@ The final chunk may contain fewer than 50 directories.
   upload the local manifests; upload them to the expected manifest prefix
   before using the DAG command.
 
-#### Existing and partial files
-
-Both file-generation commands refuse existing outputs by default and exit
-nonzero. After inspecting the files, explicitly pass `--overwrite` to replace
-them. Unexpected/stale JSON files in a manifest output directory must be
-archived or removed deliberately before regenerating; `--overwrite` does not
-silently delete old chunks.
-
-The commands stage complete results on local temporary disk before publishing.
-Allow enough temporary disk space for the generated metadata or manifests.
-The final copies to a bucket mount are **not a transaction**: an interrupted
-publication can leave partial files or only some outputs updated. Inspect those
-outputs before recovering with `--overwrite`. Do not run overlapping writers
-for the same deployment.
+The [existing and partial file safeguards](#existing-and-partial-files-both-workflows)
+apply to these individual commands as well as the runner.
 
 ### Preview DAG submissions
 
@@ -254,40 +350,51 @@ To submit an initial live test:
 python ~/esdglider/scripts/trigger-osi-dag.py --config ~/calanus-imagery.yaml --submit --test-limit 1
 ```
 
-To submit all selected manifests, omit `--test-limit`.
-An accepted API request is a **submission**, not completed inference.
+To submit all selected manifests, omit `--test-limit`. The
+[existing-run and submission safeguards](#existing-dag-runs-and-submission-failures-both-workflows)
+apply here too.
 
-Before any new submission, the command checks every selected deterministic
-Airflow run ID:
+Follow [Confirm submission and monitor progress](#confirm-submission-and-monitor-progress)
+above to verify acceptance, track processing, and inspect outputs. An accepted
+submission is not completed inference.
 
-- A matching `success` run is reported as already successful and skipped.
-- A matching active or failed run blocks new submissions. Inspect/recover that
-  run in Airflow rather than creating duplicate work.
-- Output objects without a matching successful run also block new submissions.
-  Their presence alone does not establish completion. This includes outputs
-  from runs launched by the older script without deterministic IDs.
+## Additional materials
 
-IDs are derived from manifest URI and DAG payload, not the current contents of
-objects at those URIs. Do not overwrite manifests or pipeline YAML and expect
-the same URI to create a fresh run automatically. Existing folders are not automatically deleted.
+### Expanded deployment configuration example
 
-All selected runs are preflighted before posting new ones, but HTTP submissions
-are not transactional: a later request can fail after earlier ones were
-accepted. The command exits nonzero; retrying the same configuration uses the
-same IDs instead of silently creating duplicates.
+The minimal example above is sufficient for the usual workflow. The following
+example shows all supported YAML settings and where they belong. Most values
+shown are defaults; `num_cores: 4` demonstrates an optional override.
+Keep only the settings you need in your own file.
 
-Monitor:
+```yaml
+deployment_name: calanus-20261007
+directory_chunk_size: 50
+mount_root: ~/mnt-gcs
+num_cores: 4
 
-- The configured Cloud Composer Airflow UI, DAG `optics-pipeline` [here](https://14668048b1ac46eba7798ad8ed19d75a-dot-us-central1.composer.googleusercontent.com/dags/optics-pipeline/grid).
-- [Batch jobs](https://console.cloud.google.com/batch/jobs?cloudshell=false&project=ggn-nmfs-osi-dev-1).
-- [Model outputs](https://console.cloud.google.com/storage/browser/ggn-nmfs-osi-dev-1-data/SWFSC/glider).
+# null includes all image directories. To select a subset, use a list:
+# directory_filter: [dir0000004, dir0000005]
+directory_filter: null
 
-For the first example chunk, the requested output prefix is:
+imagery_bucket: swfscesd-glider-imagery-data-in
+metadata_bucket: swfscesd-glider-imagery-metadata
 
-```text
-gs://ggn-nmfs-osi-dev-1-data/SWFSC/glider/calanus-20261007/050dirs/01/
+dag:
+  # Required for the runner and DAG command; there is no default model.
+  model_type: andy-6d-v1-detector-model
+  yaml_config_path: gs://ggn-nmfs-osi-dev-1-data/SWFSC/sam/viame-custom-pipeline-viamecsv-uploadno.yaml
+  output_bucket: ggn-nmfs-osi-dev-1-data
+  composer_url: https://14668048b1ac46eba7798ad8ed19d75a-dot-us-central1.composer.googleusercontent.com
+  dag_id: optics-pipeline
 ```
 
-The remote DAG and container YAML determine the actual result files beneath
-that location. Zone allocation and remote task timeouts remain DAG/runtime
-configuration concerns.
+Choose the model deliberately and check that its pipeline YAML is appropriate.
+Directory names in a filter must exist in the image metadata; the names above
+are illustrative.
+
+Safety and execution controls remain command-line options, not YAML settings:
+`--dry-run`, `--submit`, `--overwrite`, and `--test-limit`. Local manifest
+output is selected with `--output-directory` on the individual manifest command.
+See [Optional settings and precedence](#optional-settings-and-precedence)
+for how YAML and command-line overrides interact.
