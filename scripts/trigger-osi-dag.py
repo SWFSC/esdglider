@@ -1,205 +1,225 @@
-"""Trigger an OSI Airflow DAG for unprocessed image-manifest files.
+"""Preview or submit OSI DAG runs using shared deployment YAML settings.
 
-When run as a script, lists manifest JSON files in the configured input folder
-of a Google Cloud Storage bucket and checks the output bucket for folders
-corresponding to completed runs. It skips manifests with matching output
-folders, optionally limits the remaining files for testing, and submits each
-one to the configured Cloud Composer DAG with its model, output, and YAML
-configuration parameters. Set ``DRY_RUN`` to ``True`` to print the
-configurations without triggering DAG runs.
+Lists manifest JSON files and output objects in Cloud Storage. Preview is the
+default and performs no submissions or writes. --submit explicitly enables
+live requests. Output folders use manifest chunk numbers, not list positions.
+Deterministic Airflow run IDs prevent identical submissions from being
+silently repeated. Successful existing runs are reported separately from
+unfinished or failed runs; output objects alone never establish success.
 """
 
-import os
+from dataclasses import dataclass
+import hashlib
+import json
+import logging
+from pathlib import PurePosixPath
+import re
+from typing import TYPE_CHECKING, TypedDict
 
-import google.auth
-import google.auth.transport.requests
-import requests
-from google.cloud import storage
+from esdglider import imagery_cli
 
-# --- Configuration ---
-COMPOSER_URL = (
-    "https://14668048b1ac46eba7798ad8ed19d75a-"
-    "dot-us-central1.composer.googleusercontent.com"
-)
-DAG_ID = "optics-pipeline"
-JSON_BUCKET_NAME = "swfscesd-glider-imagery-metadata"
-OUTPUT_BUCKET_NAME = "ggn-nmfs-osi-dev-1-data"
+if TYPE_CHECKING:
+    import requests
 
-# GCS Paths
-DEPLOYMENT_NAME = "calanus-20261007"
-DEPLOYMENT_YEAR = DEPLOYMENT_NAME.rsplit("-", maxsplit=1)[-1][:4]
-DIRECTORY_CHUNK_SIZE = 50
-CHUNK_DIRECTORY = f"{DIRECTORY_CHUNK_SIZE:03d}dirs"
-JSON_FOLDER_PATH = (
-    f"{DEPLOYMENT_YEAR}/{DEPLOYMENT_NAME}/osi-manifests-{CHUNK_DIRECTORY}"
-)
-OUTPUT_FOLDER_PATH = f"SWFSC/glider/{DEPLOYMENT_NAME}/{CHUNK_DIRECTORY}"
-
-# --- DAG Run Parameters ---
-MODEL_TYPE = "andy-6d-v1-detector-model"
-YAML_CONFIG_PATH = (
-    "gs://ggn-nmfs-osi-dev-1-data/"
-    "SWFSC/sam/viame-custom-pipeline-viamecsv-uploadno.yaml"
-)
-# YAML_CONFIG_PATH = (
-#     "gs://ggn-nmfs-osi-dev-1-data/"
-#     "SWFSC/sam/viame-custom-pipeline-coco-uploadno.yaml"
-# )
-
-# --- Testing ---
-# Set to a number to limit test runs (e.g., 2), or None to process all files.
-TEST_LIMIT = None
-DRY_RUN = False
+logger = logging.getLogger(__name__)
 
 
-def get_access_token():
-    """Fetch an OAuth 2.0 access token for Google Cloud.
+class DagConf(TypedDict):
+    """Container parameters accepted by the existing optics-pipeline DAG."""
+
+    input_file: str
+    model_type: str
+    output_bucket: str
+    output_folder: str
+    yaml_config_path: str
+
+
+@dataclass(frozen=True)
+class RunPlan:
+    """A stable Airflow run ID and its unchanged model parameter payload.
+
+    Attributes:
+        dag_run_id: Deterministic ID derived from the complete configuration.
+        conf: Parameters passed to the remote DAG.
+    """
+
+    dag_run_id: str
+    conf: DagConf
+
+
+def build_plans(
+    names: list[str], config: imagery_cli.ImageryConfig,
+) -> list[RunPlan]:
+    """Map manifest names to stable numbered outputs and DAG run IDs.
+
+    Args:
+        names: Manifest object names returned by Cloud Storage.
+        config: Validated effective configuration.
 
     Returns:
-        str: The refreshed access token.
+        Plans sorted by numeric manifest chunk number.
 
     Raises:
-        google.auth.exceptions.DefaultCredentialsError: If application
-            default credentials cannot be obtained.
-        google.auth.exceptions.RefreshError: If the credentials cannot be
-            refreshed.
+        ValueError: If manifests are absent, misnamed, or have duplicate chunks.
     """
-    credentials, _ = google.auth.default(
-        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    pattern = re.compile(
+        re.escape(config.deployment_name) + r"-image-manifest-chunk(\d+)\.json"
     )
-    auth_req = google.auth.transport.requests.Request()
-    credentials.refresh(auth_req)
-    return credentials.token
-
-
-def main():
-    """Find unprocessed manifests and trigger the configured Airflow DAG.
-
-    The function reads input and output folder information from Google Cloud
-    Storage, then submits a DAG run for each eligible manifest unless
-    ``DRY_RUN`` is enabled.
-
-    Returns:
-        None.
-
-    Raises:
-        google.auth.exceptions.DefaultCredentialsError: If application
-            default credentials cannot be obtained.
-        google.auth.exceptions.RefreshError: If the credentials cannot be
-            refreshed.
-        google.cloud.exceptions.GoogleCloudError: If a Cloud Storage
-            operation fails.
-        requests.exceptions.RequestException: If a DAG trigger request fails
-            at the transport level.
-    """
-    print("Obtaining access token...")
-    token = get_access_token()
-
-    # Connect to GCS bucket
-    storage_client = storage.Client()
-    json_bucket = storage_client.bucket(JSON_BUCKET_NAME)
-    output_bucket = storage_client.bucket(OUTPUT_BUCKET_NAME)
-
-    # 1. Retrieve existing folder names in the output directory
-    print("Fetching existing output folders to exclude...")
-    output_blobs = output_bucket.list_blobs(
-        prefix=OUTPUT_FOLDER_PATH,
-        delimiter="/",
-    )
-
-    existing_output_folders = set()
-    for page in output_blobs.pages:
-        for prefix in page.prefixes:
-            folder_name = prefix[len(OUTPUT_FOLDER_PATH) :].rstrip("/")
-            if folder_name:
-                existing_output_folders.add(folder_name)
-
-    print(f"Found {len(existing_output_folders)} existing output folder(s).")
-
-    # 2. Fetch JSON input files
-    blobs = json_bucket.list_blobs(prefix=JSON_FOLDER_PATH)
-    json_blobs = [
-        blob
-        for blob in blobs
-        if blob.name.endswith(".json") and not blob.name.endswith("/")
-    ]
-    print(f"Found {len(json_blobs)} total JSON configuration files in GCS.")
-
-    # 3. Filter out files whose base name matches an existing folder in output
-    filtered_json_blobs = []
-    skipped_count = 0
-
-    for blob in json_blobs:
-        file_name = os.path.basename(blob.name)
-        base_name, _ = os.path.splitext(file_name)
-
-        if base_name in existing_output_folders:
-            skipped_count += 1
-        else:
-            filtered_json_blobs.append(blob)
-
-    print(
-        f"Filtered out {skipped_count} existing run(s). "
-        f"{len(filtered_json_blobs)} remaining to process."
-    )
-
-    # --- Apply Test Limit ---
-    if TEST_LIMIT is not None:
-        filtered_json_blobs = filtered_json_blobs[:TEST_LIMIT]
-        print(
-            "\n--- TEST MODE ACTIVE: Only processing the first "
-            f"{len(filtered_json_blobs)} file(s) ---\n"
-        )
-    else:
-        print("\n")
-
-    # REST API setup
-    url = f"{COMPOSER_URL}/api/v1/dags/{DAG_ID}/dagRuns"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
-
-    # Iterate through each remaining JSON file and trigger DAG
-    for i, blob in enumerate(filtered_json_blobs, 1):
-        file_name = os.path.basename(blob.name)
-
-        # --- Generate the Wrapper Configuration dynamically ---
-        input_file_uri = f"gs://{JSON_BUCKET_NAME}/{blob.name}"
-
-        dag_conf = {
-            "input_file": input_file_uri,
-            "model_type": MODEL_TYPE,
-            "output_bucket": OUTPUT_BUCKET_NAME,
-            "output_folder": f"{OUTPUT_FOLDER_PATH}/{i:02d}",
-            "yaml_config_path": YAML_CONFIG_PATH,
+    chunks = {}
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        match = pattern.fullmatch(PurePosixPath(name).name)
+        if (
+            not match or not name.startswith(config.manifest_prefix)
+            or "/" in name[len(config.manifest_prefix):]
+        ):
+            raise ValueError(f"Unexpected manifest name: {name}")
+        chunk = int(match[1])
+        if chunk < 1 or chunk in chunks:
+            raise ValueError(f"Invalid or duplicate manifest chunk: {name}")
+        chunks[chunk] = name
+    if not chunks:
+        raise ValueError(f"No manifests found under {config.manifest_prefix}")
+    plans = []
+    for chunk, name in sorted(chunks.items()):
+        conf: DagConf = {
+            "input_file": f"gs://{config.metadata_bucket}/{name}",
+            "model_type": config.model_type,
+            "output_bucket": config.output_bucket,
+            "output_folder": f"{config.output_prefix}/{chunk:02d}",
+            "yaml_config_path": config.yaml_config_path,
         }
+        digest = hashlib.sha256(
+            json.dumps(conf, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        plans.append(RunPlan(f"osi-{digest}", conf))
+    return plans
 
-        if not DRY_RUN:
-            # Payload structure expected by Airflow REST API
-            payload = {"conf": dag_conf}
-            res = requests.post(url, json=payload, headers=headers)
 
-            if res.status_code in (200, 201):
-                print(
-                    f"[{i}/{len(filtered_json_blobs)}] Successfully triggered "
-                    f"run for {file_name}"
-                )
-            else:
-                print(
-                    f"[{i}/{len(filtered_json_blobs)}] Failed to trigger "
-                    f"{file_name}: {res.status_code} - {res.text}"
-                )
+def submit_plans(
+    plans: list[RunPlan],
+    existing_outputs: set[str],
+    config: imagery_cli.ImageryConfig,
+    session: "requests.Session",
+) -> None:
+    """Preflight all runs, then submit only new, unambiguous work.
 
-        else:
-            print(
-                f"[{i}/{len(filtered_json_blobs)}] DRY RUN: "
-                f"Skipping trigger for {file_name}"
+    Args:
+        plans: Selected manifest submissions.
+        existing_outputs: Output folders already containing objects.
+        config: Validated DAG settings.
+        session: Authenticated HTTP session with refreshing credentials.
+
+    Raises:
+        RuntimeError: If an existing run is unfinished or failed.
+        FileExistsError: If outputs exist without a matching successful run.
+        requests.exceptions.RequestException: If an API request fails.
+    """
+    url = (
+        f"{config.composer_url.rstrip('/')}/api/v1/dags/"
+        f"{config.dag_id}/dagRuns"
+    )
+    pending = []
+    for plan in plans:
+        response = session.get(f"{url}/{plan.dag_run_id}", timeout=60)
+        if response.status_code == 200:
+            state = response.json().get("state")
+            if state == "success":
+                logger.info("Already successful: %s", plan.conf["input_file"])
+                continue
+            raise RuntimeError(
+                f"Run {plan.dag_run_id} already exists with state {state!r}; "
+                "inspect/recover it in Airflow rather than resubmitting."
             )
-            print("Would post the following payload configuration -----")
-            for k, v in dag_conf.items():
-                print(f"{k}: {v}")
-            print("End of payload configuration -----\n")
+        if response.status_code != 404:
+            response.raise_for_status()
+            raise RuntimeError(
+                f"Unexpected Airflow response: {response.status_code}"
+            )
+        if plan.conf["output_folder"] in existing_outputs:
+            raise FileExistsError(
+                f"Output objects exist at {plan.conf['output_folder']}; "
+                "inspect their run history before submitting."
+            )
+        pending.append(plan)
+    for plan in pending:
+        response = session.post(
+            url, json={"dag_run_id": plan.dag_run_id, "conf": plan.conf},
+            timeout=60,
+        )
+        response.raise_for_status()
+        if response.status_code not in (200, 201):
+            raise RuntimeError(
+                f"Unexpected Airflow response: {response.status_code}"
+            )
+        logger.info(
+            "Submitted %s as %s (not yet completed)",
+            plan.conf["input_file"], plan.dag_run_id,
+        )
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Preview selected manifests or explicitly submit live DAG runs.
+
+    Args:
+        argv: Optional arguments; defaults to the process command line.
+
+    Raises:
+        ValueError: If settings or manifest names are invalid.
+        OSError: If configuration cannot be read.
+        RuntimeError: If a run is blocked or submission fails.
+    """
+    parser = imagery_cli.create_parser("dag", __doc__)
+    args = parser.parse_args(argv)
+    config = imagery_cli.load_config(args)
+    imagery_cli.configure_logging()
+    from google.cloud import storage
+
+    client = storage.Client()
+    names = [
+        blob.name for blob in client.bucket(config.metadata_bucket).list_blobs(
+            prefix=config.manifest_prefix,
+        )
+    ]
+    plans = build_plans(names, config)
+    if args.test_limit is not None:
+        plans = plans[:args.test_limit]
+    output_bucket = client.bucket(config.output_bucket)
+    existing_outputs = {
+        plan.conf["output_folder"] for plan in plans
+        if next(iter(output_bucket.list_blobs(
+            prefix=plan.conf["output_folder"] + "/", max_results=1,
+        )), None) is not None
+    }
+    if not args.submit:
+        for plan in plans:
+            print(json.dumps({
+                "dag_run_id": plan.dag_run_id,
+                "conf": plan.conf,
+                "existing_output_objects": (
+                    plan.conf["output_folder"] in existing_outputs
+                ),
+            }))
+        logger.info(
+            "Previewed %d runs; no submissions. Airflow states not checked.",
+            len(plans),
+        )
+        if existing_outputs:
+            logger.warning(
+                "Existing output objects require inspection; they do not "
+                "prove successful processing."
+            )
+        return
+    import google.auth
+    from google.auth.transport.requests import AuthorizedSession
+
+    credentials, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+    with AuthorizedSession(credentials) as session:
+        submit_plans(plans, existing_outputs, config, session)
+
 
 if __name__ == "__main__":
     main()

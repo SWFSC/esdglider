@@ -1,111 +1,97 @@
-"""Generate chunked Open Sensor Imaging manifests for a glider deployment.
+"""Generate OSI manifest JSON files from deployment image metadata.
 
-When run as a script, resolves the configured deployment's imagery paths and
-mounts the imagery-metadata bucket read-write. Reads image metadata
-JSONL file to discover unique image directories, optionally filters those
-directories, and writes one OSI manifest JSON file per chunk. By default,
-manifests are written beneath the deployment's metadata directory; setting
-``use_tmp_dir`` writes them to a local temporary directory instead and prints
-a suggested ``gcloud storage cp`` command.
+Reads the image-metadata JSONL file in the metadata bucket. Writes manifests
+under {year}/{deployment}/osi-manifests-{chunk_size:03d}dirs/, or to an explicit
+local --output-directory. --dry-run prints paths without mounting or writing.
+Existing manifests require --overwrite. All chunks are staged locally before
+publication; a failed publication can leave partial outputs.
 """
 
+import json
 import logging
 from pathlib import Path
+import tempfile
 
-from esdglider import defaults, gcp, imagery, paths, utils
+from esdglider import imagery_cli
 
-logger = logging.getLogger(__name__)
 
-deployment_name = "chovy-20261005"  # Deployment name
-dir_chunk_size = 50  # Number of directories per JSON file
+def main(argv: list[str] | None = None) -> None:
+    """Parse shared settings and generate one manifest per directory chunk.
 
-# List of directories to include; set to None to include all.
-# For example: ["dir0000004"]
-dir_filter = None
+    Args:
+        argv: Optional arguments; defaults to the process command line.
 
-home = Path.home()
-# mnt_path = home / "mnt-gcs"
-
-use_tmp_dir = False
-
-# imagery_in_bucket_name = "swfscesd-glider-imagery-data-in"
-# imagery_in_path = mnt_path / imagery_in_bucket_name
-# imagery_meta_bucket_name = "swfscesd-glider-imagery-metadata"
-# imagery_meta_path = mnt_path / imagery_meta_bucket_name
-
-# -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    logging.basicConfig(
-        format=(
-            "%(name)s:%(asctime)s:%(levelname)s:%(message)s "
-            "[line %(lineno)d]"
-        ),
-        level=logging.INFO,
-        datefmt="%Y-%m-%d %H:%M:%S",
+    Raises:
+        ValueError: If configuration or the directory selection is invalid.
+        OSError: If metadata cannot be read or manifests cannot be written.
+        FileExistsError: If outputs exist without --overwrite.
+    """
+    parser = imagery_cli.create_parser("manifests", __doc__)
+    args = parser.parse_args(argv)
+    config = imagery_cli.load_config(args)
+    imagery_cli.configure_logging()
+    image_paths = config.image_paths()
+    output_directory = (
+        args.output_directory.expanduser().resolve()
+        if args.output_directory is not None
+        else config.mount_root / config.metadata_bucket / config.manifest_prefix
     )
-    logging.captureWarnings(True)
-
-    img_paths = paths.get_path_imagery(
-        deployment_name=deployment_name,
-        home_path=home,
+    if args.dry_run:
+        print(json.dumps({
+            "input": image_paths["imgmetapath"],
+            "output_directory": str(output_directory),
+            "directory_chunk_size": config.directory_chunk_size,
+        }, indent=2))
+        return
+    imagery_cli.mount_bucket(
+        config, config.metadata_bucket,
+        read_only=args.output_directory is not None,
     )
-    gcp.gcs_mount_bucket(
-        defaults.BUCKET_IMAGERY_META,
-        img_paths["imagery_meta_path"],
-        ro=False,
+    from esdglider import imagery
+
+    directories = imagery.get_unique_directories(image_paths["imgmetapath"])
+    if config.directory_filter is not None:
+        missing = set(config.directory_filter) - set(directories)
+        if missing:
+            raise ValueError(f"Unknown image directories: {sorted(missing)}")
+        directories = [
+            item for item in directories if item in config.directory_filter
+        ]
+    if not directories:
+        raise ValueError("No image directories found in metadata.")
+    chunks = [
+        directories[start:start + config.directory_chunk_size]
+        for start in range(0, len(directories), config.directory_chunk_size)
+    ]
+    outputs = [
+        output_directory
+        / f"{config.deployment_name}-image-manifest-chunk{number:02d}.json"
+        for number in range(1, len(chunks) + 1)
+    ]
+    stale_outputs = set(output_directory.glob("*.json")) - set(outputs)
+    if stale_outputs:
+        raise FileExistsError(
+            "Unexpected or stale manifests exist; archive them before "
+            f"regenerating: {sorted(map(str, stale_outputs))}"
+        )
+    imagery_cli.check_outputs(outputs, overwrite=args.overwrite)
+    base_uri = (
+        f"gs://{config.imagery_bucket}/{config.year}/"
+        f"{config.deployment_name}/images"
     )
-
-    if not use_tmp_dir:
-        output_path_pre = (
-            Path(img_paths["metadir"])
-            / f"osi-manifests-{dir_chunk_size:03d}dirs"
-        )
-    else:
-        output_path_pre = Path(
-            f"/home/user/tmp-meta/{deployment_name}/"
-            f"osi-manifests-{dir_chunk_size:03d}dirs"
-        )
-    output_path_pre.mkdir(parents=True, exist_ok=True)
-
-    unique_dirs = imagery.get_unique_directories(img_paths["imgmetapath"])
-    if dir_filter is not None:
-        unique_dirs = [d for d in unique_dirs if d in dir_filter]
-
-    # Chunk directories into manageable sizes for processing
-    total_dirs = len(unique_dirs)
-    for chunk_start in range(0, total_dirs, dir_chunk_size):
-        chunk = unique_dirs[chunk_start : chunk_start + dir_chunk_size]
-        chunk_num = (chunk_start // dir_chunk_size) + 1
-        output_filepath = output_path_pre / (
-            f"{deployment_name}-image-manifest-chunk{chunk_num:02d}.json"
-        )
-        logger.info(
-            "First / last directory in chunk %d: %s / %s",
-            chunk_num,
-            chunk[0],
-            chunk[-1],
-        )
-        logger.info("Writing chunk to %s", output_filepath)
-        logger.debug("Chunk %d directories: %s", chunk_num, chunk)
-
-        # Build the Cloud Storage URI used in the manifest.
-        bucket_name = defaults.BUCKET_IMAGERY_IN
-        year = utils.get_path_year(deployment_name)
-        base_uri = f"gs://{bucket_name}/{year}/{deployment_name}/images"
-        imagery.generate_osi_manifest(
-            jsonl_filepath=img_paths["imgmetapath"],
-            output_filepath=output_filepath,
-            target_dirs=chunk,
-            base_uri=base_uri,
-            log_interval=100000,
-        )
-
-        if use_tmp_dir:
-            print(
-                "Command to run to copy from temp directory to bucket, "
-                "if necessary:\n"
-                f"gcloud storage cp -r {output_path_pre} "
-                f"gs://{defaults.BUCKET_IMAGERY_META}/"
-                f"{utils.get_path_year(deployment_name)}/{deployment_name}/"
+    with tempfile.TemporaryDirectory(prefix="osi-manifests-") as directory:
+        for chunk, output in zip(chunks, outputs):
+            imagery.generate_osi_manifest(
+                jsonl_filepath=image_paths["imgmetapath"],
+                output_filepath=Path(directory) / output.name,
+                target_dirs=chunk, base_uri=base_uri, log_interval=100000,
             )
-        
+        for output in outputs:
+            imagery_cli.publish_file(
+                Path(directory) / output.name, output, overwrite=args.overwrite,
+            )
+    logging.info("Generated %d manifests", len(outputs))
+
+
+if __name__ == "__main__":
+    main()
