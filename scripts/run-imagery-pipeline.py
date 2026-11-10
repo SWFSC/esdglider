@@ -36,6 +36,8 @@ def run_pipeline(
         subprocess.CalledProcessError: If any stage fails.
         OSError: If a stage process cannot be started.
     """
+    if not config.model_type:
+        raise ValueError("Choose a model explicitly before running the pipeline.")
     common = []
     for key in (
         "deployment_name", "directory_chunk_size", "mount_root",

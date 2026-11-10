@@ -47,6 +47,38 @@ PIPELINE = load_script("run-imagery-pipeline")
 class ConfigTests(unittest.TestCase):
     """Check defaults, shared YAML, overrides, and early validation."""
 
+    def test_explicit_model_required_only_for_dag_stages(self):
+        """Missing models block DAG stages, including path-only previews."""
+        for stage in ("dag", "pipeline"):
+            parser = imagery_cli.create_parser(stage, "test")
+            for mode in ([], ["--dry-run"], ["--submit"]):
+                args = parser.parse_args([
+                    "--deployment-name", "calanus-20261007", *mode,
+                ])
+                with self.assertRaisesRegex(ValueError, "Choose a model"):
+                    imagery_cli.load_config(args)
+            for model in ("", " ", "invalid/model"):
+                args = parser.parse_args([
+                    "--deployment-name", "calanus-20261007",
+                    "--model-type", model,
+                ])
+                with self.assertRaises(ValueError):
+                    imagery_cli.load_config(args)
+        for stage in ("metadata", "manifests"):
+            config = self.parse(
+                stage, "--deployment-name", "calanus-20261007",
+            )
+            self.assertEqual(config.model_type, "")
+
+    def test_missing_model_starts_no_pipeline_stages(self):
+        """A missing model fails before metadata can be written."""
+        with patch.object(PIPELINE.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "Choose a model"):
+                PIPELINE.main([
+                    "--deployment-name", "calanus-20261007", "--submit",
+                ])
+            run.assert_not_called()
+
     def parse(self, stage="dag", *options):
         """Return effective settings for a stage and CLI options."""
         parser = imagery_cli.create_parser(stage, "test")
@@ -274,7 +306,10 @@ class PipelineTests(unittest.TestCase):
     def test_default_prepares_files_but_previews_submission(self):
         """Default runs the writing stages but explicitly previews the DAG."""
         with patch.object(PIPELINE.subprocess, "run") as run:
-            PIPELINE.main(["--deployment-name", "calanus-20261007"])
+            PIPELINE.main([
+                "--deployment-name", "calanus-20261007",
+                "--model-type", "test-model",
+            ])
         commands = [call.args[0] for call in run.call_args_list]
         self.assertEqual(len(commands), 3)
         for command in commands[:2]:
@@ -290,6 +325,7 @@ class PipelineTests(unittest.TestCase):
                 with redirect_stdout(io.StringIO()) as output:
                     PIPELINE.main([
                         "--deployment-name", "calanus-20261007", "--dry-run",
+                        "--model-type", "test-model",
                     ])
         run.assert_not_called()
         mount.assert_not_called()
@@ -311,6 +347,7 @@ class PipelineTests(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     PIPELINE.main([
                         "--deployment-name", "calanus-20261007", "--submit",
+                        "--model-type", "test-model",
                     ])
                 self.assertEqual(run.call_count, failure_index + 1)
 
@@ -347,7 +384,10 @@ class PipelineTests(unittest.TestCase):
         with (
             patch.object(
                 sys, "argv",
-                [script, "--deployment-name", "calanus-20261007"],
+                [
+                    script, "--deployment-name", "calanus-20261007",
+                    "--model-type", "test-model",
+                ],
             ),
             patch(
                 "subprocess.run",
@@ -477,7 +517,9 @@ class DagTests(unittest.TestCase):
 
     def setUp(self):
         """Create a config and two nonconsecutive manifest plans."""
-        self.config = imagery_cli.ImageryConfig("calanus-20261007")
+        self.config = imagery_cli.ImageryConfig(
+            "calanus-20261007", model_type="test-model",
+        )
         self.names = [
             self.config.manifest_prefix
             + f"calanus-20261007-image-manifest-chunk{chunk:02d}.json"
@@ -519,6 +561,7 @@ class DagTests(unittest.TestCase):
                     with redirect_stdout(io.StringIO()) as output:
                         DAG.main([
                             "--deployment-name", self.config.deployment_name,
+                            "--model-type", self.config.model_type,
                             *options,
                         ])
                     submit.assert_not_called()

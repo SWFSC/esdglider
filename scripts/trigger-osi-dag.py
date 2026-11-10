@@ -62,6 +62,8 @@ def build_plans(
     Raises:
         ValueError: If manifests are absent, misnamed, or have duplicate chunks.
     """
+    if not config.model_type:
+        raise ValueError("Choose a model explicitly before planning DAG runs.")
     pattern = re.compile(
         re.escape(config.deployment_name) + r"-image-manifest-chunk(\d+)\.json"
     )

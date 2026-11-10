@@ -30,7 +30,7 @@ class ImageryConfig:
         metadata_bucket: Bucket containing metadata and manifests.
         composer_url: HTTPS Airflow webserver URL.
         dag_id: Airflow DAG identifier.
-        model_type: Inference model identifier.
+        model_type: Explicit inference model identifier; empty when unselected.
         yaml_config_path: Container pipeline YAML URI.
         output_bucket: Bucket for model results.
     """
@@ -47,7 +47,7 @@ class ImageryConfig:
         "dot-us-central1.composer.googleusercontent.com"
     )
     dag_id: str = "optics-pipeline"
-    model_type: str = "andy-6d-v1-detector-model"
+    model_type: str = ""
     yaml_config_path: str = (
         "gs://ggn-nmfs-osi-dev-1-data/"
         "SWFSC/sam/viame-custom-pipeline-viamecsv-uploadno.yaml"
@@ -98,6 +98,7 @@ def create_parser(stage: str, description: str) -> argparse.ArgumentParser:
         An argument parser; unset configuration overrides are omitted.
     """
     parser = argparse.ArgumentParser(description=description)
+    parser.set_defaults(require_model=stage in ("dag", "pipeline"))
     parser.add_argument("--config", type=Path, help="Shared YAML config file.")
     for name in (
         "deployment-name", "imagery-bucket", "metadata-bucket", "mount-root",
@@ -132,7 +133,11 @@ def create_parser(stage: str, description: str) -> argparse.ArgumentParser:
         ):
             parser.add_argument(
                 f"--{name}", default=argparse.SUPPRESS,
-                help=f"Override DAG {name.replace('-', ' ')}.",
+                help=(
+                    "Model identifier; required in config or on the CLI."
+                    if name == "model-type" else
+                    f"Override DAG {name.replace('-', ' ')}."
+                ),
             )
         mode = parser.add_mutually_exclusive_group()
         mode.add_argument(
@@ -248,6 +253,11 @@ def load_config(args: argparse.Namespace) -> ImageryConfig:
     except ValueError as exc:
         raise ValueError("deployment_name contains an invalid date.") from exc
     config = ImageryConfig(**values)
+    if args.require_model and "model_type" not in values:
+        raise ValueError(
+            "Choose a model explicitly using dag.model_type in the YAML "
+            "configuration or --model-type."
+        )
     for key in ("directory_chunk_size", "num_cores"):
         value = getattr(config, key)
         if key == "num_cores" and value is None:
@@ -259,7 +269,7 @@ def load_config(args: argparse.Namespace) -> ImageryConfig:
         raise ValueError("test_limit must be a positive integer.")
     for key in (
         "imagery_bucket", "metadata_bucket", "output_bucket", "dag_id",
-        "model_type", "composer_url", "yaml_config_path",
+        "composer_url", "yaml_config_path",
     ):
         value = getattr(config, key)
         if not isinstance(value, str) or not value.strip():
@@ -269,9 +279,13 @@ def load_config(args: argparse.Namespace) -> ImageryConfig:
             r"[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]", getattr(config, key),
         ):
             raise ValueError(f"{key} must be a bucket name, not a URI or path.")
-    for key in ("dag_id", "model_type"):
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+", getattr(config, key)):
-            raise ValueError(f"{key} contains invalid characters.")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", config.dag_id):
+        raise ValueError("dag_id contains invalid characters.")
+    if "model_type" in values and (
+        not isinstance(config.model_type, str)
+        or not re.fullmatch(r"[A-Za-z0-9_.-]+", config.model_type)
+    ):
+        raise ValueError("model_type must be a nonempty model identifier.")
     url = urlparse(config.composer_url)
     if (
         url.scheme != "https" or not url.netloc or url.username
