@@ -19,7 +19,7 @@ Paths below are relative to the root of this repository.
 
 | File | Purpose |
 | --- | --- |
-| [`scripts/run-imagery-pipeline.py`](../scripts/run-imagery-pipeline.py) | Recommended entry point: runs all three stages in order. |
+| [`scripts/run-imagery-pipeline.py`](../scripts/run-imagery-pipeline.py) | Recommended: runs all the other scripts in order. |
 | [`scripts/extract-image-metadata.py`](../scripts/extract-image-metadata.py) | Extracts deployment JSON and per-image JSONL metadata. |
 | [`scripts/generate-osi-json.py`](../scripts/generate-osi-json.py) | Converts image metadata into chunked OSI manifest JSON files. |
 | [`scripts/trigger-osi-dag.py`](../scripts/trigger-osi-dag.py) | Previews or submits manifest-based Airflow DAG runs. |
