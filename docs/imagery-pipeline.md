@@ -1,9 +1,5 @@
 # Imagery pipeline
 
-For routine use on a prepared workstation, start with the
-[operator quickstart](imagery-pipeline-quickstart.md). This detailed guide covers
-setup, configuration options, individual stages, and recovery.
-
 Instructions for how to extract image metadata, generate OSI manifests, and submit them to the Optics SI
 Airflow DAG in Cloud Composer.
 Basically you're telling the DAG how to find the images and run the correct
@@ -74,7 +70,7 @@ environment is already active, and the configuration repository is at
 
 Copy `~/glider-processing/inference-configs/template.yaml` into the deployment's
 year folder in the same repository, creating the folder if needed. For a 2026
-deployment, save the copy as
+deployment, save the copy as e.g.
 `~/glider-processing/inference-configs/2026/glider-imagery.yaml`.
 Edit the copy to select the deployment and model:
 
