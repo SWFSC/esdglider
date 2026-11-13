@@ -111,15 +111,24 @@ def create_parser(stage: str, description: str) -> argparse.ArgumentParser:
         "--directory-chunk-size", type=int, default=argparse.SUPPRESS,
         help="Directories per manifest (default: 50).",
     )
-    if stage in ("metadata", "pipeline"):
+    if stage in ("metadata", "pipeline", "dag"):
         parser.add_argument(
             "--num-cores", type=int, default=argparse.SUPPRESS,
-            help="Positive number of metadata extraction workers.",
+            help=(
+                "Record metadata worker setting; does not rerun extraction."
+                if stage == "dag" else
+                "Positive number of metadata extraction workers."
+            ),
         )
-    if stage in ("manifests", "pipeline"):
+    if stage in ("manifests", "pipeline", "dag"):
         parser.add_argument(
             "--directory-filter", nargs="+", default=argparse.SUPPRESS,
-            help="Process only these image directory names.",
+            help=(
+                "Record manifest-generation filter; does not filter existing "
+                "manifests."
+                if stage == "dag" else
+                "Process only these image directory names."
+            ),
         )
         if stage == "manifests":
             parser.add_argument(
@@ -127,6 +136,14 @@ def create_parser(stage: str, description: str) -> argparse.ArgumentParser:
                 help="Write manifests locally instead of the metadata bucket.",
             )
     if stage in ("dag", "pipeline"):
+        parser.add_argument(
+            "--resume-run-id",
+            help="Resume only DAG submissions from an existing run record.",
+        )
+        if stage == "dag":
+            parser.add_argument(
+                "--run-context", type=Path, help=argparse.SUPPRESS,
+            )
         for name in (
             "composer-url", "dag-id", "model-type", "yaml-config-path",
             "output-bucket",
@@ -173,11 +190,14 @@ def create_parser(stage: str, description: str) -> argparse.ArgumentParser:
     return parser
 
 
-def load_config(args: argparse.Namespace) -> ImageryConfig:
+def load_config(
+    args: argparse.Namespace, *, yaml_contents: bytes | None = None,
+) -> ImageryConfig:
     """Load, merge, and validate settings before any cloud operations.
 
     Args:
         args: Parsed stage arguments.
+        yaml_contents: Optional exact input bytes for provenance validation.
 
     Returns:
         Validated effective configuration.
@@ -218,8 +238,11 @@ def load_config(args: argparse.Namespace) -> ImageryConfig:
                 return mapping
 
         try:
-            with args.config.expanduser().open(encoding="utf-8") as stream:
-                document = yaml.load(stream, Loader=ConfigLoader)
+            if yaml_contents is not None:
+                document = yaml.load(yaml_contents, Loader=ConfigLoader)
+            else:
+                with args.config.expanduser().open(encoding="utf-8") as stream:
+                    document = yaml.load(stream, Loader=ConfigLoader)
         except yaml.YAMLError as exc:
             raise ValueError(f"Invalid YAML: {exc}") from exc
         if not isinstance(document, dict):
@@ -267,6 +290,14 @@ def load_config(args: argparse.Namespace) -> ImageryConfig:
     test_limit = getattr(args, "test_limit", None)
     if test_limit is not None and test_limit < 1:
         raise ValueError("test_limit must be a positive integer.")
+    if getattr(args, "resume_run_id", None) is not None:
+        from esdglider.imagery_run_records import RunLocation
+
+        RunLocation(
+            config.output_bucket, config.deployment_name, args.resume_run_id,
+        )
+        if getattr(args, "overwrite", False):
+            raise ValueError("--overwrite cannot be combined with resume.")
     for key in (
         "imagery_bucket", "metadata_bucket", "output_bucket", "dag_id",
         "composer_url", "yaml_config_path",

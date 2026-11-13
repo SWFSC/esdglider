@@ -25,6 +25,7 @@ Paths below are relative to the root of this repository.
 | [`scripts/trigger-osi-dag.py`](../scripts/trigger-osi-dag.py) | Previews or submits manifest-based Airflow DAG runs. |
 | [`resources/imagery-deployment.example.yaml`](../resources/imagery-deployment.example.yaml) | Template for shared deployment configuration. |
 | [`esdglider/imagery_cli.py`](../esdglider/imagery_cli.py) | Shared CLI parsing, configuration validation, path derivation, and file handling |
+| [`esdglider/imagery_run_records.py`](../esdglider/imagery_run_records.py) | Archives run configs, data provenance, and data snapshots. |
 
 Your deployment YAML is a separate file you create from the template. The
 remote pipeline YAML referenced by `dag.yaml_config_path` is another
@@ -46,21 +47,30 @@ configuration file which lives in the cloud created by Sam, not the shared deplo
    cd ~/esdglider && conda activate esdglider
    ```
 
-3. Configure Google Application Default Credentials. Your identity needs read
+3. Ensure you also have the separate `glider-processing` repository cloned at
+   `~/glider-processing`. Clone it if workstation provisioning has not already
+   done so. This repository is required for the Git-tracked configuration
+   workflow described here: save your deployment YAML files in its
+   `inference-configs/` directory, not directly in your home directory.
+4. Configure Google Application Default Credentials. Your identity needs read
    access to imagery and write access to metadata for the file-generation
    stages. DAG preview needs read/list access to the metadata and output
-   buckets; DAG submission also requires Airflow API permissions.
-4. The DAG's execution identity needs access to its image inputs, pipeline YAML,
+   buckets; DAG submission also requires read access to the pipeline YAML,
+   create/get access for run archives in the output bucket, and Airflow API
+   permissions. Resume needs read access to those archives.
+5. The DAG's execution identity needs access to its image inputs, pipeline YAML,
    models, and output bucket. The workstation's access does not establish this.
 
-Commands below assume the repository is at `~/esdglider`, with its Python environment
-already active. They can be run from any working directory.
+Commands below assume the code repository is at `~/esdglider`, its Python
+environment is already active, and the configuration repository is at
+`~/glider-processing`. They can be run from any working directory.
 
 ## 1. Create a deployment configuration
 
 Copy the contents of
 [`resources/imagery-deployment.example.yaml`](../resources/imagery-deployment.example.yaml)
-into a file such as `~/calanus-imagery.yaml`:
+into a new file in the `glider-processing` repository's `inference-configs/`
+directory, such as `~/glider-processing/inference-configs/calanus-imagery.yaml`:
 
 ```yaml
 deployment_name: calanus-20261007
@@ -76,6 +86,9 @@ For a more complicated example, see the
 - `model_type` must be a model which is already migrated to the DAG. For a list of migrated models, see [this JSON in the cloud](https://console.cloud.google.com/storage/browser/_details/ggn-nmfs-osi-dev-1-data/configs/model_runtime_definitions.json). To migrate a model yourself, follow the instructions in [this Google Doc](https://docs.google.com/document/d/12fqDmZUKytkDYhLj-7FLqf-RxoFs1BMrfv8ihtv5Zlc/edit?tab=t.0#heading=h.bka726cftr42).
 
 Keep the same configuration for all stages.
+Pass this repository-local YAML file to `--config` in each command below.
+Commit and push it through the usual Git workflow; the pipeline does not
+automatically commit or contact GitHub.
 The YAML you save here configures these workstation commands; `dag.yaml_config_path` points
 to the separate container pipeline configuration used by the remote DAG (not this YAML).
 
@@ -113,7 +126,7 @@ YAML at `dag.yaml_config_path` is appropriate for the model you select.
 After creating the configuration above, preview the planned paths:
 
 ```bash
-python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/calanus-imagery.yaml --dry-run
+python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --dry-run
 ```
 
 This is a **path-only preview**: it does not mount buckets, scan images, list
@@ -124,7 +137,7 @@ To extract metadata, generate manifests, and submit all selected DAG runs with
 one command:
 
 ```bash
-python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/calanus-imagery.yaml --submit
+python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --submit
 ```
 
 ### Confirm submission and monitor progress
@@ -149,7 +162,7 @@ images have finished processing.
    For the first chunk in this example, the requested output location is:
 
    ```text
-   gs://ggn-nmfs-osi-dev-1-data/SWFSC/glider/calanus-20261007/050dirs/01/
+   gs://ggn-nmfs-osi-dev-1-data/SWFSC/glider/calanus-20261007/runs/{run_id}/outputs/01/
    ```
 
 These links reflect the default environment; use the corresponding Airflow UI,
@@ -179,13 +192,106 @@ Metadata and manifests are written beneath
 `050dirs` reflects the configured chunk size of 50 directories, not 50 images.
 The final chunk can contain fewer directories. No source images is an error.
 
+After a live submission, the remote DAG writes model results to the configured
+`dag.output_bucket`, which defaults to `ggn-nmfs-osi-dev-1-data`. The requested
+output prefix for each manifest chunk is:
+
+```text
+gs://{output_bucket}/SWFSC/glider/{deployment_name}/runs/{run_id}/outputs/{chunk_number:02d}/
+```
+
+For example, chunk 1 with the default chunk size is written under:
+
+```text
+gs://ggn-nmfs-osi-dev-1-data/SWFSC/glider/calanus-20261007/runs/{run_id}/outputs/01/
+```
+
+The chunk number comes from the manifest filename. The remote DAG and its
+pipeline YAML determine the actual result files beneath that prefix; an
+accepted submission does not guarantee that results have been created.
+
+### Automatic run archives
+
+Every new live submission gets a UTC timestamp plus UUID run ID, printed to
+stderr along with its GCS folder. No manual upload or additional bucket is
+required. Under `SWFSC/glider/{deployment_name}/runs/{run_id}/`:
+
+```text
+config/input.yaml        # exact authored YAML bytes, when --config is supplied
+config/resolved.json     # effective local settings, options, paths, and DAG plans
+config/pipeline.yaml     # snapshot of dag.yaml_config_path
+manifests/*.json         # archived copies of the selected manifests
+outputs/01/              # remote model results for chunk 1
+outputs/02/              # remote model results for chunk 2, etc.
+```
+
+The `resolved.json` record includes defaults and CLI overrides, resolved local paths,
+source YAML hash, available Git commit/dirty status, input object generations
+and hashes, selection limit, and exact Airflow IDs and payloads. With CLI-only
+configuration, `input.yaml` is absent and the source is explicitly recorded as
+null. The Git status describes the working tree at invocation, not a promise
+that all changes were committed. This captures the local configuration and
+submission inputs, **not** remote model weights, container versions, runtime
+definitions, or image contents; those can still change independently.
+
+[`run-imagery-pipeline.py`](../scripts/run-imagery-pipeline.py) captures the
+deployment YAML and CLI options before generating files.
+[`trigger-osi-dag.py`](../scripts/trigger-osi-dag.py) saves that YAML as
+`config/input.yaml` and the resolved settings and submission details as
+`config/resolved.json`. It copies selected manifest JSON files into `manifests/`
+and the YAML referenced by `dag.yaml_config_path` into `config/pipeline.yaml`.
+The submitted DAG runs read these archived copies.
+
+The original deployment metadata JSON, image metadata JSONL, and generated
+manifests remain in the metadata bucket. The archived files and model results
+under `outputs/` share the run folder in the output bucket.
+
+All archive uploads use `if_generation_match=0` (create only), and
+`resolved.json` is written last, before any Airflow submission. An upload or
+permission failure prevents submission. A partial archive without that final
+record cannot be resumed; inspect it and start a new run. Preview commands do
+not create records; their proposed new-run ID and input locations are not
+reserved for a later live invocation.
+
+This is **application-level append-only behavior, not storage-enforced
+immutability**. Users with update/delete permissions can still alter or remove
+objects through other tools. No retention lock, bucket policy, or IAM change is
+made by these commands. The DAG identity must also be able to read the archived
+manifests and pipeline YAML in the output bucket.
+
+### Resume DAG submission for an existing run
+
+Keep the same YAML, effective CLI overrides, and original `--test-limit`, if any.
+The DAG command accepts `--num-cores` and `--directory-filter` for matching the
+recorded file-generation settings; they do not rerun extraction or change the
+selection of existing manifests.
+After inspecting Airflow, reuse the printed run ID:
+
+```bash
+python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --resume-run-id YOUR_RUN_ID --submit
+```
+
+The individual DAG command accepts the same options. Resume is **DAG-only**:
+it does not extract metadata, regenerate manifests, or rewrite the archive.
+It loads the saved plans, checks settings and selection, and verifies snapshot
+generations and hashes. Shared manifests may have changed; the archived copies
+are used instead. Without `--submit`, this previews the saved plans after
+verification. The runner's `--dry-run` remains a path-only preview and does not
+verify any cloud record.
+
+Already successful, queued, or running recorded chunks are skipped. Missing
+Airflow runs are submitted with their original IDs. Failed runs block
+submission; inspect and recover them in Airflow. Resume rejects `--overwrite`.
+Starting without `--resume-run-id` intentionally creates a **new run** and can
+repeat inference even if another run for that deployment is already active.
+
 ### Prepare files and preview submissions instead
 
 Omitting `--submit` still **writes metadata and manifests**, but previews the
 resulting DAG payloads instead of submitting:
 
 ```bash
-python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/calanus-imagery.yaml
+python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml
 ```
 
 ### Trigger DAG if metadata and manifests already exist
@@ -194,7 +300,7 @@ After reviewing that preview, submit using the individual DAG command below;
 there is no need to extract metadata or regenerate manifests again:
 
 ```bash
-python ~/esdglider/scripts/trigger-osi-dag.py --config ~/calanus-imagery.yaml --submit
+python ~/esdglider/scripts/trigger-osi-dag.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --submit
 ```
 
 ### Runner options and recovery
@@ -203,7 +309,7 @@ python ~/esdglider/scripts/trigger-osi-dag.py --config ~/calanus-imagery.yaml --
   manifest generation still process their full configured inputs.
 - `--overwrite` permits replacement of metadata and manifests in the first two
   stages. It does not bypass DAG run guards or delete stale manifest chunks.
-- Existing outputs are refused by default. The runner does not silently reuse
+- Existing metadata/manifests are refused by default. The runner does not silently reuse
   metadata or skip stages; use the individual commands to continue from a
   completed stage.
 - A failed stage stops the runner and reports failure with a nonzero exit code.
@@ -233,23 +339,22 @@ Before any new submission, the command checks every selected deterministic
 Airflow run ID:
 
 - A matching `success` run is reported as already successful and skipped.
-- A matching active or failed run blocks new submissions. Inspect/recover that
-  run in Airflow rather than creating duplicate work.
+- During explicit resume, matching queued/running runs are skipped; failed
+  runs block submission. Inspect/recover those runs in Airflow.
 - Output objects without a matching successful run also block new submissions.
   Their presence alone does not establish completion. This includes outputs
-  from runs launched by the older script without deterministic IDs.
+  in the selected run folder. Older output layouts are not reused.
 
-IDs are derived from the manifest location and submitted settings, not the
-current contents of files at those locations. Do not overwrite manifests or
-pipeline YAML and expect the same location to create a fresh run automatically.
-Existing folders are not automatically deleted.
+IDs are derived from archived input locations and submitted settings. They are
+stable within one recorded run, but different new runs have different IDs and
+output folders. Existing folders are not automatically deleted.
 
 All selected runs are checked before any new runs are submitted. However,
 submitting multiple runs is **not all-or-nothing**: jobs 1–4 could be accepted
 before a connection problem prevents job 5 from being submitted. The command
 stops and reports failure, but jobs 1–4 remain submitted. Retrying the same
-configuration uses the same IDs rather than creating duplicate copies.
-Successful runs skip; active or failed runs require inspection before proceeding.
+run with `--resume-run-id` uses the same IDs rather than creating duplicate
+copies. Successful and active runs skip; failed runs require inspection.
 
 ## Alternative: run individual stages
 
@@ -261,13 +366,13 @@ separately.
 Preview the derived paths without mounting buckets, scanning images, or writing:
 
 ```bash
-python ~/esdglider/scripts/extract-image-metadata.py --config ~/calanus-imagery.yaml --dry-run
+python ~/esdglider/scripts/extract-image-metadata.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --dry-run
 ```
 
 Generate the metadata:
 
 ```bash
-python ~/esdglider/scripts/extract-image-metadata.py --config ~/calanus-imagery.yaml
+python ~/esdglider/scripts/extract-image-metadata.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml
 ```
 
 With the default buckets, extraction reads JPEG and PNG files recursively under:
@@ -293,7 +398,7 @@ No images is an error, not a successful no-op.
 ### Generate OSI manifests
 
 ```bash
-python ~/esdglider/scripts/generate-osi-json.py --config ~/calanus-imagery.yaml
+python ~/esdglider/scripts/generate-osi-json.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml
 ```
 
 This reads the image-metadata JSONL file and writes one manifest per directory
@@ -319,7 +424,7 @@ apply to these individual commands as well as the runner.
 ### Preview DAG submissions
 
 ```bash
-python ~/esdglider/scripts/trigger-osi-dag.py --config ~/calanus-imagery.yaml --dry-run
+python ~/esdglider/scripts/trigger-osi-dag.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --dry-run
 ```
 
 Preview is also the default when neither `--dry-run` nor `--submit` is supplied.
@@ -327,8 +432,10 @@ It obtains credentials and lists manifest/output objects, but does not mount
 buckets, submit DAG runs, or write results. It does not query Airflow run states
 or verify that the model/YAML will execute.
 
-Each stdout line is a JSON object with a stable `dag_run_id`, the `conf` payload,
+Each stdout line is a JSON object with a `dag_run_id`, the `conf` payload,
 and an `existing_output_objects` flag. Operational logs go to stderr.
+For a new-run preview, IDs are illustrative: live submission gets a new run ID
+and replaces source input URIs with archived snapshot URIs.
 
 For manifest chunk 01, inspect these payload fields:
 
@@ -336,7 +443,7 @@ For manifest chunk 01, inspect these payload fields:
 | --- | --- |
 | `input_file` | `gs://swfscesd-glider-imagery-metadata/2026/calanus-20261007/osi-manifests-050dirs/calanus-20261007-image-manifest-chunk01.json` |
 | `output_bucket` | `ggn-nmfs-osi-dev-1-data` |
-| `output_folder` | `SWFSC/glider/calanus-20261007/050dirs/01` |
+| `output_folder` | `SWFSC/glider/calanus-20261007/runs/{run_id}/outputs/01` |
 
 Use `--test-limit 1` to select only the first manifest in numeric chunk order.
 The output folder always comes from the manifest chunk number, even when other
@@ -347,7 +454,7 @@ chunks are absent. Filtering cannot renumber chunk 10 to output folder `01`.
 To submit an initial live test:
 
 ```bash
-python ~/esdglider/scripts/trigger-osi-dag.py --config ~/calanus-imagery.yaml --submit --test-limit 1
+python ~/esdglider/scripts/trigger-osi-dag.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --submit --test-limit 1
 ```
 
 To submit all selected manifests, omit `--test-limit`. The
@@ -394,7 +501,7 @@ Directory names in a filter must exist in the image metadata; the names above
 are illustrative.
 
 Safety and execution controls remain command-line options, not YAML settings:
-`--dry-run`, `--submit`, `--overwrite`, and `--test-limit`. Local manifest
+`--dry-run`, `--submit`, `--overwrite`, `--test-limit`, and `--resume-run-id`. Local manifest
 output is selected with `--output-directory` on the individual manifest command.
 See [Optional settings and precedence](#optional-settings-and-precedence)
 for how YAML and command-line overrides interact.

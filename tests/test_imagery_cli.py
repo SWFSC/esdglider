@@ -13,7 +13,7 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
-from esdglider import imagery_cli
+from esdglider import imagery_cli, imagery_run_records
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -251,6 +251,53 @@ class ConfigTests(unittest.TestCase):
 class PipelineTests(unittest.TestCase):
     """Verify orchestration reuses stage CLIs and preserves safety controls."""
 
+    def setUp(self):
+        """Keep subprocess orchestration mocks separate from Git provenance."""
+        patcher = patch.object(
+            imagery_run_records, "git_details",
+            return_value={"available": True, "commit": "test", "dirty": False},
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_resume_skips_file_stages(self):
+        """An explicit resume only invokes the DAG with the same run ID."""
+        run_id = "20261113T173500Z-" + "a" * 32
+        with patch.object(PIPELINE.subprocess, "run") as run:
+            PIPELINE.main([
+                "--deployment-name", "calanus-20261007",
+                "--model-type", "test-model", "--submit",
+                "--resume-run-id", run_id,
+            ])
+        run.assert_called_once()
+        command = run.call_args.args[0]
+        self.assertEqual(Path(command[1]).name, "trigger-osi-dag.py")
+        self.assertIn(run_id, command)
+        self.assertNotIn("--run-context", command)
+
+    def test_dag_handoff_preserves_all_settings_and_original_context(self):
+        """Worker/filter overrides survive the subprocess boundary for recording."""
+        def run(command, **kwargs):
+            if Path(command[1]).name != "trigger-osi-dag.py":
+                return
+            args = imagery_cli.create_parser("dag", "test").parse_args(command[2:])
+            config = imagery_cli.load_config(args)
+            context = json.loads(args.run_context.read_text())
+            self.assertEqual(
+                imagery_run_records.resolved_settings(config),
+                context["settings"],
+            )
+            self.assertEqual(config.num_cores, 4)
+            self.assertEqual(config.directory_filter, ["dir0000004"])
+            self.assertEqual(context["cli_options"]["num_cores"], 4)
+
+        with patch.object(PIPELINE.subprocess, "run", side_effect=run):
+            PIPELINE.main([
+                "--deployment-name", "calanus-20261007",
+                "--model-type", "test-model", "--num-cores", "4",
+                "--directory-filter", "dir0000004", "--submit",
+            ])
+
     def test_stage_order_and_effective_options(self):
         """One YAML plus CLI overrides supplies all stages consistently."""
         example = ROOT / "resources" / "imagery-deployment.example.yaml"
@@ -400,6 +447,217 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(exc.exception.code, 7)
         self.assertEqual(run.call_count, 1)
         self.assertIn("Earlier outputs may exist", logs.output[0])
+
+
+class RunIntegrationTests(unittest.TestCase):
+    """Test automatic archive creation and verified DAG-only resume."""
+
+    def setUp(self):
+        """Prepare one run location and manifest plan without cloud access."""
+        self.config = imagery_cli.ImageryConfig(
+            "calanus-20261007", model_type="test-model",
+        )
+        self.location = imagery_run_records.RunLocation(
+            self.config.output_bucket, self.config.deployment_name,
+            "20261113T173500Z-" + "a" * 32,
+        )
+        name = (
+            self.config.manifest_prefix
+            + "calanus-20261007-image-manifest-chunk01.json"
+        )
+        self.plans = DAG.build_plans(
+            [name], self.config, output_prefix=self.location.output_prefix,
+        )
+        self.context = {
+            "settings": imagery_run_records.resolved_settings(self.config),
+            "cli_options": {"model_type": "test-model"},
+            "operations": {"submit": True, "test_limit": None},
+            "source": None, "input_yaml_base64": None,
+            "software": {"commit": "test"},
+        }
+        self.client = MagicMock()
+        self.client.bucket.return_value.name = self.config.output_bucket
+
+    def prepare(self):
+        """Create a mocked archive and return its plans and resolved record."""
+        def read(client, uri):
+            content = b"pipeline" if uri.endswith(".yaml") else b"manifest"
+            return content, {"uri": uri, "generation": 1, "sha256": "original"}
+
+        def archive(bucket, name, contents):
+            return {
+                "uri": f"gs://{bucket.name}/{name}",
+                "generation": 2, "sha256": "snapshot",
+            }
+
+        with (
+            patch.object(imagery_run_records, "read_snapshot", side_effect=read),
+            patch.object(imagery_run_records, "archive_object", side_effect=archive),
+            patch.object(imagery_run_records, "create_record") as create,
+        ):
+            plans = DAG.prepare_run(
+                self.client, self.config, self.plans, self.context,
+                self.location,
+            )
+        record = json.loads(create.call_args.args[3])
+        return plans, record
+
+    def test_record_and_outputs_share_run_folder(self):
+        """Resolved records preserve settings, paths, provenance, and chunks."""
+        plans, record = self.prepare()
+        self.assertEqual(record["settings"], self.context["settings"])
+        self.assertEqual(record["operations"], self.context["operations"])
+        self.assertEqual(record["software"], self.context["software"])
+        self.assertEqual(record["cli_options"], self.context["cli_options"])
+        self.assertEqual(record["run_id"], self.location.run_id)
+        self.assertEqual(
+            plans[0].conf["output_folder"],
+            self.location.output_prefix + "/01",
+        )
+        self.assertIn("/runs/", plans[0].conf["input_file"])
+        self.assertIn("/config/pipeline.yaml", plans[0].conf["yaml_config_path"])
+        self.assertEqual(len(record["snapshots"]), 2)
+        self.assertFalse(record["remote_runtime_captured"])
+        self.assertNotEqual(plans[0].dag_run_id, self.plans[0].dag_run_id)
+
+    def test_partial_archive_never_writes_completed_record(self):
+        """An interrupted snapshot upload leaves no resumable resolved record."""
+        with (
+            patch.object(
+                imagery_run_records, "read_snapshot",
+                return_value=(b"input", {"uri": "source"}),
+            ),
+            patch.object(
+                imagery_run_records, "archive_object",
+                side_effect=PermissionError("denied"),
+            ),
+            patch.object(imagery_run_records, "create_record") as create,
+            self.assertRaises(PermissionError),
+        ):
+            DAG.prepare_run(
+                self.client, self.config, self.plans, self.context, self.location,
+            )
+        create.assert_not_called()
+
+    def test_archived_yaml_is_exact_and_included_in_verification(self):
+        """Input YAML is stored byte-for-byte and covered by snapshot checks."""
+        import base64
+        import hashlib
+
+        contents = b"# a comment\r\ndeployment_name: calanus-20261007\r\n"
+        self.context["input_yaml_base64"] = base64.b64encode(contents).decode()
+        self.context["source"] = {
+            "sha256": hashlib.sha256(contents).hexdigest(),
+        }
+        input_uri = (
+            f"gs://{self.location.bucket_name}/"
+            f"{self.location.config_object('input.yaml')}"
+        )
+
+        def read(client, uri):
+            data = contents if uri == input_uri else b"snapshot"
+            return data, {
+                "uri": uri, "generation": 1,
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+
+        with (
+            patch.object(imagery_run_records, "read_snapshot", side_effect=read),
+            patch.object(
+                imagery_run_records, "archive_object",
+                return_value={"uri": "snapshot", "generation": 2, "sha256": "hash"},
+            ),
+            patch.object(imagery_run_records, "create_record") as create,
+        ):
+            DAG.prepare_run(
+                self.client, self.config, self.plans, self.context, self.location,
+            )
+        self.assertEqual(create.call_args_list[0].args[2:4], ("input.yaml", contents))
+        record = json.loads(create.call_args_list[-1].args[3])
+        self.assertIn(input_uri, [item["uri"] for item in record["snapshots"]])
+
+    def test_resume_reuses_exact_plans_and_verifies_snapshots(self):
+        """Resume reads the recorded selection rather than shared manifests."""
+        plans, record = self.prepare()
+        with (
+            patch.object(
+                imagery_run_records, "read_snapshot",
+                return_value=(json.dumps(record).encode(), {}),
+            ),
+            patch.object(imagery_run_records, "verify_snapshots") as verify,
+        ):
+            resumed = DAG.resume_run(
+                self.client, self.config, self.location, test_limit=None,
+            )
+        self.assertEqual(resumed, plans)
+        verify.assert_called_once_with(self.client, record["snapshots"])
+
+    def test_resume_rejects_settings_selection_or_payload_changes(self):
+        """Resume cannot quietly alter the recorded configuration or chunks."""
+        _, record = self.prepare()
+        for field in ("settings", "operations", "plans"):
+            changed = json.loads(json.dumps(record))
+            if field == "settings":
+                changed[field]["model_type"] = "changed"
+            elif field == "operations":
+                changed[field]["test_limit"] = 1
+            else:
+                changed[field][0]["conf"]["model_type"] = "changed"
+            with (
+                patch.object(
+                    imagery_run_records, "read_snapshot",
+                    return_value=(json.dumps(changed).encode(), {}),
+                ),
+                patch.object(imagery_run_records, "verify_snapshots"),
+                self.assertRaises(ValueError),
+            ):
+                DAG.resume_run(
+                    self.client, self.config, self.location, test_limit=None,
+                )
+
+    def test_resume_skips_active_runs_but_submits_missing_chunks(self):
+        """Partial submission retries preserve queued/running jobs."""
+        for state in ("queued", "running", "success"):
+            session = MagicMock()
+            session.get.return_value.status_code = 200
+            session.get.return_value.json.return_value = {"state": state}
+            DAG.submit_plans(
+                self.plans, set(), self.config, session, resume=True,
+            )
+            session.post.assert_not_called()
+        session = MagicMock()
+        session.get.return_value.status_code = 404
+        session.post.return_value.status_code = 201
+        DAG.submit_plans(
+            self.plans, set(), self.config, session, resume=True,
+        )
+        session.post.assert_called_once()
+
+    def test_upload_failure_prevents_dag_submission(self):
+        """No live HTTP request occurs if archival or recording fails."""
+        client = self.client
+        client.bucket.return_value.list_blobs.side_effect = [
+            [types.SimpleNamespace(name=(
+                self.config.manifest_prefix
+                + "calanus-20261007-image-manifest-chunk01.json"
+            ))],
+            [],
+        ]
+        with (
+            patch("google.cloud.storage.Client", return_value=client),
+            patch.object(
+                imagery_run_records, "capture_context",
+                return_value=self.context,
+            ),
+            patch.object(DAG, "prepare_run", side_effect=PermissionError("denied")),
+            patch.object(DAG, "submit_plans") as submit,
+            self.assertRaises(PermissionError),
+        ):
+            DAG.main([
+                "--deployment-name", self.config.deployment_name,
+                "--model-type", self.config.model_type, "--submit",
+            ])
+        submit.assert_not_called()
 
 
 class FileTests(unittest.TestCase):

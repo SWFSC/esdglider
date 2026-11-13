@@ -13,8 +13,9 @@ import logging
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
-from esdglider import imagery_cli
+from esdglider import imagery_cli, imagery_run_records
 
 
 def run_pipeline(
@@ -23,6 +24,8 @@ def run_pipeline(
     submit: bool = False,
     overwrite: bool = False,
     test_limit: int | None = None,
+    context: dict | None = None,
+    resume_run_id: str | None = None,
 ) -> None:
     """Run existing stage commands with the same effective configuration.
 
@@ -31,6 +34,9 @@ def run_pipeline(
         submit: Whether to submit live DAG runs instead of previewing.
         overwrite: Whether to replace existing metadata and manifests.
         test_limit: Optional limit on DAG submissions, not file generation.
+        context: Original user configuration and command options to archive in
+            GCS. See prepare_run in trigger-osi-dag.py for a dictionary example.
+        resume_run_id: Existing run ID; run only its DAG submission stage.
 
     Raises:
         subprocess.CalledProcessError: If any stage fails.
@@ -56,6 +62,10 @@ def run_pipeline(
         metadata.append("--overwrite")
         manifests.append("--overwrite")
     dag = list(common)
+    if config.num_cores is not None:
+        dag.extend(["--num-cores", str(config.num_cores)])
+    if config.directory_filter is not None:
+        dag.extend(["--directory-filter", *config.directory_filter])
     for key in (
         "composer_url", "dag_id", "model_type", "yaml_config_path",
         "output_bucket",
@@ -64,16 +74,26 @@ def run_pipeline(
     dag.append("--submit" if submit else "--dry-run")
     if test_limit is not None:
         dag.extend(["--test-limit", str(test_limit)])
+    if resume_run_id is not None:
+        dag.extend(["--resume-run-id", resume_run_id])
     scripts = Path(__file__).resolve().parent
-    for script, options in (
-        ("extract-image-metadata.py", metadata),
-        ("generate-osi-json.py", manifests),
-        ("trigger-osi-dag.py", dag),
-    ):
-        logging.info("Running stage: %s", script)
-        subprocess.run(
-            [sys.executable, str(scripts / script), *options], check=True,
-        )
+    with tempfile.TemporaryDirectory(prefix="imagery-run-context-") as directory:
+        if context is not None and submit and resume_run_id is None:
+            context_path = Path(directory) / "context.json"
+            context_path.write_text(json.dumps(context), encoding="utf-8")
+            dag.extend(["--run-context", str(context_path)])
+        stages = [
+            ("extract-image-metadata.py", metadata),
+            ("generate-osi-json.py", manifests),
+            ("trigger-osi-dag.py", dag),
+        ]
+        if resume_run_id is not None:
+            stages = stages[-1:]
+        for script, options in stages:
+            logging.info("Running stage: %s", script)
+            subprocess.run(
+                [sys.executable, str(scripts / script), *options], check=True,
+            )
     logging.info(
         "Pipeline stages finished; remote inference completion is not checked."
     )
@@ -96,6 +116,10 @@ def main(argv: list[str] | None = None) -> None:
     imagery_cli.configure_logging()
     if args.dry_run:
         image_paths = config.image_paths()
+        location = imagery_run_records.RunLocation(
+            config.output_bucket, config.deployment_name,
+            args.resume_run_id or imagery_run_records.new_run_id(),
+        )
         print(json.dumps({
             "images": str(image_paths["imagedir"]),
             "deployment_metadata": str(image_paths["deplmetapath"]),
@@ -104,8 +128,13 @@ def main(argv: list[str] | None = None) -> None:
                 f"gs://{config.metadata_bucket}/{config.manifest_prefix}"
             ),
             "model_outputs": (
-                f"gs://{config.output_bucket}/{config.output_prefix}/"
+                f"gs://{config.output_bucket}/{location.output_prefix}/"
                 "{chunk_number:02d}/"
+            ),
+            "run_id": location.run_id,
+            "run_config": (
+                f"gs://{location.bucket_name}/"
+                f"{location.config_object('resolved.json')}"
             ),
             "dag_id": config.dag_id,
             "composer_url": config.composer_url,
@@ -115,9 +144,13 @@ def main(argv: list[str] | None = None) -> None:
             "Paths only; no cloud access, extraction, writes, or submissions."
         )
         return
+    context = None
+    if args.submit and args.resume_run_id is None:
+        context = imagery_run_records.capture_context(config, args)
     run_pipeline(
         config, submit=args.submit, overwrite=args.overwrite,
         test_limit=args.test_limit,
+        context=context, resume_run_id=args.resume_run_id,
     )
 
 
