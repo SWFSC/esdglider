@@ -1,5 +1,9 @@
 # Imagery pipeline
 
+For routine use on a prepared workstation, start with the
+[operator quickstart](imagery-pipeline-quickstart.md). This detailed guide covers
+setup, configuration options, individual stages, and recovery.
+
 Instructions for how to extract image metadata, generate OSI manifests, and submit them to the Optics SI
 Airflow DAG in Cloud Composer.
 Basically you're telling the DAG how to find the images and run the correct
@@ -51,7 +55,8 @@ configuration file which lives in the cloud created by Sam, not the shared deplo
    `~/glider-processing`. Clone it if workstation provisioning has not already
    done so. This repository is required for the Git-tracked configuration
    workflow described here: save your deployment YAML files in its
-   `inference-configs/` directory, not directly in your home directory.
+   `inference-configs/{year}/` directory, using the deployment's year, not
+   directly in your home directory.
 4. Configure Google Application Default Credentials. Your identity needs read
    access to imagery and write access to metadata for the file-generation
    stages. DAG preview needs read/list access to the metadata and output
@@ -67,18 +72,22 @@ environment is already active, and the configuration repository is at
 
 ## 1. Create a deployment configuration
 
-Copy the contents of
-[`resources/imagery-deployment.example.yaml`](../resources/imagery-deployment.example.yaml)
-into a new file in the `glider-processing` repository's `inference-configs/`
-directory, such as `~/glider-processing/inference-configs/calanus-imagery.yaml`:
+Copy `~/glider-processing/inference-configs/template.yaml` into the deployment's
+year folder in the same repository, creating the folder if needed. For a 2026
+deployment, save the copy as
+`~/glider-processing/inference-configs/2026/glider-imagery.yaml`.
+Edit the copy to select the deployment and model:
 
 ```yaml
-deployment_name: calanus-20261007
+deployment_name: glider-yyymmdd
 
 dag:
   model_type: andy-6d-v1-detector-model
 ```
 This file is your configuration file which will tell the program what model you want to run and on which data.
+Replace the placeholder with the actual deployment name and an eight-digit
+`YYYYMMDD` date. Use the year from that date for the configuration folder
+(not necessarily the year you run the pipeline).
 For a more complicated example, see the
 [expanded deployment configuration example](#expanded-deployment-configuration-example).
 
@@ -126,7 +135,7 @@ YAML at `dag.yaml_config_path` is appropriate for the model you select.
 After creating the configuration above, preview the planned paths:
 
 ```bash
-python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --dry-run
+python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml --dry-run
 ```
 
 This is a **path-only preview**: it does not mount buckets, scan images, list
@@ -137,7 +146,7 @@ To extract metadata, generate manifests, and submit all selected DAG runs with
 one command:
 
 ```bash
-python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --submit
+python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml --submit
 ```
 
 ### Confirm submission and monitor progress
@@ -162,7 +171,7 @@ images have finished processing.
    For the first chunk in this example, the requested output location is:
 
    ```text
-   gs://ggn-nmfs-osi-dev-1-data/SWFSC/glider/calanus-20261007/runs/{run_id}/outputs/01/
+   gs://ggn-nmfs-osi-dev-1-data/SWFSC/glider/glider-yyymmdd/runs/{run_id}/outputs/01/
    ```
 
 These links reflect the default environment; use the corresponding Airflow UI,
@@ -203,7 +212,7 @@ gs://{output_bucket}/SWFSC/glider/{deployment_name}/runs/{run_id}/outputs/{chunk
 For example, chunk 1 with the default chunk size is written under:
 
 ```text
-gs://ggn-nmfs-osi-dev-1-data/SWFSC/glider/calanus-20261007/runs/{run_id}/outputs/01/
+gs://ggn-nmfs-osi-dev-1-data/SWFSC/glider/glider-yyymmdd/runs/{run_id}/outputs/01/
 ```
 
 The chunk number comes from the manifest filename. The remote DAG and its
@@ -268,7 +277,7 @@ selection of existing manifests.
 After inspecting Airflow, reuse the printed run ID:
 
 ```bash
-python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --resume-run-id YOUR_RUN_ID --submit
+python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml --resume-run-id YOUR_RUN_ID --submit
 ```
 
 The individual DAG command accepts the same options. Resume is **DAG-only**:
@@ -291,7 +300,7 @@ Omitting `--submit` still **writes metadata and manifests**, but previews the
 resulting DAG payloads instead of submitting:
 
 ```bash
-python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml
+python ~/esdglider/scripts/run-imagery-pipeline.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml
 ```
 
 ### Trigger DAG if metadata and manifests already exist
@@ -300,7 +309,7 @@ After reviewing that preview, submit using the individual DAG command below;
 there is no need to extract metadata or regenerate manifests again:
 
 ```bash
-python ~/esdglider/scripts/trigger-osi-dag.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --submit
+python ~/esdglider/scripts/trigger-osi-dag.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml --submit
 ```
 
 ### Runner options and recovery
@@ -366,13 +375,13 @@ separately.
 Preview the derived paths without mounting buckets, scanning images, or writing:
 
 ```bash
-python ~/esdglider/scripts/extract-image-metadata.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --dry-run
+python ~/esdglider/scripts/extract-image-metadata.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml --dry-run
 ```
 
 Generate the metadata:
 
 ```bash
-python ~/esdglider/scripts/extract-image-metadata.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml
+python ~/esdglider/scripts/extract-image-metadata.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml
 ```
 
 With the default buckets, extraction reads JPEG and PNG files recursively under:
@@ -398,14 +407,14 @@ No images is an error, not a successful no-op.
 ### Generate OSI manifests
 
 ```bash
-python ~/esdglider/scripts/generate-osi-json.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml
+python ~/esdglider/scripts/generate-osi-json.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml
 ```
 
 This reads the image-metadata JSONL file and writes one manifest per directory
 chunk. For the example config:
 
 ```text
-gs://swfscesd-glider-imagery-metadata/2026/calanus-20261007/osi-manifests-050dirs/calanus-20261007-image-manifest-chunk01.json
+gs://swfscesd-glider-imagery-metadata/2026/glider-yyymmdd/osi-manifests-050dirs/glider-yyymmdd-image-manifest-chunk01.json
 ```
 
 The final chunk may contain fewer than 50 directories.
@@ -424,7 +433,7 @@ apply to these individual commands as well as the runner.
 ### Preview DAG submissions
 
 ```bash
-python ~/esdglider/scripts/trigger-osi-dag.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --dry-run
+python ~/esdglider/scripts/trigger-osi-dag.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml --dry-run
 ```
 
 Preview is also the default when neither `--dry-run` nor `--submit` is supplied.
@@ -441,9 +450,9 @@ For manifest chunk 01, inspect these payload fields:
 
 | Field | Example |
 | --- | --- |
-| `input_file` | `gs://swfscesd-glider-imagery-metadata/2026/calanus-20261007/osi-manifests-050dirs/calanus-20261007-image-manifest-chunk01.json` |
+| `input_file` | `gs://swfscesd-glider-imagery-metadata/2026/glider-yyymmdd/osi-manifests-050dirs/glider-yyymmdd-image-manifest-chunk01.json` |
 | `output_bucket` | `ggn-nmfs-osi-dev-1-data` |
-| `output_folder` | `SWFSC/glider/calanus-20261007/runs/{run_id}/outputs/01` |
+| `output_folder` | `SWFSC/glider/glider-yyymmdd/runs/{run_id}/outputs/01` |
 
 Use `--test-limit 1` to select only the first manifest in numeric chunk order.
 The output folder always comes from the manifest chunk number, even when other
@@ -454,7 +463,7 @@ chunks are absent. Filtering cannot renumber chunk 10 to output folder `01`.
 To submit an initial live test:
 
 ```bash
-python ~/esdglider/scripts/trigger-osi-dag.py --config ~/glider-processing/inference-configs/calanus-imagery.yaml --submit --test-limit 1
+python ~/esdglider/scripts/trigger-osi-dag.py --config ~/glider-processing/inference-configs/2026/glider-imagery.yaml --submit --test-limit 1
 ```
 
 To submit all selected manifests, omit `--test-limit`. The
@@ -475,7 +484,7 @@ shown are defaults; `num_cores: 4` demonstrates an optional override.
 Keep only the settings you need in your own file.
 
 ```yaml
-deployment_name: calanus-20261007
+deployment_name: glider-yyymmdd
 directory_chunk_size: 50
 mount_root: ~/mnt-gcs
 num_cores: 4
