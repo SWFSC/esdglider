@@ -35,9 +35,11 @@ dependencies = [
 [project.optional-dependencies]
 # Cloud infrastructure & secrets
 gcp = [
+  "google-auth",
   "google-cloud-secret-manager>=2.12",
   "google-cloud-storage",
   "google-crc32c>=1.1",
+  "requests",
 ]
 # Database ingestion
 db = [

@@ -1,0 +1,16 @@
+# Use the same file with --config for all three imagery scripts.
+deployment_name: calanus-20261007
+
+# Optional shared settings (otherwise package defaults are used):
+# mount_root: ~/mnt-gcs
+# num_cores: 4
+# directory_filter: [dir0000004]
+# imagery_bucket: swfscesd-glider-imagery-data-in
+# metadata_bucket: swfscesd-glider-imagery-metadata
+
+dag:
+  # Required for the runner and DAG command; choose the intended model.
+  model_type: andy-6d-v1-detector-model
+  # output_bucket: ggn-nmfs-osi-dev-1-data
+  # composer_url: https://your-airflow-webserver.example.com
+  # dag_id: optics-pipeline
